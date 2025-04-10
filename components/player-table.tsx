@@ -127,29 +127,26 @@ export default function PlayerTable() {
   const fetchLiveStats = async () => {
     setLoadingLive(true);
     try {
-      // Fetch from the view, filtering for event_avg for now
+      // Fetch from the view, REMOVE the filter for event_avg
       const { data, error } = await supabase
         .from("latest_live_tournament_stats_view")
         .select("*")
-        .eq('round_num', 'event_avg') // Only get event average stats
-        // Optional default sort for live view?
-        .order("total", { ascending: true }); // Example: sort by score
+        // Removed: .eq('round_num', 'event_avg')
+        // Sort by latest event first, then by player name or score
+        .order("event_name", { ascending: false }) // Assuming latest event is desired if multiple present
+        .order("total", { ascending: true });
 
       if (error) throw error;
       setLiveStats(data || []);
       if (data && data.length > 0) {
+        // Update state based on the fetched data (could be any round now)
         setLastLiveUpdate(data[0].data_golf_updated_at);
         setCurrentLiveEvent(data[0].event_name);
       } else {
-        setLastLiveUpdate(null);
-        setCurrentLiveEvent(null);
+        // ... handle no live data ...
       }
     } catch (error) {
-      console.error("Error fetching live stats:", error);
-      toast({ title: "Error Fetching Live Stats", /* ... */ });
-      setLiveStats([]);
-      setLastLiveUpdate(null);
-      setCurrentLiveEvent(null);
+       // ... error handling ...
     } finally {
       setLoadingLive(false);
     }
@@ -158,11 +155,33 @@ export default function PlayerTable() {
   // Trigger for Season Skills Sync
   const triggerSkillSyncAndRefetch = async () => {
     setIsSyncingSkills(true);
-    // ... (API call to /api/players/sync-skill-ratings) ...
+    setLastSkillUpdate(null); // Clear timestamp while syncing
     try {
-       // ... fetch ... check response ... toast ...
-       await fetchSeasonSkills(); // Re-fetch season data
-    } catch (error) { /* ... */ } finally {
+      // *** Add the actual fetch call ***
+      const response = await fetch("/api/players/sync-skill-ratings");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Failed to parse error response" }));
+        throw new Error(errorData.error || `Server responded with status: ${response.status}`);
+      }
+      const data = await response.json();
+      if (data.success) {
+        toast({
+          title: "Player Sync Complete",
+          description: `Synced ${data.processedCount} player skill ratings.`,
+        });
+        // After successful API sync, re-fetch data for the table display
+        await fetchSeasonSkills(); // Re-fetch season data
+      } else {
+        throw new Error(data.error || "Unknown error occurred during sync");
+      }
+    } catch (error) {
+       console.error("Error syncing player ratings via API:", error);
+       toast({
+         title: "Error Syncing Skills",
+         description: error instanceof Error ? error.message : "Failed to connect to the server",
+         variant: "destructive",
+       });
+    } finally {
         setIsSyncingSkills(false);
     }
   };
@@ -170,11 +189,33 @@ export default function PlayerTable() {
   // Trigger for Live Stats Sync
   const triggerLiveSyncAndRefetch = async () => {
     setIsSyncingLive(true);
-    // ... (API call to /api/live-stats/sync) ...
+    setLastLiveUpdate(null); // Clear timestamp while syncing
      try {
-       // ... fetch ... check response ... toast ...
-       await fetchLiveStats(); // Re-fetch live data
-    } catch (error) { /* ... */ } finally {
+       // *** Add the actual fetch call ***
+       const response = await fetch("/api/live-stats/sync");
+       if (!response.ok) {
+         const errorData = await response.json().catch(() => ({ error: "Failed to parse error response" }));
+         throw new Error(errorData.error || `Server responded with status: ${response.status}`);
+       }
+       const data = await response.json();
+       if (data.success) {
+         toast({
+           title: "Live Stats Sync Complete",
+           description: `Synced ${data.processedCount} live player stats for ${data.eventName}.`,
+         });
+         // After successful API sync, re-fetch data for the table display
+         await fetchLiveStats(); // Re-fetch live data
+       } else {
+         throw new Error(data.error || "Unknown error occurred during sync");
+       }
+    } catch (error) {
+         console.error("Error syncing live stats via API:", error);
+         toast({
+           title: "Error Syncing Live Stats",
+           description: error instanceof Error ? error.message : "Failed to connect to the server",
+           variant: "destructive",
+         });
+    } finally {
         setIsSyncingLive(false);
     }
   };
@@ -469,7 +510,13 @@ export default function PlayerTable() {
                          </span>
                      )}
                      {isSyncingLive && <span className="text-xs text-gray-500">Syncing...</span>}
-                     <Button variant="outline" size="sm" onClick={triggerLiveSyncAndRefetch} disabled={isSyncingSkills || isSyncingLive} className="h-7 px-2">
+                     <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={triggerLiveSyncAndRefetch}
+                        disabled={isSyncingSkills || isSyncingLive}
+                        className="h-7 px-2"
+                    >
                         {isSyncingLive ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                         <span className="ml-1">Sync Live</span>
                      </Button>

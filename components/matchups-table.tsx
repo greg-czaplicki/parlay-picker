@@ -384,21 +384,21 @@ export default function MatchupsTable() {
           </div>
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             <div className="flex items-center gap-3">
-              <Button
+            <Button
                 variant={selectedBookmaker === "draftkings" ? "default" : "outline"}
                 onClick={() => { setSelectedBookmaker("draftkings"); }}
                 className={`text-sm ${selectedBookmaker === "draftkings" ? "filter-button-active" : "filter-button"}`}
-              >
-                DraftKings
-              </Button>
-              <Button
+            >
+              DraftKings
+            </Button>
+            <Button
                 variant={selectedBookmaker === "fanduel" ? "default" : "outline"}
                 onClick={() => { setSelectedBookmaker("fanduel"); }}
                 className={`text-sm ${selectedBookmaker === "fanduel" ? "filter-button-active" : "filter-button"}`}
-              >
-                FanDuel
-              </Button>
-              <Button
+            >
+              FanDuel
+            </Button>
+            <Button
                 variant="outline"
                 size="sm"
                 onClick={triggerApiRefreshAndRefetch}
@@ -407,7 +407,7 @@ export default function MatchupsTable() {
                 title="Refresh odds from Data Golf API"
               >
                 {(isRefreshingApi || (loading && !lastUpdateTime)) ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              </Button>
+            </Button>
               {lastUpdateTime && !isRefreshingApi && (
                 <span className="text-xs text-gray-400 whitespace-nowrap" title={`Data Golf feed last updated at ${new Date(lastUpdateTime).toLocaleString()}`}>
                   DG Feed: {formatRelativeTime(lastUpdateTime)}
@@ -498,14 +498,14 @@ export default function MatchupsTable() {
                   // ----------------------------------------------------
 
                   return (
-                    <TableRow key={matchup.id} className="hover:bg-[#2a2a35]">
-                      <TableCell>
+                  <TableRow key={matchup.id} className="hover:bg-[#2a2a35]">
+                    <TableCell>
                         {/* Player 1 */}
                         <div className="flex items-center gap-1.5 mb-0.5">
                            {/* Always render container, hide icon conditionally */}
                            <span title={isBestSgP1 ? "Best SG: Total in Matchup" : ""} className={`inline-block w-[12px] ${isBestSgP1 ? 'opacity-100' : 'opacity-0'}`}>
                              <Award size={12} className="text-yellow-500 shrink-0" />
-                           </span>
+                            </span>
                            <span className={highlightP1 ? "font-semibold" : ""}>{formatPlayerName(matchup.p1_player_name)}</span>
                            {!loadingSkills && skillRatingsMap.has(matchup.p1_dg_id) && (
                              <>
@@ -516,7 +516,7 @@ export default function MatchupsTable() {
                                 <HeatmapSquare statValue={skillRatingsMap.get(matchup.p1_dg_id)?.sg_putt ?? null} statKey="sg_putt" label="SG:PUTT" />
                               </>
                            )}
-                        </div>
+                          </div>
                          {/* Player 2 */}
                          <div className="flex items-center gap-1.5 mb-0.5">
                             {/* Always render container, hide icon conditionally */}
@@ -533,13 +533,13 @@ export default function MatchupsTable() {
                                 <HeatmapSquare statValue={skillRatingsMap.get(matchup.p2_dg_id)?.sg_putt ?? null} statKey="sg_putt" label="SG:PUTT" />
                               </>
                            )}
-                        </div>
+                      </div>
                          {/* Player 3 */}
                          <div className="flex items-center gap-1.5">
                             {/* Always render container, hide icon conditionally */}
                             <span title={isBestSgP3 ? "Best SG: Total in Matchup" : ""} className={`inline-block w-[12px] ${isBestSgP3 ? 'opacity-100' : 'opacity-0'}`}>
                              <Award size={12} className="text-yellow-500 shrink-0" />
-                           </span>
+                            </span>
                            <span className={highlightP3 ? "font-semibold" : ""}>{formatPlayerName(matchup.p3_player_name)}</span>
                            {!loadingSkills && skillRatingsMap.has(matchup.p3_dg_id) && (
                              <>
@@ -550,23 +550,23 @@ export default function MatchupsTable() {
                                 <HeatmapSquare statValue={skillRatingsMap.get(matchup.p3_dg_id)?.sg_putt ?? null} statKey="sg_putt" label="SG:PUTT" />
                               </>
                            )}
-                        </div>
-                      </TableCell>
+                      </div>
+                    </TableCell>
                       {selectedBookmaker === 'fanduel' && (
                         <TableCell className="text-center">
                           <div className={intensityClassP1}>{formatOdds(matchup.fanduel_p1_odds)}</div>
                           <div className={intensityClassP2}>{formatOdds(matchup.fanduel_p2_odds)}</div>
                           <div className={intensityClassP3}>{formatOdds(matchup.fanduel_p3_odds)}</div>
-                        </TableCell>
+                    </TableCell>
                       )}
                       {selectedBookmaker === 'draftkings' && (
                         <TableCell className="text-center">
                            <div className={intensityClassP1}>{formatOdds(matchup.draftkings_p1_odds)}</div>
                            <div className={intensityClassP2}>{formatOdds(matchup.draftkings_p2_odds)}</div>
                            <div className={intensityClassP3}>{formatOdds(matchup.draftkings_p3_odds)}</div>
-                        </TableCell>
+                    </TableCell>
                       )}
-                    </TableRow>
+                  </TableRow>
                   );
                 })}
               </TableBody>
