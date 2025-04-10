@@ -1,6 +1,7 @@
 "use server"
 
 import { createServerClient } from "@/lib/supabase";
+import { LiveTournamentStat } from "@/types/definitions";
 
 // --- Helper Functions ---
 
@@ -326,4 +327,209 @@ export async function getTopGolfers(matchupType: string, activeFilter: string, l
      console.warn("getTopGolfers action is not yet implemented with dynamic scoring and returns placeholder data.");
      // Placeholder implementation
      return { topGolfers: [], error: "getTopGolfers not implemented with new logic yet." };
+}
+
+// --- Server Action: findPlayerMatchup ---
+
+// Define the return type for the matchup data
+export type PlayerMatchupData = LatestThreeBallMatchupRow | null;
+
+/**
+ * Finds the absolute latest 3-ball matchup containing a given player name across all events,
+ * attempting to match "First Last" input against "Last, First" database format.
+ * @param playerName - The name of the player to search for (ideally "Firstname Lastname").
+ * @returns The matchup row if found, otherwise null. Includes an error string if applicable.
+ */
+export async function findPlayerMatchup(playerName: string): Promise<{ matchup: PlayerMatchupData; error?: string }> {
+    // console.log(`[findPlayerMatchup] Received search for player: '${playerName}'`); // REMOVE
+    const nameParts = playerName.trim().split(/\s+/);
+    let dbSearchPattern = `%${playerName}%`;
+    if (nameParts.length >= 2) {
+        const lastName = nameParts.pop();
+        const firstName = nameParts.join(' ');
+        dbSearchPattern = `%${lastName}, ${firstName}%`;
+        // console.log(`[findPlayerMatchup] Constructed DB search pattern: '${dbSearchPattern}'`); // REMOVE
+    } else {
+        // console.warn(`[findPlayerMatchup] Could not parse name ...`); // REMOVE (or keep warn?)
+    }
+
+    const supabase = createServerClient();
+    try {
+        // console.log(`[findPlayerMatchup] Searching latest_three_ball_matchups with pattern: '${dbSearchPattern}'`); // REMOVE
+        const orFilterString = `p1_player_name.ilike."${dbSearchPattern}",p2_player_name.ilike."${dbSearchPattern}",p3_player_name.ilike."${dbSearchPattern}"`;
+        // console.log(`[findPlayerMatchup] Constructed OR filter string: ${orFilterString}`); // REMOVE
+        const { data: matchup, error: matchupError } = await supabase
+            .from('latest_three_ball_matchups')
+            .select('*')
+            .or(orFilterString)
+            .order('data_golf_update_time', { ascending: false })
+            .limit(1)
+            .maybeSingle<LatestThreeBallMatchupRow>();
+
+        if (matchupError) {
+            console.error(`[findPlayerMatchup] Supabase error finding latest matchup for pattern '${dbSearchPattern}':`, matchupError); // KEEP
+            throw new Error(`Database error finding matchup: ${matchupError.message}`);
+        }
+
+        if (!matchup) {
+            // console.log(`[findPlayerMatchup] No matchup found containing pattern '${dbSearchPattern}' ...`); // REMOVE
+            return { matchup: null };
+        } else {
+             // console.log(`[findPlayerMatchup] Found latest matchup ID ...`); // REMOVE
+        }
+        // console.log(`[findPlayerMatchup] Successfully returning latest matchup ID ...`); // REMOVE
+        return { matchup };
+    } catch (error) {
+        console.error(`[findPlayerMatchup] Error during execution for ${playerName}:`, error); // KEEP
+        return { matchup: null, error: error instanceof Error ? error.message : "Unknown error finding player matchup" };
+    }
+}
+
+// --- Server Action: getLiveStatsForPlayers ---
+
+/**
+ * Fetches the latest live tournament stats for a given list of player IDs.
+ * @param playerIds - An array of player dg_id values.
+ * @returns An object containing an array of stats or an error message.
+ */
+export async function getLiveStatsForPlayers(
+    playerIds: number[]
+): Promise<{ stats: LiveTournamentStat[]; error?: string }> {
+    if (!playerIds || playerIds.length === 0) {
+        // console.log("[getLiveStatsForPlayers] Received empty or invalid player ID list."); // REMOVE
+        return { stats: [] };
+    }
+    // console.log(`[getLiveStatsForPlayers] Fetching live stats for ${playerIds.length} player IDs:`, playerIds); // REMOVE
+    const supabase = createServerClient();
+
+    try {
+        const { data, error } = await supabase
+            .from('latest_live_tournament_stats_view')
+            .select('*') // Select all columns from the view for now
+            .in('dg_id', playerIds)
+            // Assuming the view inherently provides the latest available stat per player
+            // based on its definition (e.g., using DISTINCT ON or ROW_NUMBER in the view query)
+            .returns<LiveTournamentStat[]>();
+
+        if (error) {
+            console.error(`[getLiveStatsForPlayers] Supabase error fetching live stats for IDs [${playerIds.join(', ')}]:`, error); // KEEP
+            throw new Error(`Database error fetching live stats: ${error.message}`);
+        }
+
+        if (!data || data.length === 0) {
+            // console.log(`[getLiveStatsForPlayers] No live stats found for player IDs [${playerIds.join(', ')}].`); // REMOVE
+        }
+
+        // console.log(`[getLiveStatsForPlayers] Successfully fetched ${data?.length ?? 0} stat records for IDs [${playerIds.join(', ')}].`); // REMOVE
+        return { stats: data || [] };
+
+    } catch (error) {
+        console.error(`[getLiveStatsForPlayers] Error during execution for IDs [${playerIds.join(', ')}]:`, error); // KEEP
+        return { stats: [], error: error instanceof Error ? error.message : "Unknown error fetching live stats" };
+    }
+}
+
+// --- Server Actions for Parlay Picks ---
+
+// Interface matching the parlay_picks table
+export interface ParlayPick {
+    id: number;
+    // user_id?: string; // If using auth
+    picked_player_dg_id: number;
+    picked_player_name: string;
+    matchup_id: number | null;
+    event_name: string | null;
+    round_num: number | null;
+    created_at: string;
+}
+
+/**
+ * Fetches all current parlay picks.
+ * (Assumes no user authentication for now - fetches all rows)
+ * @returns An object containing an array of picks or an error message.
+ */
+export async function getParlayPicks(): Promise<{ picks: ParlayPick[]; error?: string }> {
+    // console.log("[getParlayPicks] Fetching all parlay picks..."); // REMOVE
+    const supabase = createServerClient();
+    try {
+        // TODO: Add user filter if auth is implemented e.g., .eq('user_id', userId)
+        const { data, error } = await supabase
+            .from('parlay_picks')
+            .select('*')
+            .order('created_at', { ascending: true }) // Fetch in order they were added
+            .returns<ParlayPick[]>();
+
+        if (error) {
+            console.error("[getParlayPicks] Supabase error fetching picks:", error); // KEEP
+            throw new Error(`Database error fetching picks: ${error.message}`);
+        }
+        // console.log(`[getParlayPicks] Successfully fetched ${data?.length ?? 0} picks.`); // REMOVE
+        return { picks: data || [] };
+    } catch (error) {
+        console.error("[getParlayPicks] Error:", error); // KEEP
+        return { picks: [], error: error instanceof Error ? error.message : "Unknown error fetching picks" };
+    }
+}
+
+/**
+ * Adds a new parlay pick to the database.
+ * @param pickData - Object containing the pick details.
+ * @returns An object containing the newly added pick or an error message.
+ */
+export async function addParlayPick(pickData: Omit<ParlayPick, 'id' | 'created_at'>): Promise<{ pick: ParlayPick | null; error?: string }> {
+    // console.log("[addParlayPick] Adding pick:", pickData); // REMOVE
+    const supabase = createServerClient();
+    try {
+        // TODO: Add user_id if auth is implemented
+        const { data, error } = await supabase
+            .from('parlay_picks')
+            .insert([{
+                // user_id: userId, // If using auth
+                picked_player_dg_id: pickData.picked_player_dg_id,
+                picked_player_name: pickData.picked_player_name,
+                matchup_id: pickData.matchup_id,
+                event_name: pickData.event_name,
+                round_num: pickData.round_num,
+            }])
+            .select()
+            .single(); // Expecting one row back
+
+        if (error) {
+            console.error("[addParlayPick] Supabase error inserting pick:", error); // KEEP
+            // Handle potential duplicate picks if needed (e.g., based on user_id, matchup_id, picked_player_dg_id)
+            throw new Error(`Database error adding pick: ${error.message}`);
+        }
+        // console.log("[addParlayPick] Successfully added pick ID:", data?.id); // REMOVE
+        return { pick: data as ParlayPick };
+    } catch (error) {
+        console.error("[addParlayPick] Error:", error); // KEEP
+        return { pick: null, error: error instanceof Error ? error.message : "Unknown error adding pick" };
+    }
+}
+
+/**
+ * Removes a parlay pick from the database by its unique ID.
+ * @param pickId - The ID of the pick to remove.
+ * @returns An object indicating success or containing an error message.
+ */
+export async function removeParlayPick(pickId: number): Promise<{ success: boolean; error?: string }> {
+    // console.log(`[removeParlayPick] Removing pick ID: ${pickId}`); // REMOVE
+    const supabase = createServerClient();
+    try {
+        // TODO: Add user filter if auth is implemented e.g., .eq('user_id', userId)
+        const { error } = await supabase
+            .from('parlay_picks')
+            .delete()
+            .eq('id', pickId);
+
+        if (error) {
+            console.error(`[removeParlayPick] Supabase error removing pick ID ${pickId}:`, error); // KEEP
+            throw new Error(`Database error removing pick: ${error.message}`);
+        }
+        // console.log(`[removeParlayPick] Successfully removed pick ID: ${pickId}`); // REMOVE
+        return { success: true };
+    } catch (error) {
+        console.error(`[removeParlayPick] Error for ID ${pickId}:`, error); // KEEP
+        return { success: false, error: error instanceof Error ? error.message : "Unknown error removing pick" };
+    }
 }

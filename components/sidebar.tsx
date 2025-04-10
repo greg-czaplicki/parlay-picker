@@ -1,6 +1,7 @@
 "use client"
 
 import type React from "react"
+import Link from "next/link"
 
 import { Home, Users, BarChart2, Settings, TrendingUp, HelpCircle, DollarSign, Flag } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -30,7 +31,9 @@ export default function Sidebar() {
       <SidebarIcon icon={<Flag size={24} />} text="Tournaments" />
       <SidebarIcon icon={<Users size={24} />} text="Players" />
       <SidebarIcon icon={<BarChart2 size={24} />} text="Stats" />
-      <SidebarIcon icon={<TrendingUp size={24} />} text="Parlays" />
+      <Link href="/parlays">
+        <SidebarIcon icon={<TrendingUp size={24} />} text="Parlays" />
+      </Link>
       <SidebarIcon icon={<DollarSign size={24} />} text="Betting" />
       <hr className="sidebar-hr mt-auto" />
       <SidebarIcon icon={<Settings size={24} />} text="Settings" />

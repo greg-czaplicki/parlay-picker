@@ -14,11 +14,24 @@ interface RecommendedPicksProps {
   limit?: number // Optional limit for how many recommendations to show
 }
 
-// Helper to format odds
-const formatOdds = (odds: number) => {
-  if (odds > 0) return `+${odds}`
-  return odds.toString()
-}
+// Helper to format Decimal odds into American odds string
+const formatOdds = (decimalOdds: number | null | undefined): string => {
+  if (decimalOdds == null || decimalOdds <= 1.01) {
+      // Handle null, undefined, or odds too low to be meaningful/convertible
+      return "N/A"; 
+  }
+  
+  if (decimalOdds >= 2.00) {
+    // Positive American odds: (Decimal - 1) * 100
+    const americanOdds = (decimalOdds - 1) * 100;
+    return `+${Math.round(americanOdds)}`;
+  } else {
+    // Negative American odds: -100 / (Decimal - 1)
+    const americanOdds = -100 / (decimalOdds - 1);
+    // Negative sign is implicit in the calculation result
+    return `${Math.round(americanOdds)}`; 
+  }
+};
 
 export default function RecommendedPicks({
   matchupType,
@@ -26,7 +39,6 @@ export default function RecommendedPicks({
   limit = 10, // Default limit
 }: RecommendedPicksProps) {
   const [recommendations, setRecommendations] = useState<Player[]>([]);
-  const [groups, setGroups] = useState<string[]>([]);
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -43,26 +55,20 @@ export default function RecommendedPicks({
 
         // Extract the single recommended player from each matchup
         const recommendedPlayers = matchups
-          .map(matchup => {
-             const recommendedPlayer = matchup.players.find(p => p.isRecommended);
-             // Include group info with the player
-             return recommendedPlayer ? { ...recommendedPlayer, group: matchup.group } : null;
-          })
-          .filter((p): p is Player & { group: string } => p !== null); // Filter out nulls and type guard
+          .map(matchup => matchup.players.find(p => p.isRecommended))
+          .filter((p): p is Player => p !== null); // Filter out nulls and type guard
 
         // Sort by confidence score (descending) and take the top 'limit'
         const sortedRecommendations = recommendedPlayers
           .sort((a, b) => b.confidenceScore - a.confidenceScore)
           .slice(0, limit);
 
-        setRecommendations(sortedRecommendations.map(({ group, ...player }) => player)); // Store only player data in state
-        setGroups(sortedRecommendations.map(p => p.group)); // Store group names separately
+        setRecommendations(sortedRecommendations); // Store player data directly
 
       } catch (err) {
         console.error("Failed to fetch recommendations:", err)
         setError(err instanceof Error ? err.message : "An unknown error occurred")
         setRecommendations([])
-        setGroups([])
       } finally {
         setLoading(false)
       }
@@ -72,7 +78,7 @@ export default function RecommendedPicks({
   }, [matchupType, bookmaker, limit]) // Re-fetch if props change
 
   return (
-    <Card className="glass-card">
+    <Card className="glass-card highlight-card">
       <CardContent className="p-6">
         <h2 className="text-xl font-bold mb-4">Top {limit} Recommended Picks</h2>
 
@@ -98,16 +104,15 @@ export default function RecommendedPicks({
 
         {!loading && !error && recommendations.length > 0 && (
           <div className="space-y-3">
-            {recommendations.map((player, index) => (
+            {recommendations.map((player) => (
               <div key={player.id} className="p-4 bg-[#1e1e23] rounded-lg flex flex-col gap-2">
                 <div className="flex justify-between items-start">
                   <div>
                     <div className="font-medium text-lg">{player.name}</div>
-                    <div className="text-sm text-gray-400">{groups[index]}</div>
                   </div>
                   <div className="text-right flex flex-col items-end">
                      <span
-                       className={`text-lg font-semibold px-2 py-1 rounded mb-1 ${ // Use valueRating for the prominent score
+                       className={`text-lg font-semibold px-2 py-1 rounded mb-1 ${
                          player.valueRating >= 8
                            ? "bg-green-900/30 text-green-400"
                            : player.valueRating >= 7
@@ -120,13 +125,10 @@ export default function RecommendedPicks({
                     <span className="text-base font-medium text-green-400">{formatOdds(player.odds)}</span>
                   </div>
                 </div>
-                {/* Optional: Display Confidence Score */}
-                {/* <div className="text-xs text-gray-500">Confidence: {player.confidenceScore}</div> */}
                 <Button
                   size="sm"
                   variant="outline"
                   className="w-full mt-2 bg-[#2a2a35] border-none hover:bg-[#34343f] text-white"
-                  // onClick={() => handleAddToParlay(player)} // TODO: Implement Add to Parlay logic
                 >
                   <Plus size={16} className="mr-1" /> Add to Parlay
                 </Button>
