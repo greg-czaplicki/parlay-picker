@@ -125,9 +125,11 @@ export function StatCell({ value, colorClass, trend, precision = 2 }: StatCellPr
             <span>
               {value !== null ? value.toFixed(precision) : 'N/A'}
             </span>
-            <span className={`inline-flex items-center justify-center w-[20px] h-[20px] ml-1 ${trend.className}`}>
-              {trend.type === "up" ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
-            </span>
+            {trend && (
+              <span className={`inline-flex items-center justify-center w-[20px] h-[20px] ml-1 ${trend.className}`}>
+                {trend.type === "up" ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
+              </span>
+            )}
           </div>
         </div>
         
