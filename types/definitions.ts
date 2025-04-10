@@ -44,7 +44,7 @@ export type LiveTournamentStat = {
 
 // Type for Trend Indicator object (returned by helper function)
 export type TrendIndicator = {
-    icon: React.ReactNode;
+    type: "up" | "down";
     className: string;
     title: string;
 } | null; // Can be null if no significant trend
