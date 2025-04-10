@@ -505,14 +505,19 @@ export default function ParlayCard({ parlayId, parlayName, initialPicks /*, onDe
   //    }
   // };
 
-  // Format the last refreshed time
+  // Format the last refreshed time in 12-hour format
   const formatRefreshTime = () => {
     if (!lastRefreshed) return "";
     
-    // Get time in HH:MM format
-    const hours = lastRefreshed.getHours().toString().padStart(2, '0');
+    // Get hours in 12-hour format
+    let hours = lastRefreshed.getHours();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12; // Convert 0 to 12
+    
+    // Format as h:MM AM/PM
     const minutes = lastRefreshed.getMinutes().toString().padStart(2, '0');
-    return `${hours}:${minutes}`;
+    return `${hours}:${minutes} ${ampm}`;
   };
 
   return (
