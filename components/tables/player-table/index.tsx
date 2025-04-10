@@ -71,7 +71,7 @@ export default function PlayerTable({ initialSeasonSkills, initialLiveStats }: P
   const roundOptions = ["1", "2", "3", "4", "event_avg"]
 
   return (
-    <TooltipProvider delayDuration={100}>
+    <div>
       <Card className="glass-card">
         <CardContent className="p-6">
           {/* Header Section with Toggles and Sync Buttons */}
@@ -157,35 +157,32 @@ export default function PlayerTable({ initialSeasonSkills, initialLiveStats }: P
               >
                 {/* Define column widths explicitly */}
                 <colgroup>
-                  {dataView === "season" ? (
-                    // Season view columns
+                  {dataView === "season" ? 
                     <>
-                      <col style={{ width: "170px" }} /> {/* NAME */}
-                      <col style={{ width: "75px" }} />  {/* SG PUTT */}
-                      <col style={{ width: "75px" }} />  {/* SG ARG */}
-                      <col style={{ width: "75px" }} />  {/* SG APP */}
-                      <col style={{ width: "75px" }} />  {/* SG OTT */}
-                      <col style={{ width: "75px" }} />  {/* SG T2G */}
-                      <col style={{ width: "75px" }} />  {/* SG TOTAL */}
-                      <col style={{ width: "75px" }} />  {/* DRIVING ACC */}
-                      <col style={{ width: "75px" }} />  {/* DRIVING DIST */}
-                    </>
-                  ) : (
-                    // Tournament view columns
+                      <col style={{ width: "170px" }} />
+                      <col style={{ width: "75px" }} />
+                      <col style={{ width: "75px" }} />
+                      <col style={{ width: "75px" }} />
+                      <col style={{ width: "75px" }} />
+                      <col style={{ width: "75px" }} />
+                      <col style={{ width: "75px" }} />
+                      <col style={{ width: "75px" }} />
+                      <col style={{ width: "75px" }} />
+                    </> : 
                     <>
-                      <col style={{ width: "50px" }} />  {/* POS */}
-                      <col style={{ width: "170px" }} /> {/* NAME */}
-                      <col style={{ width: "60px" }} />  {/* TOTAL */}
-                      <col style={{ width: "50px" }} />  {/* THRU */}
-                      <col style={{ width: "50px" }} />  {/* RD */}
-                      <col style={{ width: "75px" }} />  {/* SG PUTT */}
-                      <col style={{ width: "75px" }} />  {/* SG ARG */}
-                      <col style={{ width: "75px" }} />  {/* SG APP */}
-                      <col style={{ width: "75px" }} />  {/* SG OTT */}
-                      <col style={{ width: "75px" }} />  {/* SG T2G */}
-                      <col style={{ width: "75px" }} />  {/* SG TOTAL */}
+                      <col style={{ width: "50px" }} />
+                      <col style={{ width: "170px" }} />
+                      <col style={{ width: "60px" }} />
+                      <col style={{ width: "50px" }} />
+                      <col style={{ width: "50px" }} />
+                      <col style={{ width: "75px" }} />
+                      <col style={{ width: "75px" }} />
+                      <col style={{ width: "75px" }} />
+                      <col style={{ width: "75px" }} />
+                      <col style={{ width: "75px" }} />
+                      <col style={{ width: "75px" }} />
                     </>
-                  )}
+                  }
                 </colgroup>
                 <TableHeader className="bg-[#1e1e23]">
                   {table.getHeaderGroups().map((headerGroup) => (
@@ -241,6 +238,6 @@ export default function PlayerTable({ initialSeasonSkills, initialLiveStats }: P
           )}
         </CardContent>
       </Card>
-    </TooltipProvider>
+    </div>
   )
 }

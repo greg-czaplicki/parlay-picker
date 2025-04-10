@@ -35,14 +35,14 @@ function getTrendIndicator(diff: number | null): TrendIndicator {
     return {
       type: "up",
       className: isLargeDiff ? "text-green-400" : "text-emerald-500",
-      title: `Trend: +${roundedDiff} vs Season Avg`
+      title: `Performing +${roundedDiff} strokes better than season average`
     };
   } else {
     const isLargeDiff = Math.abs(diff) >= 0.5;
     return {
       type: "down",
       className: isLargeDiff ? "text-red-500" : "text-orange-500",
-      title: `Trend: ${roundedDiff} vs Season Avg`
+      title: `Performing ${roundedDiff} strokes worse than season average`
     };
   }
 }
