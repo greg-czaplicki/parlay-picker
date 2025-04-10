@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Loader2, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react"
+import { Loader2, ChevronLeft, ChevronRight, RefreshCw, Award } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/use-toast"
 import { Slider } from "@/components/ui/slider"
@@ -37,6 +37,18 @@ interface SupabaseMatchupRow {
   draftkings_p2_odds: number | null;
   draftkings_p3_odds: number | null;
 }
+
+// Add type for skill ratings (can import if defined elsewhere)
+type PlayerSkillRating = {
+  dg_id: number;
+  player_name: string;
+  sg_putt: number | null;
+  sg_arg: number | null;
+  sg_app: number | null;
+  sg_ott: number | null;
+  sg_total: number | null;
+  // Add other fields if needed by heatmap/tooltip
+};
 
 // Initialize Supabase client (Use public variables for client-side)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -93,7 +105,9 @@ function getHighlightIntensityClass(probDiff: number): string {
 // Remove props from component definition
 export default function MatchupsTable() {
   const [matchups, setMatchups] = useState<SupabaseMatchupRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [skillRatingsMap, setSkillRatingsMap] = useState<Map<number, PlayerSkillRating>>(new Map()); // State for skills
+  const [loadingMatchups, setLoadingMatchups] = useState(true);
+  const [loadingSkills, setLoadingSkills] = useState(true); // Separate loading state
   const [isRefreshingApi, setIsRefreshingApi] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedBookmaker, setSelectedBookmaker] = useState<"fanduel" | "draftkings">("fanduel");
@@ -103,13 +117,17 @@ export default function MatchupsTable() {
   // Revert state back to probability difference
   const [probDiffThreshold, setProbDiffThreshold] = useState<number>(10); // Default to 10%
 
+  // Combined loading state
+  const loading = loadingMatchups || loadingSkills;
+
   useEffect(() => {
     fetchMatchupsFromSupabase();
-  }, []); // Fetch only on initial mount
+    fetchSkillRatings(); // Fetch skills on mount too
+  }, []);
 
   const fetchMatchupsFromSupabase = async () => {
     if (!isRefreshingApi) {
-        setLoading(true);
+        setLoadingMatchups(true);
     }
     setError(null);
     let fetchedTimestamp: string | null = null;
@@ -162,9 +180,33 @@ export default function MatchupsTable() {
       setLastUpdateTime(null); // Set timestamp state on error
     } finally {
       if (!isRefreshingApi) {
-          setLoading(false);
+          setLoadingMatchups(false);
       }
     }
+  };
+
+  const fetchSkillRatings = async () => {
+      setLoadingSkills(true);
+      try {
+          const { data, error } = await supabase
+              .from("player_skill_ratings")
+              .select("dg_id, player_name, sg_total, sg_ott, sg_app, sg_arg, sg_putt"); // Select needed fields
+
+          if (error) throw error;
+
+          const map = new Map<number, PlayerSkillRating>();
+          (data || []).forEach(skill => {
+              map.set(skill.dg_id, skill);
+          });
+          setSkillRatingsMap(map);
+
+      } catch(error: any) {
+          console.error("Error fetching skill ratings:", error);
+          toast({ title: "Error loading player skills", description: error.message, variant: "destructive"});
+          // Don't clear map, maybe previous data is still useful?
+      } finally {
+          setLoadingSkills(false);
+      }
   };
 
   // Function to trigger API refresh and then re-fetch data for the table
@@ -185,6 +227,7 @@ export default function MatchupsTable() {
         });
         // After successful API update, re-fetch data for the table display
         await fetchMatchupsFromSupabase();
+        // Optional: await fetchSkillRatings(); // Re-fetch skills too?
       } else {
         throw new Error(data.error || "Unknown error occurred during refresh");
       }
@@ -226,6 +269,82 @@ export default function MatchupsTable() {
   const formatPlayerName = (name: string): string => {
       return name.split(",").reverse().join(" ").trim();
   }
+
+  // Calculate Percentiles based on players *in the current matchups*
+  const matchupSkillPercentiles = useMemo(() => {
+    if (matchups.length === 0 || skillRatingsMap.size === 0) return {};
+
+    // Get unique player IDs from the matchups
+    const playerIdsInMatchups = new Set<number>();
+    matchups.forEach(m => {
+        playerIdsInMatchups.add(m.p1_dg_id);
+        playerIdsInMatchups.add(m.p2_dg_id);
+        playerIdsInMatchups.add(m.p3_dg_id);
+    });
+
+    // Get skill ratings only for these players
+    const relevantSkills: PlayerSkillRating[] = [];
+    playerIdsInMatchups.forEach(id => {
+        const skills = skillRatingsMap.get(id);
+        if (skills) {
+            relevantSkills.push(skills);
+        }
+    });
+
+    if (relevantSkills.length === 0) return {};
+
+    const calculatePercentiles = (values: (number | null)[]) => {
+        // ... (same percentile calculation logic as before) ...
+        const validValues = values.filter(v => v !== null) as number[];
+        if (validValues.length === 0) return new Map<number, number>();
+        const sortedValues = [...validValues].sort((a, b) => a - b);
+        const percentileMap = new Map<number, number>();
+        sortedValues.forEach((value, index) => {
+            if (!percentileMap.has(value)) {
+                percentileMap.set(value, index / sortedValues.length);
+            }
+        });
+        return percentileMap;
+    };
+
+    return {
+        sg_total: calculatePercentiles(relevantSkills.map(p => p.sg_total)),
+        sg_ott: calculatePercentiles(relevantSkills.map(p => p.sg_ott)),
+        sg_app: calculatePercentiles(relevantSkills.map(p => p.sg_app)),
+        sg_arg: calculatePercentiles(relevantSkills.map(p => p.sg_arg)),
+        sg_putt: calculatePercentiles(relevantSkills.map(p => p.sg_putt)),
+    };
+
+  }, [matchups, skillRatingsMap]); // Depends on matchups and the skill map
+
+  // getHeatmapColor function (similar to PlayerTable, adjust keys/percentile source if needed)
+  const getHeatmapColor = (value: number | null, statKey: keyof typeof matchupSkillPercentiles, isHigherBetter = true) => {
+    const currentPercentiles = matchupSkillPercentiles as Record<string, Map<number, number>>;
+    if (value === null || !currentPercentiles[statKey]) return "bg-gray-700/20"; // Neutral for null
+    const percentileMap = currentPercentiles[statKey];
+    const percentile = percentileMap.get(value);
+    if (percentile === undefined) return "bg-gray-600/30"; // Fallback if not found
+    const adjustedPercentile = isHigherBetter ? percentile : 1 - percentile;
+
+    // Use a simpler scale for small squares?
+    if (adjustedPercentile >= 0.80) return "bg-green-500"; // Top 20%
+    else if (adjustedPercentile >= 0.60) return "bg-emerald-600"; // 60-80%
+    else if (adjustedPercentile >= 0.40) return "bg-yellow-600"; // 40-60%
+    else if (adjustedPercentile >= 0.20) return "bg-orange-600"; // 20-40%
+    else return "bg-red-600"; // Bottom 20%
+  };
+
+  // Helper component for the heatmap square with tooltip
+  const HeatmapSquare = ({ statValue, statKey, label }: { statValue: number | null, statKey: keyof typeof matchupSkillPercentiles, label: string }) => {
+    const colorClass = getHeatmapColor(statValue, statKey);
+    const valueString = statValue !== null ? statValue.toFixed(2) : 'N/A';
+    return (
+      <div
+        title={`${label}: ${valueString}`}
+        className={`w-2.5 h-2.5 rounded-sm inline-block ${colorClass}`}
+      />
+    );
+  };
 
   if (loading && matchups.length === 0) {
     return (
@@ -363,12 +482,75 @@ export default function MatchupsTable() {
                   const intensityClassP2 = highlightP2 ? getHighlightIntensityClass(p2Diff) : "";
                   const intensityClassP3 = highlightP3 ? getHighlightIntensityClass(p3Diff) : "";
 
+                  // --- Add logic to find player with best SG: Total ---
+                  const p1_sg_total = skillRatingsMap.get(matchup.p1_dg_id)?.sg_total ?? -Infinity;
+                  const p2_sg_total = skillRatingsMap.get(matchup.p2_dg_id)?.sg_total ?? -Infinity;
+                  const p3_sg_total = skillRatingsMap.get(matchup.p3_dg_id)?.sg_total ?? -Infinity;
+
+                  const max_sg_total = Math.max(p1_sg_total, p2_sg_total, p3_sg_total);
+
+                  // Check if max_sg_total is valid (not -Infinity)
+                  const isValidMaxSg = max_sg_total > -Infinity;
+
+                  const isBestSgP1 = isValidMaxSg && p1_sg_total === max_sg_total;
+                  const isBestSgP2 = isValidMaxSg && p2_sg_total === max_sg_total;
+                  const isBestSgP3 = isValidMaxSg && p3_sg_total === max_sg_total;
+                  // ----------------------------------------------------
+
                   return (
                     <TableRow key={matchup.id} className="hover:bg-[#2a2a35]">
                       <TableCell>
-                        <div className={highlightP1 ? "font-semibold" : ""}>{formatPlayerName(matchup.p1_player_name)}</div>
-                        <div className={highlightP2 ? "font-semibold" : ""}>{formatPlayerName(matchup.p2_player_name)}</div>
-                        <div className={highlightP3 ? "font-semibold" : ""}>{formatPlayerName(matchup.p3_player_name)}</div>
+                        {/* Player 1 */}
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                           {/* Always render container, hide icon conditionally */}
+                           <span title={isBestSgP1 ? "Best SG: Total in Matchup" : ""} className={`inline-block w-[12px] ${isBestSgP1 ? 'opacity-100' : 'opacity-0'}`}>
+                             <Award size={12} className="text-yellow-500 shrink-0" />
+                           </span>
+                           <span className={highlightP1 ? "font-semibold" : ""}>{formatPlayerName(matchup.p1_player_name)}</span>
+                           {!loadingSkills && skillRatingsMap.has(matchup.p1_dg_id) && (
+                             <>
+                                <HeatmapSquare statValue={skillRatingsMap.get(matchup.p1_dg_id)?.sg_total ?? null} statKey="sg_total" label="SG:Total" />
+                                <HeatmapSquare statValue={skillRatingsMap.get(matchup.p1_dg_id)?.sg_ott ?? null} statKey="sg_ott" label="SG:OTT" />
+                                <HeatmapSquare statValue={skillRatingsMap.get(matchup.p1_dg_id)?.sg_app ?? null} statKey="sg_app" label="SG:APP" />
+                                <HeatmapSquare statValue={skillRatingsMap.get(matchup.p1_dg_id)?.sg_arg ?? null} statKey="sg_arg" label="SG:ARG" />
+                                <HeatmapSquare statValue={skillRatingsMap.get(matchup.p1_dg_id)?.sg_putt ?? null} statKey="sg_putt" label="SG:PUTT" />
+                              </>
+                           )}
+                        </div>
+                         {/* Player 2 */}
+                         <div className="flex items-center gap-1.5 mb-0.5">
+                            {/* Always render container, hide icon conditionally */}
+                           <span title={isBestSgP2 ? "Best SG: Total in Matchup" : ""} className={`inline-block w-[12px] ${isBestSgP2 ? 'opacity-100' : 'opacity-0'}`}>
+                             <Award size={12} className="text-yellow-500 shrink-0" />
+                           </span>
+                           <span className={highlightP2 ? "font-semibold" : ""}>{formatPlayerName(matchup.p2_player_name)}</span>
+                            {!loadingSkills && skillRatingsMap.has(matchup.p2_dg_id) && (
+                             <>
+                                <HeatmapSquare statValue={skillRatingsMap.get(matchup.p2_dg_id)?.sg_total ?? null} statKey="sg_total" label="SG:Total" />
+                                <HeatmapSquare statValue={skillRatingsMap.get(matchup.p2_dg_id)?.sg_ott ?? null} statKey="sg_ott" label="SG:OTT" />
+                                <HeatmapSquare statValue={skillRatingsMap.get(matchup.p2_dg_id)?.sg_app ?? null} statKey="sg_app" label="SG:APP" />
+                                <HeatmapSquare statValue={skillRatingsMap.get(matchup.p2_dg_id)?.sg_arg ?? null} statKey="sg_arg" label="SG:ARG" />
+                                <HeatmapSquare statValue={skillRatingsMap.get(matchup.p2_dg_id)?.sg_putt ?? null} statKey="sg_putt" label="SG:PUTT" />
+                              </>
+                           )}
+                        </div>
+                         {/* Player 3 */}
+                         <div className="flex items-center gap-1.5">
+                            {/* Always render container, hide icon conditionally */}
+                            <span title={isBestSgP3 ? "Best SG: Total in Matchup" : ""} className={`inline-block w-[12px] ${isBestSgP3 ? 'opacity-100' : 'opacity-0'}`}>
+                             <Award size={12} className="text-yellow-500 shrink-0" />
+                           </span>
+                           <span className={highlightP3 ? "font-semibold" : ""}>{formatPlayerName(matchup.p3_player_name)}</span>
+                           {!loadingSkills && skillRatingsMap.has(matchup.p3_dg_id) && (
+                             <>
+                                <HeatmapSquare statValue={skillRatingsMap.get(matchup.p3_dg_id)?.sg_total ?? null} statKey="sg_total" label="SG:Total" />
+                                <HeatmapSquare statValue={skillRatingsMap.get(matchup.p3_dg_id)?.sg_ott ?? null} statKey="sg_ott" label="SG:OTT" />
+                                <HeatmapSquare statValue={skillRatingsMap.get(matchup.p3_dg_id)?.sg_app ?? null} statKey="sg_app" label="SG:APP" />
+                                <HeatmapSquare statValue={skillRatingsMap.get(matchup.p3_dg_id)?.sg_arg ?? null} statKey="sg_arg" label="SG:ARG" />
+                                <HeatmapSquare statValue={skillRatingsMap.get(matchup.p3_dg_id)?.sg_putt ?? null} statKey="sg_putt" label="SG:PUTT" />
+                              </>
+                           )}
+                        </div>
                       </TableCell>
                       {selectedBookmaker === 'fanduel' && (
                         <TableCell className="text-center">
