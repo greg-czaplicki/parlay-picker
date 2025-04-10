@@ -14,22 +14,33 @@ export default function ParlaysPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [newParlayName, setNewParlayName] = useState('');
 
-  // Fetch existing parlays on mount
+  // Fetch existing parlays on mount (only once)
   useEffect(() => {
-    setIsLoading(true);
-    getParlaysAndPicks().then(({ parlays: fetchedParlays, error }) => {
-      if (error) {
-        toast({ title: "Error Loading Parlays", description: error, variant: "destructive" });
-      } else {
-        setParlays(fetchedParlays || []);
-      }
-      setIsLoading(false);
-    }).catch(err => {
+    const fetchParlays = async () => {
+      if (!isLoading) setIsLoading(true);
+      
+      try {
+        const { parlays: fetchedParlays, error } = await getParlaysAndPicks();
+        
+        if (error) {
+          toast({ title: "Error Loading Parlays", description: error, variant: "destructive" });
+        } else {
+          setParlays(fetchedParlays || []);
+        }
+      } catch (err: any) {
         console.error("Error fetching parlays:", err);
-        toast({ title: "Error Loading Parlays", description: err.message, variant: "destructive" });
+        toast({ 
+          title: "Error Loading Parlays", 
+          description: err?.message || "Failed to load parlays", 
+          variant: "destructive" 
+        });
+      } finally {
         setIsLoading(false);
-    });
-  }, []);
+      }
+    };
+    
+    fetchParlays();
+  }, []); // Empty dependency array ensures this only runs once
 
   const handleCreateParlay = async () => {
       setIsCreating(true);

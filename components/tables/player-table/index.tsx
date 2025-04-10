@@ -190,7 +190,10 @@ export default function PlayerTable({ initialSeasonSkills, initialLiveStats }: P
                       {headerGroup.headers.map((header) => (
                         <TableHead 
                           key={header.id}
-                          style={{ padding: "4px 8px" }}
+                          style={{ 
+                            padding: "4px 8px",
+                            ...(header.column.columnDef.meta as any)?.customStyles?.header
+                          }}
                           className={`text-white whitespace-nowrap text-xs sm:text-sm ${(header.column.columnDef.meta as any)?.headerClassName}`}
                         >
                           {header.isPlaceholder
@@ -216,7 +219,8 @@ export default function PlayerTable({ initialSeasonSkills, initialLiveStats }: P
                             style={{ 
                               padding: 0, 
                               border: '1px solid rgba(75, 85, 99, 0.15)',
-                              borderCollapse: 'collapse'
+                              borderCollapse: 'collapse',
+                              ...(cell.column.columnDef.meta as any)?.customStyles?.cell
                             }}
                             className={`p-0 text-xs sm:text-sm ${(cell.column.columnDef.meta as any)?.cellClassName}`}
                           >

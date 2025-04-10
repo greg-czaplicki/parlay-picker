@@ -123,7 +123,15 @@ export function useColumns({ dataView, getHeatmapColor }: UseColumnsProps) {
               const colorClass = getHeatmapColor(value, "sg_total")
               return <StatCell value={value} colorClass={colorClass} />
             },
-            meta: { headerClassName: 'text-right', cellClassName: 'text-right' },
+            meta: { 
+              headerClassName: 'text-right', 
+              cellClassName: 'text-right',
+              // Add custom styles that will be applied inline
+              customStyles: { 
+                cell: { borderRight: '6px solid #6b7280' },
+                header: { borderRight: '6px solid #6b7280' } 
+              }
+            },
           },
           {
             accessorKey: "driving_acc",
@@ -132,6 +140,14 @@ export function useColumns({ dataView, getHeatmapColor }: UseColumnsProps) {
                 Driving Acc <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" />
               </div>
             ),
+            meta: { 
+              headerClassName: 'pl-3', 
+              cellClassName: 'pl-3',
+              customStyles: {
+                cell: { backgroundColor: '#2a2a38' },
+                header: { backgroundColor: '#2a2a38' }
+              }
+            },
             cell: ({ row }: { row: Row<DisplayPlayer> }) => {
               const value = (row.original as PlayerSkillRating).driving_acc
               const colorClass = getHeatmapColor(value, "driving_acc", false)
@@ -145,6 +161,14 @@ export function useColumns({ dataView, getHeatmapColor }: UseColumnsProps) {
                 Driving Dist <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" />
               </div>
             ),
+            meta: { 
+              headerClassName: 'pl-3', 
+              cellClassName: 'pl-3',
+              customStyles: {
+                cell: { backgroundColor: '#2a2a38' },
+                header: { backgroundColor: '#2a2a38' }
+              }
+            },
             cell: ({ row }: { row: Row<DisplayPlayer> }) => {
               const value = (row.original as PlayerSkillRating).driving_dist
               const colorClass = getHeatmapColor(value, "driving_dist")

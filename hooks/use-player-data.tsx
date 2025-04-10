@@ -178,8 +178,8 @@ export function usePlayerData({
       const data = await response.json()
       if (data.success) {
         toast({
-          title: "Player Sync Complete",
-          description: `Synced ${data.processedCount} player skill ratings.`,
+          title: "Season Data Updated",
+          description: `Latest player skill ratings refreshed`,
         })
         await fetchSeasonSkills()
       } else {
@@ -210,8 +210,8 @@ export function usePlayerData({
       const data = await response.json()
       if (data.success) {
         toast({
-          title: "Live Stats Sync Complete",
-          description: `Synced ${data.processedCount} live player stats for ${data.eventName}.`,
+          title: "Tournament Data Updated",
+          description: `Latest stats refreshed for ${data.eventName}`,
         })
         await fetchLiveStats()
       } else {
@@ -328,53 +328,89 @@ export function usePlayerData({
     // Adjust the value if it's a stat where lower is better
     const adjustedValue = isHigherBetter ? value : -value
     
-    // Create a more granular scale with better differentiation for higher values
-    // This will better highlight the difference between good and exceptional performers
-    
-    // For SG stats, we're seeing values as high as 5+ in the data
-    if (adjustedValue >= 3.0) {
-      // Exceptional - very dark green (top performers)
-      return "heatmap-exceptional"
-    } 
-    else if (adjustedValue >= 2.0) {
-      // Excellent - dark green
-      return "heatmap-excellent"
-    }
-    else if (adjustedValue >= 1.25) {
-      // Very good - medium-dark green
-      return "heatmap-very-good"
-    }
-    else if (adjustedValue >= 0.8) {
-      // Good - medium green
-      return "heatmap-good"
-    }
-    else if (adjustedValue >= 0.4) {
-      // Above average - light-medium green
-      return "heatmap-above-average"
-    }
-    else if (adjustedValue >= 0.0) {
-      // Slightly above average - light green
-      return "heatmap-slightly-good"
-    }
-    else if (adjustedValue >= -0.4) {
-      // Slightly below average - pale yellow
-      return "heatmap-neutral"
-    }
-    else if (adjustedValue >= -0.8) {
-      // Below average - light orange/red
-      return "heatmap-slightly-poor"
-    }
-    else if (adjustedValue >= -1.5) {
-      // Poor - medium red
-      return "heatmap-poor"
-    }
-    else if (adjustedValue >= -2.5) {
-      // Very poor - dark red
-      return "heatmap-very-poor"
-    }
-    else {
-      // Terrible - very dark red
-      return "heatmap-terrible"
+    // Use different thresholds based on dataView (season vs tournament)
+    // Season stats tend to be more tightly clustered, so we need tighter thresholds
+    if (dataView === "season") {
+      // More sensitive thresholds for season-long stats
+      if (adjustedValue >= 1.2) {
+        return "heatmap-exceptional"
+      } 
+      else if (adjustedValue >= 0.9) {
+        return "heatmap-excellent"
+      }
+      else if (adjustedValue >= 0.6) {
+        return "heatmap-very-good"
+      }
+      else if (adjustedValue >= 0.3) {
+        return "heatmap-good"
+      }
+      else if (adjustedValue >= 0.1) {
+        return "heatmap-above-average"
+      }
+      else if (adjustedValue >= 0.0) {
+        return "heatmap-slightly-good"
+      }
+      else if (adjustedValue >= -0.1) {
+        return "heatmap-neutral"
+      }
+      else if (adjustedValue >= -0.3) {
+        return "heatmap-slightly-poor"
+      }
+      else if (adjustedValue >= -0.6) {
+        return "heatmap-poor"
+      }
+      else if (adjustedValue >= -0.9) {
+        return "heatmap-very-poor"
+      }
+      else {
+        return "heatmap-terrible"
+      }
+    } else {
+      // Original thresholds for tournament stats, where the spread is wider
+      if (adjustedValue >= 3.0) {
+        // Exceptional - very dark green (top performers)
+        return "heatmap-exceptional"
+      } 
+      else if (adjustedValue >= 2.0) {
+        // Excellent - dark green
+        return "heatmap-excellent"
+      }
+      else if (adjustedValue >= 1.25) {
+        // Very good - medium-dark green
+        return "heatmap-very-good"
+      }
+      else if (adjustedValue >= 0.8) {
+        // Good - medium green
+        return "heatmap-good"
+      }
+      else if (adjustedValue >= 0.4) {
+        // Above average - light-medium green
+        return "heatmap-above-average"
+      }
+      else if (adjustedValue >= 0.0) {
+        // Slightly above average - light green
+        return "heatmap-slightly-good"
+      }
+      else if (adjustedValue >= -0.4) {
+        // Slightly below average - pale yellow
+        return "heatmap-neutral"
+      }
+      else if (adjustedValue >= -0.8) {
+        // Below average - light orange/red
+        return "heatmap-slightly-poor"
+      }
+      else if (adjustedValue >= -1.5) {
+        // Poor - medium red
+        return "heatmap-poor"
+      }
+      else if (adjustedValue >= -2.5) {
+        // Very poor - dark red
+        return "heatmap-very-poor"
+      }
+      else {
+        // Terrible - very dark red
+        return "heatmap-terrible"
+      }
     }
   }
 

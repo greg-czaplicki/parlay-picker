@@ -71,73 +71,181 @@ export default function ParlayCard({ parlayId, parlayName, initialPicks /*, onDe
   );
   const [newPlayerName, setNewPlayerName] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   // Removed isLoadingInitialPicks, as data comes via props now
 
   // useEffect to fetch initial picks REMOVED (handled by initial state)
 
-  // useEffect to fetch matchup/stats (Logic remains the same, operates on local `players` state)
+  // Function to load matchup data for a player
+  const loadMatchupForPlayer = async (player: ParlayPlayer, index: number) => {
+    try {
+      const { matchup, error } = await findPlayerMatchup(player.name);
+      setPlayers(prev => prev.map((p, i) =>
+        i === index ? { ...p, matchup, matchupError: error, isLoadingMatchup: false } : p
+      ));
+      
+      // If we got a matchup, immediately load stats for it
+      if (matchup) {
+        await loadStatsForPlayer({ ...player, matchup }, index);
+      }
+    } catch (err) {
+      console.error(`Error loading matchup for ${player.name}:`, err);
+      setPlayers(prev => prev.map((p, i) =>
+        i === index ? { ...p, matchupError: "Failed to load matchup", isLoadingMatchup: false } : p
+      ));
+    }
+  };
+  
+  // Function to load stats for a player's matchup
+  const loadStatsForPlayer = async (player: ParlayPlayer, index: number) => {
+    if (!player.matchup) return;
+    
+    try {
+      const playerIds = [
+        player.matchup.p1_dg_id,
+        player.matchup.p2_dg_id,
+        player.matchup.p3_dg_id,
+      ].filter((id): id is number => id !== null);
+      
+      if (playerIds.length === 0) {
+        setPlayers(prev => prev.map((p, i) => 
+          i === index ? { ...p, isLoadingStats: false, statsError: "No player IDs for stats" } : p
+        ));
+        return;
+      }
+      
+      // Set loading state
+      setPlayers(prev => prev.map((p, i) => 
+        i === index ? { ...p, isLoadingStats: true } : p
+      ));
+      
+      const { stats, error } = await getLiveStatsForPlayers(playerIds);
+      
+      // Process and update stats
+      const statsMap: Record<number, LiveTournamentStat> = {};
+      (stats || []).forEach(stat => {
+        if (stat.dg_id) {
+          statsMap[stat.dg_id] = stat;
+        }
+      });
+      
+      setPlayers(prev => prev.map((p, i) => 
+        i === index ? {
+          ...p, 
+          liveStats: statsMap,
+          statsError: error,
+          isLoadingStats: false
+        } : p
+      ));
+      
+      if (error) {
+        console.warn(`Stats error for ${player.name}:`, error);
+      }
+    } catch (err) {
+      console.error(`Error loading stats for ${player.name}:`, err);
+      setPlayers(prev => prev.map((p, i) => 
+        i === index ? {
+          ...p,
+          statsError: "Failed to load stats",
+          isLoadingStats: false
+        } : p
+      ));
+    }
+  };
+  
+  // Load data for all players on mount and when players change
   useEffect(() => {
-    players.forEach((player, index) => {
-        // Fetch matchup if needed
-        if (!player.matchup && player.isLoadingMatchup && !player.matchupError) {
-             findPlayerMatchup(player.name).then(({ matchup, error }) => {
-                setPlayers(prev => prev.map((p, i) =>
-                    i === index ? { ...p, matchup, matchupError: error, isLoadingMatchup: false } : p
-                ));
-                if (error) { /* Optional: toast? */ }
-             });
+    // Skip if no players
+    if (players.length === 0) return;
+    
+    // Create a map of pending actions to track what needs to be fetched
+    const pendingMatchupFetches = players.filter(p => !p.matchup && p.isLoadingMatchup && !p.matchupError);
+    const pendingStatsFetches = players.filter(p => p.matchup && !p.liveStats && !p.isLoadingStats && !p.statsError);
+    
+    // Only proceed if there's actual work to do
+    if (pendingMatchupFetches.length === 0 && pendingStatsFetches.length === 0) {
+      return;
+    }
+    
+    // Initial loading - happens once when the component mounts
+    const loadInitialData = async () => {
+      // First load all matchups
+      await Promise.all(pendingMatchupFetches.map(async (player) => {
+        const index = players.findIndex(p => p.name === player.name && p.pickId === player.pickId);
+        if (index !== -1) {
+          await loadMatchupForPlayer(player, index);
         }
-
-        // Fetch stats if matchup is loaded, stats aren't, etc.
-        if (player.matchup && !player.liveStats && !player.isLoadingStats && !player.statsError) {
-             const playerIds = [
-                player.matchup.p1_dg_id,
-                player.matchup.p2_dg_id,
-                player.matchup.p3_dg_id,
-             ].filter((id): id is number => id !== null);
-
-             if (playerIds.length > 0) {
-                 setPlayers(prev => {
-                    return prev.map((p, i) => i === index ? { ...p, isLoadingStats: true } : p);
-                 });
-
-                 getLiveStatsForPlayers(playerIds).then(({ stats, error }) => {
-                    const statsMap: Record<number, LiveTournamentStat> = {};
-                    (stats || []).forEach(stat => {
-                        if (stat.dg_id) {
-                           statsMap[stat.dg_id] = stat;
-                        }
-                    });
-                    setPlayers(prev => {
-                        return prev.map((p, i) => i === index ? {
-                            ...p,
-                            liveStats: statsMap,
-                            statsError: error,
-                            isLoadingStats: false
-                        } : p);
-                    });
-                    if (error) {
-                       toast({
-                           title: "Error Fetching Live Stats",
-                           description: `Failed to get live stats for ${player.name}'s group: ${error}`,
-                           variant: "destructive",
-                       });
-                    }
-                 }).catch(err => {
-                      console.error(`   -> Error in getLiveStatsForPlayers promise for index ${index}:`, err);
-                      // Also update state on promise rejection
-                      setPlayers(prev => prev.map((p, i) => i === index ? {
-                          ...p,
-                          statsError: err.message || "Promise failed",
-                          isLoadingStats: false
-                      } : p));
-                 });
-             } else {
-                 setPlayers(prev => prev.map((p, i) => i === index ? { ...p, isLoadingStats: false, statsError: "No player IDs for stats" } : p));
-             }
+      }));
+      
+      // Then load stats for any players that have matchups but no stats yet
+      const updatedPlayers = [...players];
+      const pendingStats = updatedPlayers.filter(p => p.matchup && !p.liveStats && !p.isLoadingStats);
+      
+      await Promise.all(pendingStats.map(async (player) => {
+        const index = updatedPlayers.findIndex(p => p.name === player.name && p.pickId === player.pickId);
+        if (index !== -1) {
+          await loadStatsForPlayer(player, index);
         }
-    });
-  }, [players]);
+      }));
+      
+      // Set the last refreshed time
+      setLastRefreshed(new Date());
+    };
+    
+    loadInitialData();
+  }, [players.length]);
+  
+  // Add a function to refresh data
+  const refreshData = async () => {
+    if (isRefreshing || players.length === 0) return;
+    
+    setIsRefreshing(true);
+    
+    try {
+      // Process each player - get matchups for those without, refresh stats for those with matchups
+      const refreshPromises = players.map(async (player, index) => {
+        // If player doesn't have a matchup yet, load it first
+        if (!player.matchup && !player.matchupError) {
+          await loadMatchupForPlayer(player, index);
+        } 
+        // If player has a matchup, just refresh the stats
+        else if (player.matchup) {
+          await loadStatsForPlayer(player, index);
+        }
+      });
+      
+      // Wait for all refresh operations to complete
+      await Promise.all(refreshPromises);
+      
+      // Update the last refreshed timestamp
+      setLastRefreshed(new Date());
+    } catch (err) {
+      console.error("Error refreshing data:", err);
+      toast({
+        title: "Error Refreshing Stats",
+        description: "An unexpected error occurred while refreshing stats.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+  
+  // Effect to refresh data every 5 minutes
+  useEffect(() => {
+    // Skip if no players or no matchups to refresh
+    if (players.length === 0 || !players.some(p => p.matchup)) {
+      return;
+    }
+    
+    const interval = setInterval(() => {
+      refreshData();
+    }, 5 * 60 * 1000); // 5 minutes
+    
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [players.length, players.some(p => p.matchup)]);
 
   // --- Add Player Handler ---
   const addPlayer = async () => {
@@ -397,14 +505,48 @@ export default function ParlayCard({ parlayId, parlayName, initialPicks /*, onDe
   //    }
   // };
 
+  // Format the last refreshed time
+  const formatRefreshTime = () => {
+    if (!lastRefreshed) return "";
+    
+    // Get time in HH:MM format
+    const hours = lastRefreshed.getHours().toString().padStart(2, '0');
+    const minutes = lastRefreshed.getMinutes().toString().padStart(2, '0');
+    return `${hours}:${minutes}`;
+  };
+
   return (
     <Card className="bg-background/90 backdrop-blur-sm border border-border/40 shadow-lg flex flex-col h-full">
-      <CardHeader className="flex-row justify-between items-center"> {/* Use flex row for title and delete */} 
-        <CardTitle className="text-lg font-semibold">{parlayName || `Parlay #${parlayId}`}</CardTitle>
-        {/* Optional: Delete Parlay Button */}
-        {/* <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive" onClick={handleDeleteParlay} title="Delete Parlay"> 
-           <Trash2 size={16} />
-        </Button> */}
+      <CardHeader className="flex-row justify-between items-center pb-3"> {/* Use flex row for title and action buttons */} 
+        <div>
+          <CardTitle className="text-lg font-semibold">{parlayName || `Parlay #${parlayId}`}</CardTitle>
+          {lastRefreshed && (
+            <p className="text-xs text-muted-foreground mt-1">Last updated: {formatRefreshTime()}</p>
+          )}
+        </div>
+        <div className="flex items-center space-x-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="text-xs px-2 h-8" 
+            onClick={refreshData} 
+            disabled={isRefreshing || players.length === 0 || !players.some(p => p.matchup)}
+          >
+            {isRefreshing ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+            ) : (
+              <svg className="h-3.5 w-3.5 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16" />
+              </svg>
+            )}
+            <span>{isRefreshing ? "Refreshing..." : "Refresh"}</span>
+          </Button>
+          
+          {/* Optional: Delete Parlay Button */}
+          {/* <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive" onClick={handleDeleteParlay} title="Delete Parlay"> 
+             <Trash2 size={16} />
+          </Button> */}
+        </div>
       </CardHeader>
       {/* Content takes remaining space and scrolls internally if needed */}
       <CardContent className="flex-grow overflow-y-auto p-4 space-y-4"> 
