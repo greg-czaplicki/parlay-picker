@@ -11,8 +11,10 @@ import {
   useReactTable,
   getSortedRowModel,
   type SortingState,
+  type Row,
+  type Column,
 } from "@tanstack/react-table"
-import { ArrowUpDown, ChevronDown, ChevronUp, RefreshCw, Loader2 } from "lucide-react"
+import { ArrowUpDown, ChevronDown, ChevronUp, RefreshCw, Loader2, ArrowUp, ArrowDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/use-toast"
 
@@ -82,10 +84,36 @@ function formatRelativeTime(isoTimestamp: string | null): string {
   return `${diffInHours}h ago`;
 }
 
+// Helper function for Trend Indicator
+function getTrendIndicator(diff: number | null): { icon: React.ReactNode, className: string, title: string } | null {
+    if (diff === null || Math.abs(diff) < 0.1) { // Threshold for showing indicator (e.g., +/- 0.1 strokes)
+        return null; // No significant trend or data missing
+    }
+
+    const roundedDiff = diff.toFixed(2);
+    // Simple thresholds for color intensity
+    if (diff > 0) { // Performing Better than Season
+        const isLargeDiff = diff >= 0.5;
+        return {
+            icon: <ArrowUp size={12} />, // size={10} ?
+            className: isLargeDiff ? "text-green-400" : "text-emerald-500",
+            title: `Trend: +${roundedDiff} vs Season Avg`
+        };
+    } else { // Performing Worse than Season
+        const isLargeDiff = Math.abs(diff) >= 0.5;
+        return {
+            icon: <ArrowDown size={12} />,
+            className: isLargeDiff ? "text-red-500" : "text-orange-500",
+            title: `Trend: ${roundedDiff} vs Season Avg`
+        };
+    }
+}
+
 export default function PlayerTable() {
   // Define sorting state separately, still needed for the table options
   const [sorting, setSorting] = useState<SortingState>([]);
   const [seasonSkills, setSeasonSkills] = useState<PlayerSkillRating[]>([]);
+  const [seasonSkillsMap, setSeasonSkillsMap] = useState<Map<number, PlayerSkillRating>>(new Map()); // Map for lookup
   const [liveStats, setLiveStats] = useState<LiveTournamentStat[]>([]);
   const [loadingSeason, setLoadingSeason] = useState(true);
   const [loadingLive, setLoadingLive] = useState(true);
@@ -114,7 +142,14 @@ export default function PlayerTable() {
         .order("sg_total", { ascending: false });
 
       if (error) throw error;
-      setSeasonSkills(data || []);
+      const fetchedSkills = data || [];
+      setSeasonSkills(fetchedSkills);
+      // *** Populate the map ***
+      const map = new Map<number, PlayerSkillRating>();
+      fetchedSkills.forEach(skill => map.set(skill.dg_id, skill));
+      setSeasonSkillsMap(map);
+      // ***
+
       if (data && data.length > 0) {
         setLastSkillUpdate(data[0].data_golf_updated_at);
       } else {
@@ -260,14 +295,10 @@ export default function PlayerTable() {
     }
   }, [dataView, seasonSkills, liveStats, roundFilter]);
 
-  // Calculate percentiles based on the *filtered* displayPlayers for the tournament view
+  // Calculate percentiles dynamically based on the current view
   const statPercentiles = useMemo(() => {
-    // Use displayPlayers which is already filtered for the correct view and round
     const playersToAnalyze = displayPlayers;
     if (playersToAnalyze.length === 0) return {};
-
-    // Type guards might need adjustment if displayPlayers type isn't specific enough
-    // Or rely on optional chaining/null checks within calculations
 
     const calculatePercentiles = (values: (number | null)[]) => {
       const validValues = values.filter(v => v !== null) as number[];
@@ -284,35 +315,45 @@ export default function PlayerTable() {
 
     // Define keys based on the view
     if (dataView === "season") {
-       const skills = playersToAnalyze as PlayerSkillRating[];
-       return {
-           sg_total: calculatePercentiles(skills.map(p => p.sg_total)),
-           sg_ott: calculatePercentiles(skills.map(p => p.sg_ott)),
-           sg_app: calculatePercentiles(skills.map(p => p.sg_app)),
-           sg_arg: calculatePercentiles(skills.map(p => p.sg_arg)),
-           sg_putt: calculatePercentiles(skills.map(p => p.sg_putt)),
-           driving_acc: calculatePercentiles(skills.map(p => p.driving_acc)),
-           driving_dist: calculatePercentiles(skills.map(p => p.driving_dist)),
-       };
+        const skills = playersToAnalyze as PlayerSkillRating[];
+        // Calculate season sg_t2g values first
+        const seasonT2GValues = skills.map(p => 
+            (typeof p.sg_ott === 'number' && typeof p.sg_app === 'number') 
+            ? p.sg_ott + p.sg_app 
+            : null
+        );
+        return {
+            sg_total: calculatePercentiles(skills.map(p => p.sg_total)),
+            sg_ott: calculatePercentiles(skills.map(p => p.sg_ott)),
+            sg_app: calculatePercentiles(skills.map(p => p.sg_app)),
+            sg_arg: calculatePercentiles(skills.map(p => p.sg_arg)),
+            sg_putt: calculatePercentiles(skills.map(p => p.sg_putt)),
+            sg_t2g: calculatePercentiles(seasonT2GValues), // Calculate percentiles for T2G
+            driving_acc: calculatePercentiles(skills.map(p => p.driving_acc)),
+            driving_dist: calculatePercentiles(skills.map(p => p.driving_dist)),
+        };
     } else { // dataView === "tournament"
         const live = playersToAnalyze as LiveTournamentStat[];
-        // Calculate percentiles based only on the players visible for the selected round
+        // Calculate live sg_t2g if not directly present but OTT/APP are
+         const liveT2GValues = live.map(p => 
+            (typeof p.sg_ott === 'number' && typeof p.sg_app === 'number') 
+            ? p.sg_ott + p.sg_app 
+            // If live feed *does* provide sg_t2g directly, prefer that:
+            // : (typeof p.sg_t2g === 'number' ? p.sg_t2g : null)
+            // For now, assuming we need to calculate it based on API providing OTT/APP reliably
+            : null
+        );
         return {
             sg_ott: calculatePercentiles(live.map(p => p.sg_ott)),
             sg_app: calculatePercentiles(live.map(p => p.sg_app)),
             sg_putt: calculatePercentiles(live.map(p => p.sg_putt)),
             sg_arg: calculatePercentiles(live.map(p => p.sg_arg)),
-            sg_t2g: calculatePercentiles(live.map(p => p.sg_t2g)),
+            sg_t2g: calculatePercentiles(liveT2GValues), // Use calculated live T2G for consistency if needed
             sg_total: calculatePercentiles(live.map(p => p.sg_total)),
-            // accuracy: calculatePercentiles(live.map(p => p.accuracy)), // Add if needed
-            // distance: calculatePercentiles(live.map(p => p.distance)), // Add if needed
-            // gir: calculatePercentiles(live.map(p => p.gir)),          // Add if needed
-            // scrambling: calculatePercentiles(live.map(p => p.scrambling)), // Add if needed
+            // ... other live stats ...
         };
     }
-    // Return empty object if view type mismatch (shouldn't happen)
-    return {};
-  }, [dataView, displayPlayers]); // Update dependency to displayPlayers
+  }, [dataView, displayPlayers]);
 
   // getHeatmapColor function remains largely the same, but needs careful key usage
   const getHeatmapColor = (value: number | null, statKey: string, isHigherBetter = true) => {
@@ -344,206 +385,260 @@ export default function PlayerTable() {
           },
       };
 
-      if (dataView === "season") {
-        return [
-          nameColumn,
-          // Season Skill Columns with Heatmap
-          {
-            accessorKey: "sg_total",
-            header: ({ column }) => (
-                 <div className="flex items-center cursor-pointer" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>SG: Total <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" /></div>
-            ),
-            cell: ({ row }) => {
-              const value = (row.original as PlayerSkillRating).sg_total;
-              const colorClass = getHeatmapColor(value, "sg_total");
-              return <div className={`text-right font-medium rounded-md px-2 py-1 ${colorClass}`}>{value?.toFixed(2) ?? 'N/A'}</div>;
-            },
-          },
-          {
-            accessorKey: "sg_ott",
-            header: ({ column }) => (
-                 <div className="flex items-center cursor-pointer" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>SG: OTT <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" /></div>
-            ),
-             cell: ({ row }) => {
-              const value = (row.original as PlayerSkillRating).sg_ott;
-              const colorClass = getHeatmapColor(value, "sg_ott");
-              return <div className={`text-right font-medium rounded-md px-2 py-1 ${colorClass}`}>{value?.toFixed(2) ?? 'N/A'}</div>;
-            },
-          },
-          {
-            accessorKey: "sg_app",
-             header: ({ column }) => (
-                 <div className="flex items-center cursor-pointer" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>SG: APP <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" /></div>
-            ),
-             cell: ({ row }) => {
-              const value = (row.original as PlayerSkillRating).sg_app;
-              const colorClass = getHeatmapColor(value, "sg_app");
-              return <div className={`text-right font-medium rounded-md px-2 py-1 ${colorClass}`}>{value?.toFixed(2) ?? 'N/A'}</div>;
-            },
-          },
-           {
-            accessorKey: "sg_arg",
-             header: ({ column }) => (
-                 <div className="flex items-center cursor-pointer" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>SG: ARG <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" /></div>
-            ),
-             cell: ({ row }) => {
-              const value = (row.original as PlayerSkillRating).sg_arg;
-              const colorClass = getHeatmapColor(value, "sg_arg");
-              return <div className={`text-right font-medium rounded-md px-2 py-1 ${colorClass}`}>{value?.toFixed(2) ?? 'N/A'}</div>;
-            },
-          },
-          {
-            accessorKey: "sg_putt",
-             header: ({ column }) => (
-                 <div className="flex items-center cursor-pointer" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>SG: PUTT <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" /></div>
-            ),
-             cell: ({ row }) => {
-              const value = (row.original as PlayerSkillRating).sg_putt;
+      // Define SG Columns with explicit types for row/column
+      const sgPuttCol = (isSeason: boolean): ColumnDef<PlayerSkillRating | LiveTournamentStat> => ({
+          accessorKey: "sg_putt",
+          header: ({ column }: { column: Column<PlayerSkillRating | LiveTournamentStat, unknown> }) => (
+              <div className="text-right cursor-pointer flex items-center justify-end" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>SG PUTT{isSeason ? "" : " (T)"}<ArrowUpDown className="ml-1 h-3 w-3 opacity-50" /></div>
+          ),
+          cell: ({ row }: { row: Row<PlayerSkillRating | LiveTournamentStat> }) => {
+              const value = isSeason ? (row.original as PlayerSkillRating).sg_putt : (row.original as LiveTournamentStat).sg_putt;
               const colorClass = getHeatmapColor(value, "sg_putt");
-              return <div className={`text-right font-medium rounded-md px-2 py-1 ${colorClass}`}>{value?.toFixed(2) ?? 'N/A'}</div>;
-            },
+              // Add trend indicator only for tournament view
+              let trend = null;
+              if (!isSeason) {
+                   const seasonValue = seasonSkillsMap.get(row.original.dg_id)?.sg_putt;
+                   const diff = (typeof value === 'number' && typeof seasonValue === 'number') ? value - seasonValue : null;
+                   trend = getTrendIndicator(diff);
+              }
+              return (
+                 <div className={`flex items-center justify-end gap-1 font-medium rounded-md px-2 py-1 ${colorClass}`}>
+                     <span>{value?.toFixed(2) ?? 'N/A'}</span>
+                     {!isSeason && <span title={trend?.title ?? ""} className={`inline-block w-[12px] ${trend ? 'opacity-100' : 'opacity-0'} ${trend?.className ?? ""}`}>{trend?.icon}</span>}
+                 </div>
+             );
           },
-            {
-            accessorKey: "driving_acc",
-             header: ({ column }) => (
+          meta: { headerClassName: 'text-right', cellClassName: 'text-right' },
+      });
+      const sgArgCol = (isSeason: boolean): ColumnDef<PlayerSkillRating | LiveTournamentStat> => ({ 
+          accessorKey: "sg_arg",
+          header: ({ column }: { column: Column<PlayerSkillRating | LiveTournamentStat, unknown> }) => (
+               <div className="text-right cursor-pointer flex items-center justify-end" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>SG ARG{isSeason ? "" : " (T)"}<ArrowUpDown className="ml-1 h-3 w-3 opacity-50" /></div>
+          ),
+          cell: ({ row }: { row: Row<PlayerSkillRating | LiveTournamentStat> }) => {
+              const value = isSeason ? (row.original as PlayerSkillRating).sg_arg : (row.original as LiveTournamentStat).sg_arg;
+              const colorClass = getHeatmapColor(value, "sg_arg");
+              let trend = null;
+              if (!isSeason) {
+                   const seasonValue = seasonSkillsMap.get(row.original.dg_id)?.sg_arg;
+                   const diff = (typeof value === 'number' && typeof seasonValue === 'number') ? value - seasonValue : null;
+                   trend = getTrendIndicator(diff);
+              }
+               return (
+                 <div className={`flex items-center justify-end gap-1 font-medium rounded-md px-2 py-1 ${colorClass}`}>
+                     <span>{value?.toFixed(2) ?? 'N/A'}</span>
+                     {!isSeason && <span title={trend?.title ?? ""} className={`inline-block w-[12px] ${trend ? 'opacity-100' : 'opacity-0'} ${trend?.className ?? ""}`}>{trend?.icon}</span>}
+                 </div>
+             );
+          },
+          meta: { headerClassName: 'text-right', cellClassName: 'text-right' },
+      });
+       const sgAppCol = (isSeason: boolean): ColumnDef<PlayerSkillRating | LiveTournamentStat> => ({ 
+          accessorKey: "sg_app",
+          header: ({ column }: { column: Column<PlayerSkillRating | LiveTournamentStat, unknown> }) => (
+                <div className="text-right cursor-pointer flex items-center justify-end" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>SG APP{isSeason ? "" : " (T)"}<ArrowUpDown className="ml-1 h-3 w-3 opacity-50" /></div>
+          ),
+          cell: ({ row }: { row: Row<PlayerSkillRating | LiveTournamentStat> }) => {
+              const value = isSeason ? (row.original as PlayerSkillRating).sg_app : (row.original as LiveTournamentStat).sg_app;
+              const colorClass = getHeatmapColor(value, "sg_app");
+               let trend = null;
+              if (!isSeason) {
+                   const seasonValue = seasonSkillsMap.get(row.original.dg_id)?.sg_app;
+                   const diff = (typeof value === 'number' && typeof seasonValue === 'number') ? value - seasonValue : null;
+                   trend = getTrendIndicator(diff);
+              }
+               return (
+                 <div className={`flex items-center justify-end gap-1 font-medium rounded-md px-2 py-1 ${colorClass}`}>
+                     <span>{value?.toFixed(2) ?? 'N/A'}</span>
+                     {!isSeason && <span title={trend?.title ?? ""} className={`inline-block w-[12px] ${trend ? 'opacity-100' : 'opacity-0'} ${trend?.className ?? ""}`}>{trend?.icon}</span>}
+                 </div>
+             );
+          },
+          meta: { headerClassName: 'text-right', cellClassName: 'text-right' },
+      });
+       const sgOttCol = (isSeason: boolean): ColumnDef<PlayerSkillRating | LiveTournamentStat> => ({ 
+          accessorKey: "sg_ott",
+          header: ({ column }: { column: Column<PlayerSkillRating | LiveTournamentStat, unknown> }) => (
+                 <div className="text-right cursor-pointer flex items-center justify-end" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>SG OTT{isSeason ? "" : " (T)"}<ArrowUpDown className="ml-1 h-3 w-3 opacity-50" /></div>
+            ),
+          cell: ({ row }: { row: Row<PlayerSkillRating | LiveTournamentStat> }) => {
+              const value = isSeason ? (row.original as PlayerSkillRating).sg_ott : (row.original as LiveTournamentStat).sg_ott;
+              const colorClass = getHeatmapColor(value, "sg_ott");
+               let trend = null;
+              if (!isSeason) {
+                   const seasonValue = seasonSkillsMap.get(row.original.dg_id)?.sg_ott;
+                   const diff = (typeof value === 'number' && typeof seasonValue === 'number') ? value - seasonValue : null;
+                   trend = getTrendIndicator(diff);
+              }
+               return (
+                 <div className={`flex items-center justify-end gap-1 font-medium rounded-md px-2 py-1 ${colorClass}`}>
+                     <span>{value?.toFixed(2) ?? 'N/A'}</span>
+                     {!isSeason && <span title={trend?.title ?? ""} className={`inline-block w-[12px] ${trend ? 'opacity-100' : 'opacity-0'} ${trend?.className ?? ""}`}>{trend?.icon}</span>}
+                 </div>
+             );
+          },
+          meta: { headerClassName: 'text-right', cellClassName: 'text-right' },
+      });
+       const sgT2gCol = (isSeason: boolean): ColumnDef<PlayerSkillRating | LiveTournamentStat> => ({
+            accessorKey: "sg_t2g",
+            header: ({ column }: { column: Column<PlayerSkillRating | LiveTournamentStat, unknown> }) => (
+                <div className="text-right cursor-pointer flex items-center justify-end" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>SG T2G{isSeason ? "" : " (T)"} <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" /></div>
+            ),
+            cell: ({ row }: { row: Row<PlayerSkillRating | LiveTournamentStat> }) => {
+                let value: number | null;
+                let trend = null;
+                if (isSeason) {
+                    const ott = (row.original as PlayerSkillRating).sg_ott;
+                    const app = (row.original as PlayerSkillRating).sg_app;
+                    value = (typeof ott === 'number' && typeof app === 'number') ? ott + app : null;
+                } else {
+                    value = (row.original as LiveTournamentStat).sg_t2g;
+                    const seasonOtt = seasonSkillsMap.get(row.original.dg_id)?.sg_ott;
+                    const seasonApp = seasonSkillsMap.get(row.original.dg_id)?.sg_app;
+                    const seasonValue = (typeof seasonOtt === 'number' && typeof seasonApp === 'number') ? seasonOtt + seasonApp : null;
+                    const diff = (typeof value === 'number' && typeof seasonValue === 'number') ? value - seasonValue : null;
+                    trend = getTrendIndicator(diff);
+                }
+                const colorClass = getHeatmapColor(value, "sg_t2g");
+                return (
+                    <div className={`flex items-center justify-end gap-1 font-medium rounded-md px-2 py-1 ${colorClass}`}>
+                        <span>{value?.toFixed(2) ?? 'N/A'}</span>
+                        {!isSeason && <span title={trend?.title ?? ""} className={`inline-block w-[12px] ${trend ? 'opacity-100' : 'opacity-0'} ${trend?.className ?? ""}`}>{trend?.icon}</span>}
+                    </div>
+                );
+            },
+            meta: { headerClassName: 'text-right', cellClassName: 'text-right' },
+            sortingFn: isSeason ? (rowA: Row<PlayerSkillRating | LiveTournamentStat>, rowB: Row<PlayerSkillRating | LiveTournamentStat>, columnId: string): number => {
+                const ottA = (rowA.original as PlayerSkillRating).sg_ott;
+                const appA = (rowA.original as PlayerSkillRating).sg_app;
+                const t2gA = (typeof ottA === 'number' && typeof appA === 'number') ? ottA + appA : null;
+                const ottB = (rowB.original as PlayerSkillRating).sg_ott;
+                const appB = (rowB.original as PlayerSkillRating).sg_app;
+                const t2gB = (typeof ottB === 'number' && typeof appB === 'number') ? ottB + appB : null;
+                if (t2gA === null && t2gB === null) return 0;
+                if (t2gA === null) return 1;
+                if (t2gB === null) return -1;
+                return t2gA - t2gB; // Return the number difference
+            } : undefined
+       });
+       const sgTotalCol = (isSeason: boolean): ColumnDef<PlayerSkillRating | LiveTournamentStat> => ({ 
+            accessorKey: "sg_total",
+            header: ({ column }: { column: Column<PlayerSkillRating | LiveTournamentStat, unknown> }) => (
+                 <div className="text-right cursor-pointer flex items-center justify-end" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>SG TOTAL{isSeason ? "" : " (T)"}<ArrowUpDown className="ml-1 h-3 w-3 opacity-50" /></div>
+            ),
+            cell: ({ row }: { row: Row<PlayerSkillRating | LiveTournamentStat> }) => {
+              const value = isSeason ? (row.original as PlayerSkillRating).sg_total : (row.original as LiveTournamentStat).sg_total;
+              const colorClass = getHeatmapColor(value, "sg_total");
+              let trend = null;
+              if (!isSeason) {
+                   const seasonValue = seasonSkillsMap.get(row.original.dg_id)?.sg_total;
+                   const diff = (typeof value === 'number' && typeof seasonValue === 'number') ? value - seasonValue : null;
+                   trend = getTrendIndicator(diff);
+              }
+               return (
+                 <div className={`flex items-center justify-end gap-1 font-medium rounded-md px-2 py-1 ${colorClass}`}>
+                     <span>{value?.toFixed(2) ?? 'N/A'}</span>
+                     {!isSeason && <span title={trend?.title ?? ""} className={`inline-block w-[12px] ${trend ? 'opacity-100' : 'opacity-0'} ${trend?.className ?? ""}`}>{trend?.icon}</span>}
+                 </div>
+             );
+            },
+            meta: { headerClassName: 'text-right', cellClassName: 'text-right' },
+      });
+
+
+      if (dataView === "season") {
+        const drivingAccCol = {
+          accessorKey: "driving_acc",
+          header: ({ column }: { column: Column<PlayerSkillRating | LiveTournamentStat, unknown> }) => (
                  <div className="flex items-center cursor-pointer" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>Driving Acc <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" /></div>
             ),
-             cell: ({ row }) => {
-              const value = (row.original as PlayerSkillRating).driving_acc;
-              const colorClass = getHeatmapColor(value, "driving_acc", false); // isHigherBetter = false
-              return <div className={`text-right font-medium rounded-md px-2 py-1 ${colorClass}`}>{value?.toFixed(3) ?? 'N/A'}</div>;
-            },
+          cell: ({ row }: { row: Row<PlayerSkillRating | LiveTournamentStat> }) => {
+            const value = (row.original as PlayerSkillRating).driving_acc;
+            const colorClass = getHeatmapColor(value, "driving_acc", false); // isHigherBetter = false
+            return <div className={`text-right font-medium rounded-md px-2 py-1 ${colorClass}`}>{value?.toFixed(3) ?? 'N/A'}</div>;
           },
-          {
-            accessorKey: "driving_dist",
-             header: ({ column }) => (
+        };
+        const drivingDistCol = {
+          accessorKey: "driving_dist",
+          header: ({ column }: { column: Column<PlayerSkillRating | LiveTournamentStat, unknown> }) => (
                  <div className="flex items-center cursor-pointer" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>Driving Dist <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" /></div>
             ),
-             cell: ({ row }) => {
-              const value = (row.original as PlayerSkillRating).driving_dist;
-              const colorClass = getHeatmapColor(value, "driving_dist");
-              return <div className={`text-right font-medium rounded-md px-2 py-1 ${colorClass}`}>{value?.toFixed(1) ?? 'N/A'}</div>;
-            },
+          cell: ({ row }: { row: Row<PlayerSkillRating | LiveTournamentStat> }) => {
+            const value = (row.original as PlayerSkillRating).driving_dist;
+            const colorClass = getHeatmapColor(value, "driving_dist");
+            return <div className={`text-right font-medium rounded-md px-2 py-1 ${colorClass}`}>{value?.toFixed(1) ?? 'N/A'}</div>;
           },
+        };
+        return [
+          nameColumn,
+          // Reordered SG Columns
+          sgPuttCol(true),
+          sgArgCol(true),
+          sgAppCol(true),
+          sgOttCol(true),
+          sgT2gCol(true),
+          sgTotalCol(true),
+          // Other season columns
+          drivingAccCol,
+          drivingDistCol,
         ];
       } else { // dataView === "tournament"
-        return [
-          {
-            accessorKey: "position",
-            header: "POS",
-            cell: ({ row }) => <div className="text-center">{ (row.original as LiveTournamentStat).position ?? '-'}</div>,
-            meta: { headerClassName: 'text-center', cellClassName: 'text-center' },
-          },
-          nameColumn,
-          {
-            accessorKey: "total",
-            header: ({ column }) => (
+        const posCol = {
+          accessorKey: "position",
+          header: "POS",
+          cell: ({ row }: { row: Row<PlayerSkillRating | LiveTournamentStat> }) => <div className="text-center">{ (row.original as LiveTournamentStat).position ?? '-'}</div>,
+          meta: { headerClassName: 'text-center', cellClassName: 'text-center' },
+        };
+        const totalCol = {
+          accessorKey: "total",
+          header: ({ column }: { column: Column<PlayerSkillRating | LiveTournamentStat, unknown> }) => (
                  <div className="text-right cursor-pointer flex items-center justify-end" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>TOTAL <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" /></div>
             ),
-            cell: ({ row }) => {
+          cell: ({ row }: { row: Row<PlayerSkillRating | LiveTournamentStat> }) => {
                  const value = (row.original as LiveTournamentStat).total;
                  const formatted = value === 0 ? 'E' : value && value > 0 ? `+${value}` : value?.toString() ?? '-';
                  return <div className="font-medium">{formatted}</div>;
              },
               meta: { headerClassName: 'text-right', cellClassName: 'text-right' },
-          },
-          {
-            accessorKey: "thru",
-            header: ({ column }) => (
+        };
+        const thruCol = {
+          accessorKey: "thru",
+          header: ({ column }: { column: Column<PlayerSkillRating | LiveTournamentStat, unknown> }) => (
                  <div className="text-center cursor-pointer flex items-center justify-center" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>THRU <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" /></div>
             ),
-            cell: ({ row }) => <div className="text-center">{(row.original as LiveTournamentStat).thru ?? '-'}</div>,
-            meta: { headerClassName: 'text-center', cellClassName: 'text-center' },
-          },
-           {
-            accessorKey: "today",
-            header: ({ column }) => (
+          cell: ({ row }: { row: Row<PlayerSkillRating | LiveTournamentStat> }) => <div className="text-center">{(row.original as LiveTournamentStat).thru ?? '-'}</div>,
+          meta: { headerClassName: 'text-center', cellClassName: 'text-center' },
+        };
+        const rdCol = {
+          accessorKey: "today",
+          header: ({ column }: { column: Column<PlayerSkillRating | LiveTournamentStat, unknown> }) => (
                  <div className="text-right cursor-pointer flex items-center justify-end" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>RD <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" /></div>
             ),
-            cell: ({ row }) => {
+          cell: ({ row }: { row: Row<PlayerSkillRating | LiveTournamentStat> }) => {
                 const value = (row.original as LiveTournamentStat).today;
                 console.log(`Rendering RD for ${row.original.player_name}: raw value = ${value}`);
                 const formatted = value === 0 ? 'E' : value && value > 0 ? `+${value}` : value?.toString() ?? '-';
                  return <div className="font-medium">{formatted}</div>;
              },
              meta: { headerClassName: 'text-right', cellClassName: 'text-right' },
-          },
-           {
-            accessorKey: "sg_putt",
-            header: ({ column }) => (
-                 <div className="text-right cursor-pointer flex items-center justify-end" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>SG PUTT <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" /></div>
-            ),
-            cell: ({ row }) => {
-                 const value = (row.original as LiveTournamentStat).sg_putt;
-                 const colorClass = getHeatmapColor(value, "sg_putt");
-                 return <div className={`font-medium rounded-md px-2 py-1 ${colorClass}`}>{value?.toFixed(2) ?? 'N/A'}</div>;
-             },
-              meta: { headerClassName: 'text-right', cellClassName: 'text-right' },
-          },
-           {
-            accessorKey: "sg_arg",
-            header: ({ column }) => (
-                 <div className="text-right cursor-pointer flex items-center justify-end" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>SG ARG <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" /></div>
-            ),
-            cell: ({ row }) => {
-                 const value = (row.original as LiveTournamentStat).sg_arg;
-                 const colorClass = getHeatmapColor(value, "sg_arg");
-                 return <div className={`font-medium rounded-md px-2 py-1 ${colorClass}`}>{value?.toFixed(2) ?? 'N/A'}</div>;
-             },
-              meta: { headerClassName: 'text-right', cellClassName: 'text-right' },
-          },
-           {
-            accessorKey: "sg_app",
-            header: ({ column }) => (
-                 <div className="text-right cursor-pointer flex items-center justify-end" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>SG APP <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" /></div>
-            ),
-            cell: ({ row }) => {
-                 const value = (row.original as LiveTournamentStat).sg_app;
-                 const colorClass = getHeatmapColor(value, "sg_app");
-                 return <div className={`font-medium rounded-md px-2 py-1 ${colorClass}`}>{value?.toFixed(2) ?? 'N/A'}</div>;
-             },
-             meta: { headerClassName: 'text-right', cellClassName: 'text-right' },
-          },
-          {
-            accessorKey: "sg_ott",
-            header: ({ column }) => (
-                 <div className="text-right cursor-pointer flex items-center justify-end" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>SG OTT <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" /></div>
-            ),
-            cell: ({ row }) => {
-                 const value = (row.original as LiveTournamentStat).sg_ott;
-                 const colorClass = getHeatmapColor(value, "sg_ott");
-                 return <div className={`font-medium rounded-md px-2 py-1 ${colorClass}`}>{value?.toFixed(2) ?? 'N/A'}</div>;
-             },
-             meta: { headerClassName: 'text-right', cellClassName: 'text-right' },
-          },
-          {
-            accessorKey: "sg_t2g",
-            header: ({ column }) => (
-                 <div className="text-right cursor-pointer flex items-center justify-end" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>SG T2G <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" /></div>
-            ),
-            cell: ({ row }) => {
-                 const value = (row.original as LiveTournamentStat).sg_t2g;
-                 const colorClass = getHeatmapColor(value, "sg_t2g");
-                 return <div className={`font-medium rounded-md px-2 py-1 ${colorClass}`}>{value?.toFixed(2) ?? 'N/A'}</div>;
-             },
-             meta: { headerClassName: 'text-right', cellClassName: 'text-right' },
-          },
-          {
-            accessorKey: "sg_total",
-            header: ({ column }) => (
-                 <div className="text-right cursor-pointer flex items-center justify-end" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>SG TOTAL <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" /></div>
-            ),
-            cell: ({ row }) => {
-                 const value = (row.original as LiveTournamentStat).sg_total;
-                 const colorClass = getHeatmapColor(value, "sg_total");
-                 return <div className={`font-medium rounded-md px-2 py-1 ${colorClass}`}>{value?.toFixed(2) ?? 'N/A'}</div>;
-             },
-             meta: { headerClassName: 'text-right', cellClassName: 'text-right' },
-          },
+        };
+        return [
+          posCol,
+          nameColumn,
+          totalCol,
+          thruCol,
+          rdCol,
+          // Reordered SG Columns
+          sgPuttCol(false),
+          sgArgCol(false),
+          sgAppCol(false),
+          sgOttCol(false),
+          sgT2gCol(false),
+          sgTotalCol(false),
         ];
       }
     },
-    [dataView, statPercentiles]
+    [dataView, statPercentiles, seasonSkillsMap]
   );
 
   const table = useReactTable({
