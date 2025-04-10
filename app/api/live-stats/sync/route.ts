@@ -14,11 +14,13 @@ interface LivePlayerData {
   sg_app?: number | null;
   sg_ott?: number | null;
   sg_putt?: number | null;
-  // sg_arg?: number | null; // Add if available
-  // sg_total?: number | null; // Add if available
+  sg_arg?: number | null;
+  sg_t2g?: number | null;
+  sg_total?: number | null;
   thru?: number | null;
   today?: number | null;
   total?: number | null;
+  round?: number | null; // Score relative to par for the current round
 }
 
 interface DataGolfLiveStatsResponse {
@@ -40,6 +42,9 @@ interface SupabaseLiveStat {
   sg_app?: number | null;
   sg_ott?: number | null;
   sg_putt?: number | null;
+  sg_arg?: number | null;
+  sg_t2g?: number | null;
+  sg_total?: number | null;
   accuracy?: number | null;
   distance?: number | null;
   gir?: number | null;
@@ -47,7 +52,7 @@ interface SupabaseLiveStat {
   scrambling?: number | null;
   "position"?: string | null;
   thru?: number | null;
-  today?: number | null;
+  today?: number | null; // This column will store the player's round score
   total?: number | null;
   data_golf_updated_at: string;
 }
@@ -80,7 +85,8 @@ if (!dataGolfApiKey) {
 }
 
 const DATA_GOLF_FIELD_URL = `https://feeds.datagolf.com/field-updates?tour=pga&file_format=json&key=${dataGolfApiKey}`;
-const LIVE_STATS_BASE_URL = `https://feeds.datagolf.com/preds/live-tournament-stats?tour=pga&stats=sg_app,sg_ott,sg_putt,accuracy,distance,gir,prox_fw,scrambling,position,thru,today,total&display=value&file_format=json&key=${dataGolfApiKey}`;
+const requiredStats = "sg_app,sg_ott,sg_putt,sg_arg,sg_t2g,sg_total,accuracy,distance,gir,prox_fw,scrambling,position,thru,today,total";
+const LIVE_STATS_BASE_URL = `https://feeds.datagolf.com/preds/live-tournament-stats?tour=pga&stats=${requiredStats}&display=value&file_format=json&key=${dataGolfApiKey}`;
 
 export async function GET() {
   let roundToFetch = "event_avg"; // Default
@@ -143,26 +149,36 @@ export async function GET() {
     console.log(`Processing ${data.live_stats.length} records for round ${roundToFetch}...`);
 
     // 3. Map data using the actual fetched round number
-    const statsToInsert: SupabaseLiveStat[] = data.live_stats.map((player) => ({
-        dg_id: player.dg_id,
-        player_name: player.player_name,
-        event_name: data.event_name,
-        course_name: data.course_name,
-        round_num: data.stat_round, // Use the round number from the response data
-        sg_app: player.sg_app,
-        sg_ott: player.sg_ott,
-        sg_putt: player.sg_putt,
-        accuracy: player.accuracy ?? null,
-        distance: player.distance ?? null,
-        gir: player.gir ?? null,
-        prox_fw: player.prox_fw ?? null,
-        scrambling: player.scrambling ?? null,
-        "position": player.position ?? null,
-        thru: player.thru ?? null,
-        today: player.today ?? null,
-        total: player.total ?? null,
-        data_golf_updated_at: sourceUpdateTime,
-    }));
+    console.log("Mapping received player data...");
+    const statsToInsert: SupabaseLiveStat[] = data.live_stats.map((player, index) => {
+        // Log the 'round' field for the first few players
+        if (index < 3) {
+            console.log(`Player ${player.player_name} - Raw round value: ${player.round}`);
+        }
+        return {
+            dg_id: player.dg_id,
+            player_name: player.player_name,
+            event_name: data.event_name,
+            course_name: data.course_name,
+            round_num: data.stat_round,
+            sg_app: player.sg_app,
+            sg_ott: player.sg_ott,
+            sg_putt: player.sg_putt,
+            sg_arg: player.sg_arg ?? null,
+            sg_t2g: player.sg_t2g ?? null,
+            sg_total: player.sg_total ?? null,
+            accuracy: player.accuracy ?? null,
+            distance: player.distance ?? null,
+            gir: player.gir ?? null,
+            prox_fw: player.prox_fw ?? null,
+            scrambling: player.scrambling ?? null,
+            "position": player.position ?? null,
+            thru: player.thru ?? null,
+            today: player.round ?? null, // Map player.round to Supabase.today
+            total: player.total ?? null,
+            data_golf_updated_at: sourceUpdateTime,
+        };
+    });
 
     // 4. Insert into historical table
     if (statsToInsert.length > 0) {

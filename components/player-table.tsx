@@ -41,6 +41,8 @@ type LiveTournamentStat = {
   sg_app: number | null;
   sg_ott: number | null;
   sg_putt: number | null;
+  sg_t2g: number | null;
+  sg_total: number | null;
   accuracy: number | null;
   distance: number | null;
   gir: number | null;
@@ -52,6 +54,7 @@ type LiveTournamentStat = {
   total: number | null;
   data_golf_updated_at: string | null;
   fetched_at: string | null; // from historical table, might be null if view definition changes
+  sg_arg: number | null;
 }
 
 // Combined type for table display flexibility (optional, could use union)
@@ -80,7 +83,8 @@ function formatRelativeTime(isoTimestamp: string | null): string {
 }
 
 export default function PlayerTable() {
-  const [sorting, setSorting] = useState<SortingState>([{ id: "sg_total", desc: true }]);
+  // Define sorting state separately, still needed for the table options
+  const [sorting, setSorting] = useState<SortingState>([]);
   const [seasonSkills, setSeasonSkills] = useState<PlayerSkillRating[]>([]);
   const [liveStats, setLiveStats] = useState<LiveTournamentStat[]>([]);
   const [loadingSeason, setLoadingSeason] = useState(true);
@@ -125,15 +129,21 @@ export default function PlayerTable() {
   };
 
   const fetchLiveStats = async () => {
+    console.log("@@@ fetchLiveStats CALLED @@@");
     setLoadingLive(true);
     try {
-      // Fetch from the view, REMOVE the filter for event_avg
       const { data, error } = await supabase
         .from("latest_live_tournament_stats_view")
-        .select("*")
+        .select("*", {
+          // Add head: true and count: 'exact' if needed, but focus on cache for now
+          // Try forcing no cache on the read
+          // Note: Standard Supabase JS client might not directly support fetch options like cache.
+          // This might require lower-level fetch or acknowledging potential slight delays.
+          // For now, let's assume standard behavior and see if recreating view helps.
+          // If issue persists, we might need RPC or direct table query with JS filtering.
+        })
         // Removed: .eq('round_num', 'event_avg')
-        // Sort by latest event first, then by player name or score
-        .order("event_name", { ascending: false }) // Assuming latest event is desired if multiple present
+        .order("event_name", { ascending: false })
         .order("total", { ascending: true });
 
       if (error) throw error;
@@ -188,6 +198,7 @@ export default function PlayerTable() {
 
   // Trigger for Live Stats Sync
   const triggerLiveSyncAndRefetch = async () => {
+    console.log("@@@ triggerLiveSyncAndRefetch CALLED @@@");
     setIsSyncingLive(true);
     setLastLiveUpdate(null); // Clear timestamp while syncing
      try {
@@ -264,15 +275,16 @@ export default function PlayerTable() {
     } else { // dataView === "tournament"
         const live = playersToAnalyze as LiveTournamentStat[];
         return {
-            // Use stats available in LiveTournamentStat
             sg_ott: calculatePercentiles(live.map(p => p.sg_ott)),
             sg_app: calculatePercentiles(live.map(p => p.sg_app)),
             sg_putt: calculatePercentiles(live.map(p => p.sg_putt)),
+            sg_t2g: calculatePercentiles(live.map(p => p.sg_t2g)),
+            sg_total: calculatePercentiles(live.map(p => p.sg_total)),
             accuracy: calculatePercentiles(live.map(p => p.accuracy)),
             distance: calculatePercentiles(live.map(p => p.distance)),
             gir: calculatePercentiles(live.map(p => p.gir)),
             scrambling: calculatePercentiles(live.map(p => p.scrambling)),
-            // Note: total score (lower is better) would need isHigherBetter=false if used in heatmap
+            sg_arg: calculatePercentiles(live.map(p => p.sg_arg)),
         };
     }
   }, [dataView, seasonSkills, liveStats]); // Recalculate when view or data changes
@@ -297,21 +309,19 @@ export default function PlayerTable() {
   // Make columns dynamic based on dataView
   const columns: ColumnDef<PlayerSkillRating | LiveTournamentStat>[] = useMemo(
     () => {
-      const baseColumns: ColumnDef<PlayerSkillRating | LiveTournamentStat>[] = [
-        {
+      const nameColumn: ColumnDef<PlayerSkillRating | LiveTournamentStat> = {
           accessorKey: "player_name",
-          header: "Name",
+          header: "NAME",
           cell: ({ row }) => {
             const name = row.original.player_name;
             const formattedName = name.includes(",") ? name.split(",").reverse().join(" ").trim() : name;
             return <div className="font-medium min-w-[150px]">{formattedName}</div>;
           },
-        },
-      ];
+      };
 
       if (dataView === "season") {
         return [
-          ...baseColumns,
+          nameColumn,
           // Season Skill Columns with Heatmap
           {
             accessorKey: "sg_total",
@@ -393,74 +403,144 @@ export default function PlayerTable() {
         ];
       } else { // dataView === "tournament"
         return [
-          ...baseColumns,
-          // Live Tournament Stat Columns with Heatmap
           {
             accessorKey: "position",
-            header: "Pos",
+            header: "POS",
             cell: ({ row }) => <div className="text-center">{ (row.original as LiveTournamentStat).position ?? '-'}</div>,
+            meta: { headerClassName: 'text-center', cellClassName: 'text-center' },
           },
-           {
+          nameColumn,
+          {
             accessorKey: "total",
             header: ({ column }) => (
-                 <div className="flex items-center cursor-pointer" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>Total <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" /></div>
+                 <div className="text-right cursor-pointer flex items-center justify-end" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>TOTAL <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" /></div>
             ),
             cell: ({ row }) => {
                  const value = (row.original as LiveTournamentStat).total;
-                 // Format score (+/-)
                  const formatted = value === 0 ? 'E' : value && value > 0 ? `+${value}` : value?.toString() ?? '-';
-                 return <div className="text-right font-medium">{formatted}</div>;
+                 return <div className="font-medium">{formatted}</div>;
              },
+              meta: { headerClassName: 'text-right', cellClassName: 'text-right' },
           },
           {
-            accessorKey: "sg_ott",
-            header: "SG: OTT (T)",
-             cell: ({ row }) => {
-                 const value = (row.original as LiveTournamentStat).sg_ott;
-                 const colorClass = getHeatmapColor(value, "sg_ott");
-                 return <div className={`text-right font-medium rounded-md px-2 py-1 ${colorClass}`}>{value?.toFixed(2) ?? 'N/A'}</div>;
-             },
+            accessorKey: "thru",
+            header: ({ column }) => (
+                 <div className="text-center cursor-pointer flex items-center justify-center" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>THRU <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" /></div>
+            ),
+            cell: ({ row }) => <div className="text-center">{(row.original as LiveTournamentStat).thru ?? '-'}</div>,
+            meta: { headerClassName: 'text-center', cellClassName: 'text-center' },
           },
            {
-            accessorKey: "sg_app",
-            header: "SG: APP (T)",
-             cell: ({ row }) => {
-                 const value = (row.original as LiveTournamentStat).sg_app;
-                 const colorClass = getHeatmapColor(value, "sg_app");
-                 return <div className={`text-right font-medium rounded-md px-2 py-1 ${colorClass}`}>{value?.toFixed(2) ?? 'N/A'}</div>;
+            accessorKey: "today",
+            header: ({ column }) => (
+                 <div className="text-right cursor-pointer flex items-center justify-end" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>RD <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" /></div>
+            ),
+            cell: ({ row }) => {
+                const value = (row.original as LiveTournamentStat).today;
+                console.log(`Rendering RD for ${row.original.player_name}: raw value = ${value}`);
+                const formatted = value === 0 ? 'E' : value && value > 0 ? `+${value}` : value?.toString() ?? '-';
+                 return <div className="font-medium">{formatted}</div>;
              },
+             meta: { headerClassName: 'text-right', cellClassName: 'text-right' },
           },
            {
             accessorKey: "sg_putt",
-            header: "SG: PUTT (T)",
-             cell: ({ row }) => {
+            header: ({ column }) => (
+                 <div className="text-right cursor-pointer flex items-center justify-end" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>SG PUTT <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" /></div>
+            ),
+            cell: ({ row }) => {
                  const value = (row.original as LiveTournamentStat).sg_putt;
                  const colorClass = getHeatmapColor(value, "sg_putt");
-                 return <div className={`text-right font-medium rounded-md px-2 py-1 ${colorClass}`}>{value?.toFixed(2) ?? 'N/A'}</div>;
+                 return <div className={`font-medium rounded-md px-2 py-1 ${colorClass}`}>{value?.toFixed(2) ?? 'N/A'}</div>;
              },
+              meta: { headerClassName: 'text-right', cellClassName: 'text-right' },
           },
            {
-            accessorKey: "thru",
-            header: "Thru",
-             cell: ({ row }) => <div className="text-center">{(row.original as LiveTournamentStat).thru ?? '-'}</div>,
+            accessorKey: "sg_arg",
+            header: ({ column }) => (
+                 <div className="text-right cursor-pointer flex items-center justify-end" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>SG ARG <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" /></div>
+            ),
+            cell: ({ row }) => {
+                 const value = (row.original as LiveTournamentStat).sg_arg;
+                 const colorClass = getHeatmapColor(value, "sg_arg");
+                 return <div className={`font-medium rounded-md px-2 py-1 ${colorClass}`}>{value?.toFixed(2) ?? 'N/A'}</div>;
+             },
+              meta: { headerClassName: 'text-right', cellClassName: 'text-right' },
+          },
+           {
+            accessorKey: "sg_app",
+            header: ({ column }) => (
+                 <div className="text-right cursor-pointer flex items-center justify-end" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>SG APP <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" /></div>
+            ),
+            cell: ({ row }) => {
+                 const value = (row.original as LiveTournamentStat).sg_app;
+                 const colorClass = getHeatmapColor(value, "sg_app");
+                 return <div className={`font-medium rounded-md px-2 py-1 ${colorClass}`}>{value?.toFixed(2) ?? 'N/A'}</div>;
+             },
+             meta: { headerClassName: 'text-right', cellClassName: 'text-right' },
+          },
+          {
+            accessorKey: "sg_ott",
+            header: ({ column }) => (
+                 <div className="text-right cursor-pointer flex items-center justify-end" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>SG OTT <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" /></div>
+            ),
+            cell: ({ row }) => {
+                 const value = (row.original as LiveTournamentStat).sg_ott;
+                 const colorClass = getHeatmapColor(value, "sg_ott");
+                 return <div className={`font-medium rounded-md px-2 py-1 ${colorClass}`}>{value?.toFixed(2) ?? 'N/A'}</div>;
+             },
+             meta: { headerClassName: 'text-right', cellClassName: 'text-right' },
+          },
+          {
+            accessorKey: "sg_t2g",
+            header: ({ column }) => (
+                 <div className="text-right cursor-pointer flex items-center justify-end" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>SG T2G <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" /></div>
+            ),
+            cell: ({ row }) => {
+                 const value = (row.original as LiveTournamentStat).sg_t2g;
+                 const colorClass = getHeatmapColor(value, "sg_t2g");
+                 return <div className={`font-medium rounded-md px-2 py-1 ${colorClass}`}>{value?.toFixed(2) ?? 'N/A'}</div>;
+             },
+             meta: { headerClassName: 'text-right', cellClassName: 'text-right' },
+          },
+          {
+            accessorKey: "sg_total",
+            header: ({ column }) => (
+                 <div className="text-right cursor-pointer flex items-center justify-end" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>SG TOTAL <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" /></div>
+            ),
+            cell: ({ row }) => {
+                 const value = (row.original as LiveTournamentStat).sg_total;
+                 const colorClass = getHeatmapColor(value, "sg_total");
+                 return <div className={`font-medium rounded-md px-2 py-1 ${colorClass}`}>{value?.toFixed(2) ?? 'N/A'}</div>;
+             },
+             meta: { headerClassName: 'text-right', cellClassName: 'text-right' },
           },
         ];
       }
     },
-    [dataView, statPercentiles] // Add statPercentiles as dependency
+    [dataView, statPercentiles]
   );
 
   const table = useReactTable({
-    // Use the selected displayPlayers data
     data: displayPlayers,
     columns,
-    // Add back required table options
-    getCoreRowModel: getCoreRowModel(),
-    onSortingChange: setSorting,
-    getSortedRowModel: getSortedRowModel(),
+    // Define initial sorting based on dataView
+    initialState: {
+        get sorting() { // Use getter to dynamically access dataView
+            if (dataView === 'tournament') {
+                return [{ id: 'total', desc: false }]; // Sort by Total Ascending
+            } else {
+                return [{ id: 'sg_total', desc: true }]; // Default Season sort
+            }
+        }
+    },
+    // Manage sorting state
     state: {
       sorting,
     },
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
   });
 
   const loading = loadingSeason || loadingLive; // Overall loading state
@@ -536,7 +616,7 @@ export default function PlayerTable() {
                    <TableRow key={headerGroup.id}>
                      {headerGroup.headers.map((header) => {
                        return (
-                         <TableHead key={header.id} className="text-white whitespace-nowrap px-3 py-2 text-xs sm:text-sm">
+                         <TableHead key={header.id} className={`text-white whitespace-nowrap px-3 py-2 text-xs sm:text-sm ${(header.column.columnDef.meta as any)?.headerClassName}`}>
                            {header.isPlaceholder
                              ? null
                              : flexRender(header.column.columnDef.header, header.getContext())}
@@ -555,7 +635,7 @@ export default function PlayerTable() {
                        className="hover:bg-[#2a2a35]"
                      >
                        {row.getVisibleCells().map((cell) => (
-                         <TableCell key={cell.id} className="px-3 py-1.5 text-xs sm:text-sm">
+                         <TableCell key={cell.id} className={`px-3 py-1.5 text-xs sm:text-sm ${(cell.column.columnDef.meta as any)?.cellClassName}`}>
                             {flexRender(cell.column.columnDef.cell, cell.getContext())}
                          </TableCell>
                        ))}
