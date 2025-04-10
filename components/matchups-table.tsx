@@ -14,6 +14,8 @@ import {
 import { Loader2, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/use-toast"
+import { Slider } from "@/components/ui/slider"
+import { Label } from "@/components/ui/label"
 
 // Interface matching the Supabase table structure
 interface SupabaseMatchupRow {
@@ -49,8 +51,6 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 const supabase = createClient(supabaseUrl!, supabaseAnonKey!); // Add non-null assertion or proper handling
 
-const PAGE_SIZE = 10;
-
 // Helper function for relative time
 function formatRelativeTime(isoTimestamp: string | null): string {
   if (!isoTimestamp) return "";
@@ -70,17 +70,38 @@ function formatRelativeTime(isoTimestamp: string | null): string {
   return `${diffInHours}h ago`; // For longer durations, consider days or using a library
 }
 
+// Helper function to convert decimal odds to implied probability
+function decimalToImpliedProbability(decimalOdds: number | null): number {
+    if (decimalOdds === null || decimalOdds <= 1) return 0;
+    return 1 / decimalOdds;
+}
+
+// Function to get dynamic highlight class based on probability difference magnitude
+function getHighlightIntensityClass(probDiff: number): string {
+    // Example scale: Higher diff -> more intense green
+    if (probDiff >= 0.20) { // 20%+ diff
+        return "bg-green-600/80"; // Most intense
+    } else if (probDiff >= 0.15) { // 15-20% diff
+        return "bg-green-700/70";
+    } else if (probDiff >= 0.10) { // 10-15% diff
+        return "bg-green-700/50";
+    } else { // Below 10% (but still meeting threshold)
+        return "bg-green-800/40"; // Least intense
+    }
+}
+
 // Remove props from component definition
 export default function MatchupsTable() {
   const [matchups, setMatchups] = useState<SupabaseMatchupRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRefreshingApi, setIsRefreshingApi] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(0);
   const [selectedBookmaker, setSelectedBookmaker] = useState<"fanduel" | "draftkings">("fanduel");
   const [totalCount, setTotalCount] = useState(0);
   const [currentEvent, setCurrentEvent] = useState<string | null>(null);
   const [lastUpdateTime, setLastUpdateTime] = useState<string | null>(null);
+  // Revert state back to probability difference
+  const [probDiffThreshold, setProbDiffThreshold] = useState<number>(10); // Default to 10%
 
   useEffect(() => {
     fetchMatchupsFromSupabase();
@@ -181,13 +202,8 @@ export default function MatchupsTable() {
     }
   };
 
-  // Pagination logic - use 'matchups' state directly (which now contains only latest)
-  const pageCount = Math.ceil(matchups.length / PAGE_SIZE);
-  const displayData = useMemo(() => {
-      // Use matchups directly for pagination
-      return matchups.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
-  // Update dependency array
-  }, [matchups, page]);
+  // Use matchups directly for display
+  const displayData = matchups;
 
   // Helper function to convert Decimal odds to American odds
   const decimalToAmerican = (decimalOdds: number): string => {
@@ -240,46 +256,61 @@ export default function MatchupsTable() {
   return (
     <Card className="glass-card">
       <CardContent className="p-6">
-        <div className="flex justify-between items-center mb-4">
-          <div>
-             <h2 className="text-xl font-bold">3-Ball Matchups</h2>
-             {currentEvent && <p className="text-sm text-gray-400">Event: {currentEvent}</p>}
+        <div className="flex flex-col gap-4 mb-4">
+          <div className="flex justify-between items-start">
+            <div>
+              <h2 className="text-xl font-bold">3-Ball Matchups</h2>
+              {currentEvent && <p className="text-sm text-gray-400">Event: {currentEvent}</p>}
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            {/* Bookmaker Buttons */}
-            <Button
-              variant={selectedBookmaker === "draftkings" ? "default" : "outline"}
-              onClick={() => { setSelectedBookmaker("draftkings"); setPage(0); }}
-              className={`text-sm ${selectedBookmaker === "draftkings" ? "filter-button-active" : "filter-button"}`}
-            >
-              DraftKings
-            </Button>
-            <Button
-              variant={selectedBookmaker === "fanduel" ? "default" : "outline"}
-              onClick={() => { setSelectedBookmaker("fanduel"); setPage(0); }}
-              className={`text-sm ${selectedBookmaker === "fanduel" ? "filter-button-active" : "filter-button"}`}
-            >
-              FanDuel
-            </Button>
-            <Button
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <div className="flex items-center gap-3">
+              <Button
+                variant={selectedBookmaker === "draftkings" ? "default" : "outline"}
+                onClick={() => { setSelectedBookmaker("draftkings"); }}
+                className={`text-sm ${selectedBookmaker === "draftkings" ? "filter-button-active" : "filter-button"}`}
+              >
+                DraftKings
+              </Button>
+              <Button
+                variant={selectedBookmaker === "fanduel" ? "default" : "outline"}
+                onClick={() => { setSelectedBookmaker("fanduel"); }}
+                className={`text-sm ${selectedBookmaker === "fanduel" ? "filter-button-active" : "filter-button"}`}
+              >
+                FanDuel
+              </Button>
+              <Button
                 variant="outline"
                 size="sm"
                 onClick={triggerApiRefreshAndRefetch}
                 disabled={isRefreshingApi || loading}
                 className="flex items-center gap-2 bg-[#1e1e23] border-none h-9"
                 title="Refresh odds from Data Golf API"
-            >
-                 {(isRefreshingApi || (loading && !lastUpdateTime)) ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            </Button>
-             {/* Last Updated Timestamp - Add context */}
-            {lastUpdateTime && !isRefreshingApi && (
-              <span className="text-xs text-gray-400 whitespace-nowrap" title={`Data Golf feed last updated at ${new Date(lastUpdateTime).toLocaleString()}`}>
-                DG Feed: {formatRelativeTime(lastUpdateTime)}
-              </span>
-            )}
-            {isRefreshingApi && (
-                 <span className="text-xs text-gray-500 whitespace-nowrap">Updating...</span>
-            )}
+              >
+                {(isRefreshingApi || (loading && !lastUpdateTime)) ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              </Button>
+              {lastUpdateTime && !isRefreshingApi && (
+                <span className="text-xs text-gray-400 whitespace-nowrap" title={`Data Golf feed last updated at ${new Date(lastUpdateTime).toLocaleString()}`}>
+                  DG Feed: {formatRelativeTime(lastUpdateTime)}
+                </span>
+              )}
+              {isRefreshingApi && (
+                <span className="text-xs text-gray-500 whitespace-nowrap">Updating...</span>
+              )}
+            </div>
+            <div className="flex items-center gap-3 flex-grow min-w-[200px]">
+              <Label htmlFor="prob-slider" className="text-sm whitespace-nowrap">Min Prob Diff:</Label>
+              <Slider
+                id="prob-slider"
+                min={0}
+                max={30} // Back to 0-30 %
+                step={1}
+                value={[probDiffThreshold]}
+                onValueChange={(value) => setProbDiffThreshold(value[0])}
+                className="w-full max-w-[150px]"
+              />
+              <span className="text-sm font-medium w-8 text-right">{probDiffThreshold}%</span>
+            </div>
           </div>
         </div>
 
@@ -298,29 +329,64 @@ export default function MatchupsTable() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {displayData.map((matchup) => (
-                  <TableRow key={matchup.id} className="hover:bg-[#2a2a35]">
-                    <TableCell>
-                      <div>{formatPlayerName(matchup.p1_player_name)}</div>
-                      <div>{formatPlayerName(matchup.p2_player_name)}</div>
-                      <div>{formatPlayerName(matchup.p3_player_name)}</div>
-                    </TableCell>
-                    {selectedBookmaker === 'fanduel' && (
-                      <TableCell className="text-center">
-                        <div>{formatOdds(matchup.fanduel_p1_odds)}</div>
-                        <div>{formatOdds(matchup.fanduel_p2_odds)}</div>
-                        <div>{formatOdds(matchup.fanduel_p3_odds)}</div>
+                {displayData.map((matchup) => {
+                  const p1_odds = selectedBookmaker === 'fanduel' ? matchup.fanduel_p1_odds : matchup.draftkings_p1_odds;
+                  const p2_odds = selectedBookmaker === 'fanduel' ? matchup.fanduel_p2_odds : matchup.draftkings_p2_odds;
+                  const p3_odds = selectedBookmaker === 'fanduel' ? matchup.fanduel_p3_odds : matchup.draftkings_p3_odds;
+
+                  const prob1 = decimalToImpliedProbability(p1_odds);
+                  const prob2 = decimalToImpliedProbability(p2_odds);
+                  const prob3 = decimalToImpliedProbability(p3_odds);
+
+                  const threshold = probDiffThreshold / 100;
+
+                  // Determine highlighting and calculate the difference for highlighted player
+                  let highlightP1 = false, highlightP2 = false, highlightP3 = false;
+                  let p1Diff = 0, p2Diff = 0, p3Diff = 0;
+
+                  if (prob1 > 0 && prob1 >= prob2 + threshold && prob1 >= prob3 + threshold) {
+                      highlightP1 = true;
+                      // Calculate the minimum difference to the other two
+                      p1Diff = Math.min(prob1 - prob2, prob1 - prob3);
+                  }
+                  if (prob2 > 0 && prob2 >= prob1 + threshold && prob2 >= prob3 + threshold) {
+                      highlightP2 = true;
+                      p2Diff = Math.min(prob2 - prob1, prob2 - prob3);
+                  }
+                  if (prob3 > 0 && prob3 >= prob1 + threshold && prob3 >= prob2 + threshold) {
+                      highlightP3 = true;
+                      p3Diff = Math.min(prob3 - prob1, prob3 - prob2);
+                  }
+
+                  // Get intensity classes based on the calculated difference
+                  const intensityClassP1 = highlightP1 ? getHighlightIntensityClass(p1Diff) : "";
+                  const intensityClassP2 = highlightP2 ? getHighlightIntensityClass(p2Diff) : "";
+                  const intensityClassP3 = highlightP3 ? getHighlightIntensityClass(p3Diff) : "";
+
+                  return (
+                    <TableRow key={matchup.id} className="hover:bg-[#2a2a35]">
+                      <TableCell>
+                        <div className={highlightP1 ? "font-semibold" : ""}>{formatPlayerName(matchup.p1_player_name)}</div>
+                        <div className={highlightP2 ? "font-semibold" : ""}>{formatPlayerName(matchup.p2_player_name)}</div>
+                        <div className={highlightP3 ? "font-semibold" : ""}>{formatPlayerName(matchup.p3_player_name)}</div>
                       </TableCell>
-                    )}
-                    {selectedBookmaker === 'draftkings' && (
-                      <TableCell className="text-center">
-                        <div>{formatOdds(matchup.draftkings_p1_odds)}</div>
-                        <div>{formatOdds(matchup.draftkings_p2_odds)}</div>
-                        <div>{formatOdds(matchup.draftkings_p3_odds)}</div>
-                      </TableCell>
-                    )}
-                  </TableRow>
-                ))}
+                      {selectedBookmaker === 'fanduel' && (
+                        <TableCell className="text-center">
+                          <div className={intensityClassP1}>{formatOdds(matchup.fanduel_p1_odds)}</div>
+                          <div className={intensityClassP2}>{formatOdds(matchup.fanduel_p2_odds)}</div>
+                          <div className={intensityClassP3}>{formatOdds(matchup.fanduel_p3_odds)}</div>
+                        </TableCell>
+                      )}
+                      {selectedBookmaker === 'draftkings' && (
+                        <TableCell className="text-center">
+                           <div className={intensityClassP1}>{formatOdds(matchup.draftkings_p1_odds)}</div>
+                           <div className={intensityClassP2}>{formatOdds(matchup.draftkings_p2_odds)}</div>
+                           <div className={intensityClassP3}>{formatOdds(matchup.draftkings_p3_odds)}</div>
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
@@ -330,32 +396,6 @@ export default function MatchupsTable() {
              {matchups.length === 0 && !loading && (
                 <p className="text-sm text-gray-500 mt-2">Try running the data fetching API route first: /api/matchups/3ball</p>
             )}
-          </div>
-        )}
-
-        {pageCount > 1 && (
-          <div className="flex items-center justify-center space-x-2 py-4">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPage((p) => Math.max(0, p - 1))}
-              disabled={page === 0}
-              className="bg-[#2a2a35] border-none hover:bg-[#34343f]"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <div className="text-sm text-gray-400">
-              Page {page + 1} of {pageCount}
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
-              disabled={page === pageCount - 1}
-              className="bg-[#2a2a35] border-none hover:bg-[#34343f]"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
           </div>
         )}
       </CardContent>
