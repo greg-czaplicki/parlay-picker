@@ -8,14 +8,16 @@ import {
     findPlayerMatchup,
     PlayerMatchupData,
     getLiveStatsForPlayers,
-    getParlayPicks,
+    getParlaysAndPicks,
     addParlayPick,
     removeParlayPick,
-    ParlayPick
+    ParlayPick,
+    ParlayWithPicks
 } from '@/app/actions/matchups';
 import { toast } from '@/components/ui/use-toast';
 import { Loader2, Check, X } from 'lucide-react';
 import { LiveTournamentStat } from '@/types/definitions';
+import { Trash2 } from 'lucide-react';
 
 // Structure to hold player name, matchup, and live stats
 interface ParlayPlayer {
@@ -43,42 +45,37 @@ const formatScore = (score: number | null | undefined): string => {
     return score > 0 ? `+${score}` : `${score}`;
 };
 
-export default function ParlayCard() {
-  const [players, setPlayers] = useState<ParlayPlayer[]>([]);
+// Define Props for ParlayCard
+interface ParlayCardProps {
+    parlayId: number;
+    parlayName: string | null;
+    initialPicks: ParlayPick[];
+    // Optional: Add a callback to notify parent page when parlay is deleted
+    // onDelete?: (parlayId: number) => void;
+}
+
+export default function ParlayCard({ parlayId, parlayName, initialPicks /*, onDelete */ }: ParlayCardProps) {
+  // Initialize state from props
+  const [players, setPlayers] = useState<ParlayPlayer[]>(() =>
+      initialPicks.map(pick => ({
+          name: pick.picked_player_name,
+          pickId: pick.id,
+          matchup: null,
+          liveStats: null,
+          isLoadingMatchup: true, // Start loading
+          isLoadingStats: false,
+          isPersisted: true,
+          matchupError: undefined,
+          statsError: undefined,
+      }))
+  );
   const [newPlayerName, setNewPlayerName] = useState('');
   const [isAdding, setIsAdding] = useState(false);
-  const [isLoadingInitialPicks, setIsLoadingInitialPicks] = useState(true);
+  // Removed isLoadingInitialPicks, as data comes via props now
 
-  // --- Fetch initial picks on mount ---
-  useEffect(() => {
-      setIsLoadingInitialPicks(true);
-      getParlayPicks().then(({ picks, error }) => {
-          if (error) {
-              toast({ title: "Error Loading Saved Picks", description: error, variant: "destructive" });
-          } else if (picks && picks.length > 0) {
-              const initialPlayers: ParlayPlayer[] = picks.map(pick => ({
-                  name: pick.picked_player_name, // Use the name from the pick
-                  pickId: pick.id,
-                  matchup: null, // Will be fetched
-                  liveStats: null, // Will be fetched
-                  isLoadingMatchup: true, // Start loading matchup
-                  isLoadingStats: false,
-                  isPersisted: true, // Mark as loaded from DB
-                  matchupError: undefined,
-                  statsError: undefined,
-              }));
-              setPlayers(initialPlayers);
-          } else {
-          }
-          setIsLoadingInitialPicks(false);
-      }).catch(err => {
-         console.error("Error in getParlayPicks promise:", err);
-         toast({ title: "Error Loading Saved Picks", description: err.message, variant: "destructive" });
-         setIsLoadingInitialPicks(false);
-      });
-  }, []);
+  // useEffect to fetch initial picks REMOVED (handled by initial state)
 
-  // --- Fetch matchup/stats when players change (includes initial load) ---
+  // useEffect to fetch matchup/stats (Logic remains the same, operates on local `players` state)
   useEffect(() => {
     players.forEach((player, index) => {
         // Fetch matchup if needed
@@ -142,6 +139,7 @@ export default function ParlayCard() {
     });
   }, [players]);
 
+  // --- Add Player Handler ---
   const addPlayer = async () => {
     const trimmedName = newPlayerName.trim();
     if (!trimmedName || players.some(p => p.name.toLowerCase() === trimmedName.toLowerCase())) {
@@ -154,7 +152,7 @@ export default function ParlayCard() {
     }
 
     setIsAdding(true);
-    setNewPlayerName(''); // Clear input immediately
+    setNewPlayerName('');
 
     try {
       // 1. Find the matchup first
@@ -181,10 +179,11 @@ export default function ParlayCard() {
           throw new Error("Could not identify picked player ID within the found matchup.");
       }
 
-      // 2. Add to DB
+      // 2. Add to DB (use parlayId from props)
       const { pick, error: addPickError } = await addParlayPick({
+          parlay_id: parlayId, // Use prop
           picked_player_dg_id: pickedPlayerId,
-          picked_player_name: trimmedName, // Store the name used for searching
+          picked_player_name: trimmedName,
           matchup_id: matchup.id,
           event_name: matchup.event_name,
           round_num: matchup.round_num,
@@ -193,14 +192,14 @@ export default function ParlayCard() {
       if (addPickError) throw new Error(addPickError);
       if (!pick) throw new Error("Failed to save pick to database.");
 
-      // 3. Add to local state (with the new pickId)
+      // 3. Add to local state
       const newPlayerEntry: ParlayPlayer = {
         name: trimmedName,
         pickId: pick.id,
-        matchup: matchup, // We already have it
-        liveStats: null, // Will be fetched by useEffect
-        isLoadingMatchup: false, // Already loaded
-        isLoadingStats: false, // Let useEffect handle setting this to true
+        matchup: matchup,
+        liveStats: null,
+        isLoadingMatchup: false,
+        isLoadingStats: false, // Stats fetch triggered by useEffect
         isPersisted: true,
         matchupError: undefined,
         statsError: undefined,
@@ -256,7 +255,19 @@ export default function ParlayCard() {
 
     const liveStat = liveStatsMap?.[dgId];
     const displayScore = formatScore(liveStat?.today);
-    const displayThru = liveStat?.thru ? ` (Thru ${liveStat.thru})` : liveStat?.position === "CUT" ? " (CUT)" : liveStat?.position === "WD" ? " (WD)" : ""; // Add WD status
+
+    // Update Thru display logic
+    let displayThru = ""; // Default to empty
+    if (liveStat?.position === "F" || liveStat?.thru === 18) {
+        displayThru = " (F)"; // Show F if position is F OR thru is 18
+    } else if (liveStat?.thru) {
+        displayThru = ` (Thru ${liveStat.thru})`; // Show Thru X otherwise
+    } else if (liveStat?.position === "CUT") {
+        displayThru = " (CUT)";
+    } else if (liveStat?.position === "WD") {
+        displayThru = " (WD)";
+    }
+
     const formattedPlayerName = formatPlayerNameDisplay(playerName);
     const isSearchedPlayer = formattedPlayerName.toLowerCase() === searchedPlayerName.toLowerCase();
 
@@ -280,142 +291,185 @@ export default function ParlayCard() {
     );
   };
 
+  // --- Calculate Status Logic ---
+  const calculateStatus = (player: ParlayPlayer) => {
+      let playerLineStyle = 'font-bold text-primary';
+      let playerLineIcon = null as React.ReactNode | null;
+      let groupContainerStyle = '';
+      const groupIsLoadingStats = player.isLoadingStats;
+
+      const checkIcon = <Check size={14} className="inline-block ml-1.5 text-green-500" />;
+      const xIcon = <X size={14} className="inline-block ml-1.5 text-red-500" />;
+
+      if (player.matchup && player.liveStats && !player.isLoadingStats && !player.statsError) {
+          const p1Id = player.matchup.p1_dg_id;
+          const p2Id = player.matchup.p2_dg_id;
+          const p3Id = player.matchup.p3_dg_id;
+
+          const p1Stat = p1Id ? player.liveStats[p1Id] : undefined;
+          const p2Stat = p2Id ? player.liveStats[p2Id] : undefined;
+          const p3Stat = p3Id ? player.liveStats[p3Id] : undefined;
+
+          // Find which player (p1, p2, p3) corresponds to the searched name
+          let selectedPlayerId: number | null = null;
+          if (p1Id && formatPlayerNameDisplay(player.matchup.p1_player_name).toLowerCase() === player.name.toLowerCase()) selectedPlayerId = p1Id;
+          else if (p2Id && formatPlayerNameDisplay(player.matchup.p2_player_name).toLowerCase() === player.name.toLowerCase()) selectedPlayerId = p2Id;
+          else if (p3Id && formatPlayerNameDisplay(player.matchup.p3_player_name).toLowerCase() === player.name.toLowerCase()) selectedPlayerId = p3Id;
+
+          const selectedLiveStat = selectedPlayerId ? player.liveStats[selectedPlayerId] : undefined;
+
+          // Ensure all 3 players and the selected player's stats are available for comparison
+          if (p1Stat && p2Stat && p3Stat && selectedLiveStat && selectedPlayerId) {
+              const scores = [
+                  p1Stat.today ?? Infinity,
+                  p2Stat.today ?? Infinity,
+                  p3Stat.today ?? Infinity,
+              ];
+              const selectedScore = selectedLiveStat.today ?? Infinity;
+
+              const finished = [
+                  p1Stat.thru === 18 || p1Stat.position === 'F' || p1Stat.position === 'CUT' || p1Stat.position === 'WD',
+                  p2Stat.thru === 18 || p2Stat.position === 'F' || p2Stat.position === 'CUT' || p2Stat.position === 'WD',
+                  p3Stat.thru === 18 || p3Stat.position === 'F' || p3Stat.position === 'CUT' || p3Stat.position === 'WD',
+              ];
+              const selectedFinished = finished[p1Id === selectedPlayerId ? 0 : p2Id === selectedPlayerId ? 1 : 2];
+              const allFinished = finished.every(f => f);
+
+              // Find min score, excluding Infinity
+              const validScores = scores.filter(s => s !== Infinity);
+              const minScore = validScores.length > 0 ? Math.min(...validScores) : Infinity;
+
+              const isWinning = selectedScore === minScore && scores.filter(s => s === minScore).length === 1;
+              const isTiedForLead = selectedScore === minScore && scores.filter(s => s === minScore).length > 1;
+              const isLosing = selectedScore > minScore;
+              const shotsBehind = isLosing ? selectedScore - minScore : 0;
+
+              // Player Line Style & Icon
+              if (selectedScore === Infinity) {
+                  playerLineStyle = 'font-bold text-muted-foreground';
+              } else if (allFinished) {
+                  // Final Result styling (applies to group container too)
+                  if (isWinning || isTiedForLead) {
+                      playerLineStyle = 'font-bold text-green-500';
+                      playerLineIcon = checkIcon;
+                      groupContainerStyle = 'border border-green-500/30 bg-green-500/5 rounded-md p-2';
+                  } else { // Lost and Finished
+                      playerLineStyle = 'font-bold text-red-500';
+                      playerLineIcon = xIcon;
+                      groupContainerStyle = 'border border-red-500/30 bg-red-500/5 rounded-md p-2';
+                  }
+              } else {
+                  // In-Progress Styling (only player line changes color)
+                  if (isWinning) {
+                      playerLineStyle = 'font-bold text-green-500';
+                  } else if (isTiedForLead) {
+                      playerLineStyle = 'font-bold text-yellow-500';
+                  } else if (isLosing) {
+                      if (shotsBehind === 1) {
+                          playerLineStyle = 'font-bold text-orange-400'; // Losing by 1
+                      } else { // shotsBehind > 1
+                          playerLineStyle = 'font-bold text-red-400'; // Losing by 2+ (Lighter Red)
+                      }
+                  }
+                  // Set default padding for in-progress group container
+                  groupContainerStyle = 'border border-transparent p-2';
+              }
+          }
+      }
+      // Ensure default padding if calculated style is empty (e.g., loading)
+      if (!groupContainerStyle) {
+         groupContainerStyle = 'border border-transparent p-2';
+      }
+
+      return { playerLineStyle, playerLineIcon, groupContainerStyle };
+  };
+
+  // Optional: Handler to delete the entire parlay
+  // const handleDeleteParlay = async () => {
+  //    if (confirm(`Are you sure you want to delete the parlay "${parlayName || `ID: ${parlayId}`}"? This cannot be undone.`)) {
+  //       const { success, error } = await deleteParlay(parlayId); // Assuming deleteParlay action exists
+  //       if (success) {
+  //          toast({ title: "Parlay Deleted" });
+  //          onDelete?.(parlayId); // Notify parent page
+  //       } else {
+  //          toast({ title: "Error Deleting Parlay", description: error, variant: "destructive" });
+  //       }
+  //    }
+  // };
+
   return (
-    <Card className="bg-background/90 backdrop-blur-sm border border-border/40 shadow-lg">
-      <CardHeader>
-        <CardTitle className="text-lg font-semibold">Parlay Builder</CardTitle>
+    <Card className="bg-background/90 backdrop-blur-sm border border-border/40 shadow-lg flex flex-col h-full">
+      <CardHeader className="flex-row justify-between items-center"> {/* Use flex row for title and delete */} 
+        <CardTitle className="text-lg font-semibold">{parlayName || `Parlay #${parlayId}`}</CardTitle>
+        {/* Optional: Delete Parlay Button */}
+        {/* <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive" onClick={handleDeleteParlay} title="Delete Parlay"> 
+           <Trash2 size={16} />
+        </Button> */}
       </CardHeader>
-      <CardContent>
-        <div className="flex space-x-2 mb-6">
+      {/* Content takes remaining space and scrolls internally if needed */}
+      <CardContent className="flex-grow overflow-y-auto p-4 space-y-4"> 
+        {/* Input section */}
+        <div className="flex space-x-2"> 
           <Input
             type="text"
-            placeholder="Add player name (e.g., Scottie Scheffler)"
+            placeholder="Add player name..."
             value={newPlayerName}
             onChange={handleInputChange}
             onKeyPress={handleKeyPress}
             disabled={isAdding}
-            className="flex-grow"
+            className="flex-grow h-9 text-sm"
           />
-          <Button onClick={addPlayer} disabled={isAdding || !newPlayerName.trim()}>
+          <Button onClick={addPlayer} disabled={isAdding || !newPlayerName.trim()} size="sm">
             {isAdding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            Add Player
+            Add
           </Button>
         </div>
+
+        {/* Players List */}
         <div>
-          <h3 className="font-medium mb-3 text-base text-muted-foreground">Selected Players & Matchups:</h3>
-          {isLoadingInitialPicks ? (
-              <div className="text-center py-4"><Loader2 className="h-6 w-6 animate-spin inline-block text-muted-foreground" /></div>
-          ) : players.length > 0 ? (
+          {/* Removed "Selected Players & Matchups" header, implied by card title */}
+          {players.length > 0 ? (
             <ul className="space-y-3">
               {players.map((player) => {
                   const groupIsLoadingStats = player.isLoadingStats;
-                  let statusStyle = 'font-bold text-primary'; // Default style
-                  let statusIcon = null as React.ReactNode | null;
-                  const checkIcon = <Check size={14} className="inline-block ml-1.5 text-green-500" />;
-                  const xIcon = <X size={14} className="inline-block ml-1.5 text-red-500" />;
-
-                  // Calculate status if matchup and stats are loaded
-                  if (player.matchup && player.liveStats && !groupIsLoadingStats && !player.statsError) {
-                      const p1Id = player.matchup.p1_dg_id;
-                      const p2Id = player.matchup.p2_dg_id;
-                      const p3Id = player.matchup.p3_dg_id;
-
-                      const p1Stat = p1Id ? player.liveStats[p1Id] : undefined;
-                      const p2Stat = p2Id ? player.liveStats[p2Id] : undefined;
-                      const p3Stat = p3Id ? player.liveStats[p3Id] : undefined;
-
-                      // Find which player (p1, p2, p3) corresponds to the searched name
-                      let selectedPlayerId: number | null = null;
-                      if (p1Id && formatPlayerNameDisplay(player.matchup.p1_player_name).toLowerCase() === player.name.toLowerCase()) selectedPlayerId = p1Id;
-                      else if (p2Id && formatPlayerNameDisplay(player.matchup.p2_player_name).toLowerCase() === player.name.toLowerCase()) selectedPlayerId = p2Id;
-                      else if (p3Id && formatPlayerNameDisplay(player.matchup.p3_player_name).toLowerCase() === player.name.toLowerCase()) selectedPlayerId = p3Id;
-
-                      const selectedLiveStat = selectedPlayerId ? player.liveStats[selectedPlayerId] : undefined;
-
-                      // Ensure all 3 players and the selected player's stats are available for comparison
-                      if (p1Stat && p2Stat && p3Stat && selectedLiveStat && selectedPlayerId) {
-                          const scores = [
-                              p1Stat.today ?? Infinity,
-                              p2Stat.today ?? Infinity,
-                              p3Stat.today ?? Infinity,
-                          ];
-                          const selectedScore = selectedLiveStat.today ?? Infinity;
-
-                          const finished = [
-                              p1Stat.thru === 18 || p1Stat.position === 'F' || p1Stat.position === 'CUT' || p1Stat.position === 'WD',
-                              p2Stat.thru === 18 || p2Stat.position === 'F' || p2Stat.position === 'CUT' || p2Stat.position === 'WD',
-                              p3Stat.thru === 18 || p3Stat.position === 'F' || p3Stat.position === 'CUT' || p3Stat.position === 'WD',
-                          ];
-                          const selectedFinished = finished[p1Id === selectedPlayerId ? 0 : p2Id === selectedPlayerId ? 1 : 2];
-                          const allFinished = finished.every(f => f);
-
-                          // Find min score, excluding Infinity
-                          const validScores = scores.filter(s => s !== Infinity);
-                          const minScore = validScores.length > 0 ? Math.min(...validScores) : Infinity;
-
-                          const isWinning = selectedScore === minScore && scores.filter(s => s === minScore).length === 1; // Strictly lowest
-                          const isTiedForLead = selectedScore === minScore && scores.filter(s => s === minScore).length > 1;
-
-                          if (selectedScore === Infinity) { // Handle missing score case
-                             statusStyle = 'font-bold text-muted-foreground'; // Dim if no score
-                          } else if (isWinning) {
-                              statusStyle = 'font-bold text-green-500';
-                              if (allFinished) statusIcon = checkIcon;
-                          } else if (isTiedForLead) {
-                              statusStyle = 'font-bold text-yellow-500'; // Maybe yellow for tied?
-                              if (allFinished) statusIcon = checkIcon; // Still 'won' if tied and finished
-                          } else { // Losing
-                              if (allFinished) {
-                                 statusStyle = 'font-bold text-red-500';
-                                 statusIcon = xIcon;
-                              } else if (!selectedFinished) {
-                                 statusStyle = 'font-bold text-yellow-500'; // Losing but in progress
-                              } else {
-                                 statusStyle = 'font-bold text-red-500'; // Finished and lost (others may still play)
-                              }
-                          }
-                      }
-                  }
+                  const { playerLineStyle, playerLineIcon, groupContainerStyle } = calculateStatus(player);
 
                   return (
-                    <li key={player.pickId || player.name} className="p-3 rounded-md border border-border/30 bg-muted/40 relative group">
+                    <li key={player.pickId || player.name} className="p-2 rounded-md border border-border/20 bg-muted/30 relative group">
                        <Button
                             variant="ghost"
                             size="icon"
                             onClick={() => removePlayer(player.pickId, player.name)}
-                            className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                            aria-label="Remove player"
+                            className="absolute top-0 right-0 h-5 w-5 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                            aria-label="Remove pick"
                         >
-                            <span className="text-xs">✕</span>
+                            <X size={14} /> {/* Use X icon for removing pick */} 
                         </Button>
-                      <div className="flex items-center mb-2">
-                        {(player.isLoadingMatchup) && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-                      </div>
-
-                      {player.matchupError && (
-                        <p className="text-xs text-destructive">Error finding matchup: {player.matchupError}</p>
-                      )}
-                      {!player.isLoadingMatchup && !player.matchupError && player.matchup && (
-                        <div className="text-sm text-muted-foreground space-y-0.5">
-                           {/* Pass calculated statusStyle and statusIcon */} 
-                           {renderMatchupPlayerLine(player.matchup.p1_dg_id, player.matchup.p1_player_name, player.liveStats, player.name, groupIsLoadingStats, statusStyle, statusIcon)}
-                           {renderMatchupPlayerLine(player.matchup.p2_dg_id, player.matchup.p2_player_name, player.liveStats, player.name, groupIsLoadingStats, statusStyle, statusIcon)}
-                           {renderMatchupPlayerLine(player.matchup.p3_dg_id, player.matchup.p3_player_name, player.liveStats, player.name, groupIsLoadingStats, statusStyle, statusIcon)}
-
-                           {player.statsError && !groupIsLoadingStats && (
-                               <p className="text-xs text-destructive mt-1">Error loading scores: {player.statsError}</p>
-                           )}
-                        </div>
-                      )}
-                       {!player.isLoadingMatchup && !player.matchupError && !player.matchup && (
-                         <p className="text-sm text-muted-foreground italic">No 3-ball matchup data found.</p>
-                       )}
+                        {player.matchupError && (
+                            <p className="text-xs text-destructive px-1 py-2">Error finding matchup: {player.matchupError}</p>
+                        )}
+                        {!player.isLoadingMatchup && !player.matchupError && player.matchup && (
+                            <div className={`text-sm text-muted-foreground space-y-0.5 ${groupContainerStyle}`}>
+                               <p className="text-xs font-medium mb-1 text-muted-foreground/80">Group (R{player.matchup.round_num}):</p>
+                               {renderMatchupPlayerLine(player.matchup.p1_dg_id, player.matchup.p1_player_name, player.liveStats, player.name, groupIsLoadingStats, playerLineStyle, playerLineIcon)}
+                               {renderMatchupPlayerLine(player.matchup.p2_dg_id, player.matchup.p2_player_name, player.liveStats, player.name, groupIsLoadingStats, playerLineStyle, playerLineIcon)}
+                               {renderMatchupPlayerLine(player.matchup.p3_dg_id, player.matchup.p3_player_name, player.liveStats, player.name, groupIsLoadingStats, playerLineStyle, playerLineIcon)}
+                               {player.statsError && !groupIsLoadingStats && (
+                                   <p className="text-xs text-destructive mt-1">Error loading scores: {player.statsError}</p>
+                               )}
+                            </div>
+                        )}
+                        {!player.isLoadingMatchup && !player.matchupError && !player.matchup && (
+                            <p className="text-sm text-muted-foreground italic px-1 py-2">No 3-ball matchup data found for {player.name}.</p>
+                        )}
+                         {/* Show loader only if matchup is loading */}
+                         {player.isLoadingMatchup && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground mx-auto my-2" />}
                     </li>
                   );
               })}
             </ul>
           ) : (
-            <p className="text-center text-muted-foreground py-4">No players added yet.</p>
+            <p className="text-center text-xs text-muted-foreground py-2">No picks added to this parlay yet.</p>
           )}
         </div>
       </CardContent>

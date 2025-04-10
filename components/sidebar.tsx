@@ -27,7 +27,9 @@ export default function Sidebar() {
         <GolfBall size={24} />
       </div>
       <hr className="sidebar-hr" />
-      <SidebarIcon icon={<Home size={24} />} text="Dashboard" />
+      <Link href="/">
+        <SidebarIcon icon={<Home size={24} />} text="Dashboard" />
+      </Link>
       <SidebarIcon icon={<Flag size={24} />} text="Tournaments" />
       <SidebarIcon icon={<Users size={24} />} text="Players" />
       <SidebarIcon icon={<BarChart2 size={24} />} text="Stats" />

@@ -4,6 +4,7 @@ import { Inter } from "next/font/google"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
+import Sidebar from "@/components/sidebar"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -22,7 +23,12 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
-          {children}
+          <div className="flex h-screen">
+            <Sidebar />
+            <main className="flex-1 overflow-y-auto pl-16">
+              {children}
+            </main>
+          </div>
           <Toaster />
         </ThemeProvider>
       </body>
