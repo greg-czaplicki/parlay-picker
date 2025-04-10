@@ -116,20 +116,17 @@ export async function GET() {
 
     console.log(`Processed ${allPlayersSkill.length} total skill ratings, filtered down to ${playersToUpsert.length} players in the current field.`);
 
-    // 4. Upsert Filtered Players
     if (playersToUpsert.length > 0) {
-      // Clear the table first to remove players no longer in the field
-      const { error: deleteError } = await supabase.from("player_skill_ratings").delete().neq('dg_id', 0); // Delete all rows
+      // 1. Clear the main table first
+      const { error: deleteError } = await supabase.from("player_skill_ratings").delete().neq('dg_id', 0);
       if (deleteError) {
-          // Log error but continue with upsert if desired, though data might be mixed
           console.error("Error clearing player_skill_ratings table:", deleteError);
-          // Depending on severity, you might want to throw the error here
-          // throw new Error(`Failed to clear player skills table: ${deleteError.message}`);
+          // Optional: Decide if failure here should stop the process
       } else {
-          console.log("Cleared old players from player_skill_ratings table.");
+          console.log("Cleared player_skill_ratings table.");
       }
 
-      // Now upsert only the players in the current field
+      // 2. Upsert into the main table (only current field players)
       const { error: upsertError } = await supabase
         .from("player_skill_ratings")
         .upsert(playersToUpsert, {
@@ -138,17 +135,32 @@ export async function GET() {
         });
 
       if (upsertError) {
-        console.error("Error upserting player skill ratings into Supabase:", upsertError);
-        throw new Error(`Supabase upsert failed: ${upsertError.message}`);
+        // This is critical for the main display
+        console.error("Error upserting latest player skill ratings:", upsertError);
+        throw new Error(`Supabase latest upsert failed: ${upsertError.message}`);
       }
-        console.log(`Successfully upserted ${playersToUpsert.length} player skill ratings.`);
+        console.log(`Successfully upserted ${playersToUpsert.length} players into player_skill_ratings.`);
+
+      // 3. Insert into the historical table
+      // Note: We use the same playersToUpsert data. Supabase insert maps fields automatically.
+      const { error: insertHistError } = await supabase
+        .from("historical_player_skill_ratings")
+        .insert(playersToUpsert);
+
+       if (insertHistError) {
+          // Log error but don't necessarily fail the whole request, history is secondary
+          console.error("Error inserting historical player skill ratings:", insertHistError);
+       } else {
+          console.log(`Successfully inserted ${playersToUpsert.length} players into historical_player_skill_ratings.`);
+       }
+
     } else {
-        console.log("No players found in both skill ratings and current field to upsert.")
+        console.log("No players found in both skill ratings and current field to upsert/insert.")
     }
 
     return NextResponse.json({
       success: true,
-      message: `Successfully synced skill ratings for ${playersToUpsert.length} players in the current field (${fieldData.event_name}).`,
+      message: `Successfully synced skill ratings for ${playersToUpsert.length} players in the current field (${fieldData.event_name}). Historical data recorded.`,
       processedCount: playersToUpsert.length,
       sourceTimestamp: sourceUpdateTime,
       eventName: fieldData.event_name,
