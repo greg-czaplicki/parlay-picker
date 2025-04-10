@@ -16,6 +16,12 @@ import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/use-toast"
 import { Slider } from "@/components/ui/slider"
 import { Label } from "@/components/ui/label"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 // Interface matching the Supabase table structure
 interface SupabaseMatchupRow {
@@ -373,214 +379,242 @@ export default function MatchupsTable() {
   }
 
   return (
-    <Card className="glass-card">
-      <CardContent className="p-6">
-        <div className="flex flex-col gap-4 mb-4">
-          <div className="flex justify-between items-start">
-            <div>
-              <h2 className="text-xl font-bold">3-Ball Matchups</h2>
-              {currentEvent && <p className="text-sm text-gray-400">Event: {currentEvent}</p>}
+    <TooltipProvider>
+      <Card className="glass-card">
+        <CardContent className="p-6">
+          <div className="flex flex-col gap-4 mb-4">
+            <div className="flex justify-between items-start">
+              <div>
+                <h2 className="text-xl font-bold">3-Ball Matchups</h2>
+                {currentEvent && <p className="text-sm text-gray-400">Event: {currentEvent}</p>}
+              </div>
             </div>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-            <div className="flex items-center gap-3">
-            <Button
-                variant={selectedBookmaker === "draftkings" ? "default" : "outline"}
-                onClick={() => { setSelectedBookmaker("draftkings"); }}
-                className={`text-sm ${selectedBookmaker === "draftkings" ? "filter-button-active" : "filter-button"}`}
-            >
-              DraftKings
-            </Button>
-            <Button
-                variant={selectedBookmaker === "fanduel" ? "default" : "outline"}
-                onClick={() => { setSelectedBookmaker("fanduel"); }}
-                className={`text-sm ${selectedBookmaker === "fanduel" ? "filter-button-active" : "filter-button"}`}
-            >
-              FanDuel
-            </Button>
-            <Button
-                variant="outline"
-                size="sm"
-                onClick={triggerApiRefreshAndRefetch}
-                disabled={isRefreshingApi || loading}
-                className="flex items-center gap-2 bg-[#1e1e23] border-none h-9"
-                title="Refresh odds from Data Golf API"
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+              <div className="flex items-center gap-3">
+              <Button
+                  variant={selectedBookmaker === "draftkings" ? "default" : "outline"}
+                  onClick={() => { setSelectedBookmaker("draftkings"); }}
+                  className={`text-sm ${selectedBookmaker === "draftkings" ? "filter-button-active" : "filter-button"}`}
               >
-                {(isRefreshingApi || (loading && !lastUpdateTime)) ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            </Button>
-              {lastUpdateTime && !isRefreshingApi && (
-                <span className="text-xs text-gray-400 whitespace-nowrap" title={`Data Golf feed last updated at ${new Date(lastUpdateTime).toLocaleString()}`}>
-                  DG Feed: {formatRelativeTime(lastUpdateTime)}
-                </span>
-              )}
-              {isRefreshingApi && (
-                <span className="text-xs text-gray-500 whitespace-nowrap">Updating...</span>
-              )}
-            </div>
-            <div className="flex items-center gap-3 flex-grow min-w-[200px]">
-              <Label htmlFor="prob-slider" className="text-sm whitespace-nowrap">Min Prob Diff:</Label>
-              <Slider
-                id="prob-slider"
-                min={0}
-                max={30} // Back to 0-30 %
-                step={1}
-                value={[probDiffThreshold]}
-                onValueChange={(value) => setProbDiffThreshold(value[0])}
-                className="w-full max-w-[150px]"
-              />
-              <span className="text-sm font-medium w-8 text-right">{probDiffThreshold}%</span>
+                DraftKings
+              </Button>
+              <Button
+                  variant={selectedBookmaker === "fanduel" ? "default" : "outline"}
+                  onClick={() => { setSelectedBookmaker("fanduel"); }}
+                  className={`text-sm ${selectedBookmaker === "fanduel" ? "filter-button-active" : "filter-button"}`}
+              >
+                FanDuel
+              </Button>
+              <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={triggerApiRefreshAndRefetch}
+                  disabled={isRefreshingApi || loading}
+                  className="flex items-center gap-2 bg-[#1e1e23] border-none h-9"
+                  title="Refresh odds from Data Golf API"
+                >
+                  {(isRefreshingApi || (loading && !lastUpdateTime)) ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              </Button>
+                {lastUpdateTime && !isRefreshingApi && (
+                  <span className="text-xs text-gray-400 whitespace-nowrap" title={`Data Golf feed last updated at ${new Date(lastUpdateTime).toLocaleString()}`}>
+                    DG Feed: {formatRelativeTime(lastUpdateTime)}
+                  </span>
+                )}
+                {isRefreshingApi && (
+                  <span className="text-xs text-gray-500 whitespace-nowrap">Updating...</span>
+                )}
+              </div>
+              <div className="flex items-center gap-3 flex-grow min-w-[200px]">
+                <Label htmlFor="prob-slider" className="text-sm whitespace-nowrap">Min Prob Diff:</Label>
+                <Slider
+                  id="prob-slider"
+                  min={0}
+                  max={30} // Back to 0-30 %
+                  step={1}
+                  value={[probDiffThreshold]}
+                  onValueChange={(value) => setProbDiffThreshold(value[0])}
+                  className="w-full max-w-[150px]"
+                />
+                <span className="text-sm font-medium w-8 text-right">{probDiffThreshold}%</span>
+              </div>
             </div>
           </div>
-        </div>
 
-        {displayData.length > 0 ? (
-          <div className="rounded-lg overflow-hidden border border-gray-800">
-            <Table>
-              <TableHeader className="bg-[#1e1e23]">
-                <TableRow>
-                  <TableHead className="text-white text-center">Players</TableHead>
-                  {selectedBookmaker === 'fanduel' && (
-                    <TableHead className="text-white text-center">FanDuel Odds</TableHead>
-                  )}
-                  {selectedBookmaker === 'draftkings' && (
-                    <TableHead className="text-white text-center">DraftKings Odds</TableHead>
-                  )}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {displayData.map((matchup) => {
-                  const p1_odds = selectedBookmaker === 'fanduel' ? matchup.fanduel_p1_odds : matchup.draftkings_p1_odds;
-                  const p2_odds = selectedBookmaker === 'fanduel' ? matchup.fanduel_p2_odds : matchup.draftkings_p2_odds;
-                  const p3_odds = selectedBookmaker === 'fanduel' ? matchup.fanduel_p3_odds : matchup.draftkings_p3_odds;
-
-                  const prob1 = decimalToImpliedProbability(p1_odds);
-                  const prob2 = decimalToImpliedProbability(p2_odds);
-                  const prob3 = decimalToImpliedProbability(p3_odds);
-
-                  const threshold = probDiffThreshold / 100;
-
-                  // Determine highlighting and calculate the difference for highlighted player
-                  let highlightP1 = false, highlightP2 = false, highlightP3 = false;
-                  let p1Diff = 0, p2Diff = 0, p3Diff = 0;
-
-                  if (prob1 > 0 && prob1 >= prob2 + threshold && prob1 >= prob3 + threshold) {
-                      highlightP1 = true;
-                      // Calculate the minimum difference to the other two
-                      p1Diff = Math.min(prob1 - prob2, prob1 - prob3);
-                  }
-                  if (prob2 > 0 && prob2 >= prob1 + threshold && prob2 >= prob3 + threshold) {
-                      highlightP2 = true;
-                      p2Diff = Math.min(prob2 - prob1, prob2 - prob3);
-                  }
-                  if (prob3 > 0 && prob3 >= prob1 + threshold && prob3 >= prob2 + threshold) {
-                      highlightP3 = true;
-                      p3Diff = Math.min(prob3 - prob1, prob3 - prob2);
-                  }
-
-                  // Get intensity classes based on the calculated difference
-                  const intensityClassP1 = highlightP1 ? getHighlightIntensityClass(p1Diff) : "";
-                  const intensityClassP2 = highlightP2 ? getHighlightIntensityClass(p2Diff) : "";
-                  const intensityClassP3 = highlightP3 ? getHighlightIntensityClass(p3Diff) : "";
-
-                  // --- Add logic to find player with best SG: Total ---
-                  const p1_sg_total = skillRatingsMap.get(matchup.p1_dg_id)?.sg_total ?? -Infinity;
-                  const p2_sg_total = skillRatingsMap.get(matchup.p2_dg_id)?.sg_total ?? -Infinity;
-                  const p3_sg_total = skillRatingsMap.get(matchup.p3_dg_id)?.sg_total ?? -Infinity;
-
-                  const max_sg_total = Math.max(p1_sg_total, p2_sg_total, p3_sg_total);
-
-                  // Check if max_sg_total is valid (not -Infinity)
-                  const isValidMaxSg = max_sg_total > -Infinity;
-
-                  const isBestSgP1 = isValidMaxSg && p1_sg_total === max_sg_total;
-                  const isBestSgP2 = isValidMaxSg && p2_sg_total === max_sg_total;
-                  const isBestSgP3 = isValidMaxSg && p3_sg_total === max_sg_total;
-                  // ----------------------------------------------------
-
-                  return (
-                  <TableRow key={matchup.id} className="hover:bg-[#2a2a35]">
-                    <TableCell>
-                        {/* Player 1 */}
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                           {/* Always render container, hide icon conditionally */}
-                           <span title={isBestSgP1 ? "Best SG: Total in Matchup" : ""} className={`inline-block w-[12px] ${isBestSgP1 ? 'opacity-100' : 'opacity-0'}`}>
-                             <Award size={12} className="text-yellow-500 shrink-0" />
-                            </span>
-                           <span className={highlightP1 ? "font-semibold" : ""}>{formatPlayerName(matchup.p1_player_name)}</span>
-                           {!loadingSkills && skillRatingsMap.has(matchup.p1_dg_id) && (
-                             <>
-                                <HeatmapSquare statValue={skillRatingsMap.get(matchup.p1_dg_id)?.sg_total ?? null} statKey="sg_total" label="SG:Total" />
-                                <HeatmapSquare statValue={skillRatingsMap.get(matchup.p1_dg_id)?.sg_ott ?? null} statKey="sg_ott" label="SG:OTT" />
-                                <HeatmapSquare statValue={skillRatingsMap.get(matchup.p1_dg_id)?.sg_app ?? null} statKey="sg_app" label="SG:APP" />
-                                <HeatmapSquare statValue={skillRatingsMap.get(matchup.p1_dg_id)?.sg_arg ?? null} statKey="sg_arg" label="SG:ARG" />
-                                <HeatmapSquare statValue={skillRatingsMap.get(matchup.p1_dg_id)?.sg_putt ?? null} statKey="sg_putt" label="SG:PUTT" />
-                              </>
-                           )}
-                          </div>
-                         {/* Player 2 */}
-                         <div className="flex items-center gap-1.5 mb-0.5">
-                            {/* Always render container, hide icon conditionally */}
-                           <span title={isBestSgP2 ? "Best SG: Total in Matchup" : ""} className={`inline-block w-[12px] ${isBestSgP2 ? 'opacity-100' : 'opacity-0'}`}>
-                             <Award size={12} className="text-yellow-500 shrink-0" />
-                           </span>
-                           <span className={highlightP2 ? "font-semibold" : ""}>{formatPlayerName(matchup.p2_player_name)}</span>
-                            {!loadingSkills && skillRatingsMap.has(matchup.p2_dg_id) && (
-                             <>
-                                <HeatmapSquare statValue={skillRatingsMap.get(matchup.p2_dg_id)?.sg_total ?? null} statKey="sg_total" label="SG:Total" />
-                                <HeatmapSquare statValue={skillRatingsMap.get(matchup.p2_dg_id)?.sg_ott ?? null} statKey="sg_ott" label="SG:OTT" />
-                                <HeatmapSquare statValue={skillRatingsMap.get(matchup.p2_dg_id)?.sg_app ?? null} statKey="sg_app" label="SG:APP" />
-                                <HeatmapSquare statValue={skillRatingsMap.get(matchup.p2_dg_id)?.sg_arg ?? null} statKey="sg_arg" label="SG:ARG" />
-                                <HeatmapSquare statValue={skillRatingsMap.get(matchup.p2_dg_id)?.sg_putt ?? null} statKey="sg_putt" label="SG:PUTT" />
-                              </>
-                           )}
-                      </div>
-                         {/* Player 3 */}
-                         <div className="flex items-center gap-1.5">
-                            {/* Always render container, hide icon conditionally */}
-                            <span title={isBestSgP3 ? "Best SG: Total in Matchup" : ""} className={`inline-block w-[12px] ${isBestSgP3 ? 'opacity-100' : 'opacity-0'}`}>
-                             <Award size={12} className="text-yellow-500 shrink-0" />
-                            </span>
-                           <span className={highlightP3 ? "font-semibold" : ""}>{formatPlayerName(matchup.p3_player_name)}</span>
-                           {!loadingSkills && skillRatingsMap.has(matchup.p3_dg_id) && (
-                             <>
-                                <HeatmapSquare statValue={skillRatingsMap.get(matchup.p3_dg_id)?.sg_total ?? null} statKey="sg_total" label="SG:Total" />
-                                <HeatmapSquare statValue={skillRatingsMap.get(matchup.p3_dg_id)?.sg_ott ?? null} statKey="sg_ott" label="SG:OTT" />
-                                <HeatmapSquare statValue={skillRatingsMap.get(matchup.p3_dg_id)?.sg_app ?? null} statKey="sg_app" label="SG:APP" />
-                                <HeatmapSquare statValue={skillRatingsMap.get(matchup.p3_dg_id)?.sg_arg ?? null} statKey="sg_arg" label="SG:ARG" />
-                                <HeatmapSquare statValue={skillRatingsMap.get(matchup.p3_dg_id)?.sg_putt ?? null} statKey="sg_putt" label="SG:PUTT" />
-                              </>
-                           )}
-                      </div>
-                    </TableCell>
-                      {selectedBookmaker === 'fanduel' && (
-                        <TableCell className="text-center">
-                          <div className={intensityClassP1}>{formatOdds(matchup.fanduel_p1_odds)}</div>
-                          <div className={intensityClassP2}>{formatOdds(matchup.fanduel_p2_odds)}</div>
-                          <div className={intensityClassP3}>{formatOdds(matchup.fanduel_p3_odds)}</div>
-                    </TableCell>
-                      )}
-                      {selectedBookmaker === 'draftkings' && (
-                        <TableCell className="text-center">
-                           <div className={intensityClassP1}>{formatOdds(matchup.draftkings_p1_odds)}</div>
-                           <div className={intensityClassP2}>{formatOdds(matchup.draftkings_p2_odds)}</div>
-                           <div className={intensityClassP3}>{formatOdds(matchup.draftkings_p3_odds)}</div>
-                    </TableCell>
-                      )}
+          {displayData.length > 0 ? (
+            <div className="rounded-lg overflow-hidden border border-gray-800">
+              <Table>
+                <TableHeader className="bg-[#1e1e23]">
+                  <TableRow>
+                    <TableHead className="text-white text-center">Players</TableHead>
+                    {selectedBookmaker === 'fanduel' && (
+                      <TableHead className="text-white text-center">FanDuel Odds</TableHead>
+                    )}
+                    {selectedBookmaker === 'draftkings' && (
+                      <TableHead className="text-white text-center">DraftKings Odds</TableHead>
+                    )}
                   </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        ) : (
-          <div className="p-8 text-center">
-            <p className="text-gray-400">No matchups found for the selected criteria{currentEvent ? ` for ${currentEvent}`: ""}.</p>
-             {matchups.length === 0 && !loading && (
-                <p className="text-sm text-gray-500 mt-2">Try running the data fetching API route first: /api/matchups/3ball</p>
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+                </TableHeader>
+                <TableBody>
+                  {displayData.map((matchup) => {
+                    const p1_odds = selectedBookmaker === 'fanduel' ? matchup.fanduel_p1_odds : matchup.draftkings_p1_odds;
+                    const p2_odds = selectedBookmaker === 'fanduel' ? matchup.fanduel_p2_odds : matchup.draftkings_p2_odds;
+                    const p3_odds = selectedBookmaker === 'fanduel' ? matchup.fanduel_p3_odds : matchup.draftkings_p3_odds;
+
+                    const prob1 = decimalToImpliedProbability(p1_odds);
+                    const prob2 = decimalToImpliedProbability(p2_odds);
+                    const prob3 = decimalToImpliedProbability(p3_odds);
+
+                    const threshold = probDiffThreshold / 100;
+
+                    // Determine highlighting and calculate the difference for highlighted player
+                    let highlightP1 = false, highlightP2 = false, highlightP3 = false;
+                    let p1Diff = 0, p2Diff = 0, p3Diff = 0;
+
+                    if (prob1 > 0 && prob1 >= prob2 + threshold && prob1 >= prob3 + threshold) {
+                        highlightP1 = true;
+                        // Calculate the minimum difference to the other two
+                        p1Diff = Math.min(prob1 - prob2, prob1 - prob3);
+                    }
+                    if (prob2 > 0 && prob2 >= prob1 + threshold && prob2 >= prob3 + threshold) {
+                        highlightP2 = true;
+                        p2Diff = Math.min(prob2 - prob1, prob2 - prob3);
+                    }
+                    if (prob3 > 0 && prob3 >= prob1 + threshold && prob3 >= prob2 + threshold) {
+                        highlightP3 = true;
+                        p3Diff = Math.min(prob3 - prob1, prob3 - prob2);
+                    }
+
+                    // Get intensity classes based on the calculated difference
+                    const intensityClassP1 = highlightP1 ? getHighlightIntensityClass(p1Diff) : "";
+                    const intensityClassP2 = highlightP2 ? getHighlightIntensityClass(p2Diff) : "";
+                    const intensityClassP3 = highlightP3 ? getHighlightIntensityClass(p3Diff) : "";
+
+                    // --- Add logic to find player with best SG: Total ---
+                    const p1_sg_total = skillRatingsMap.get(matchup.p1_dg_id)?.sg_total ?? -Infinity;
+                    const p2_sg_total = skillRatingsMap.get(matchup.p2_dg_id)?.sg_total ?? -Infinity;
+                    const p3_sg_total = skillRatingsMap.get(matchup.p3_dg_id)?.sg_total ?? -Infinity;
+
+                    const max_sg_total = Math.max(p1_sg_total, p2_sg_total, p3_sg_total);
+
+                    // Check if max_sg_total is valid (not -Infinity)
+                    const isValidMaxSg = max_sg_total > -Infinity;
+
+                    const isBestSgP1 = isValidMaxSg && p1_sg_total === max_sg_total;
+                    const isBestSgP2 = isValidMaxSg && p2_sg_total === max_sg_total;
+                    const isBestSgP3 = isValidMaxSg && p3_sg_total === max_sg_total;
+                    // ----------------------------------------------------
+
+                    return (
+                    <TableRow key={matchup.id} className="hover:bg-[#2a2a35]">
+                      <TableCell>
+                          {/* Player 1 */}
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                             <Tooltip>
+                               <TooltipTrigger asChild>
+                                 {/* Always render container, hide icon conditionally */}
+                                 <span className={`inline-block w-[12px] ${isBestSgP1 ? 'opacity-100' : 'opacity-0'}`}>
+                                   <Award size={12} className="text-yellow-500 shrink-0" />
+                                  </span>
+                               </TooltipTrigger>
+                               {/* Only render content if icon is visible */} 
+                               {isBestSgP1 && (
+                                 <TooltipContent>
+                                   <p>Best SG: Total in Matchup</p>
+                                 </TooltipContent>
+                               )}
+                             </Tooltip>
+                             <span className={highlightP1 ? "font-semibold" : ""}>{formatPlayerName(matchup.p1_player_name)}</span>
+                             {!loadingSkills && skillRatingsMap.has(matchup.p1_dg_id) && (
+                               <>
+                                  <HeatmapSquare statValue={skillRatingsMap.get(matchup.p1_dg_id)?.sg_total ?? null} statKey="sg_total" label="SG:Total" />
+                                  <HeatmapSquare statValue={skillRatingsMap.get(matchup.p1_dg_id)?.sg_ott ?? null} statKey="sg_ott" label="SG:OTT" />
+                                  <HeatmapSquare statValue={skillRatingsMap.get(matchup.p1_dg_id)?.sg_app ?? null} statKey="sg_app" label="SG:APP" />
+                                  <HeatmapSquare statValue={skillRatingsMap.get(matchup.p1_dg_id)?.sg_arg ?? null} statKey="sg_arg" label="SG:ARG" />
+                                  <HeatmapSquare statValue={skillRatingsMap.get(matchup.p1_dg_id)?.sg_putt ?? null} statKey="sg_putt" label="SG:PUTT" />
+                                </>
+                             )}
+                            </div>
+                           {/* Player 2 */}
+                           <div className="flex items-center gap-1.5 mb-0.5">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className={`inline-block w-[12px] ${isBestSgP2 ? 'opacity-100' : 'opacity-0'}`}>
+                                    <Award size={12} className="text-yellow-500 shrink-0" />
+                                  </span>
+                                </TooltipTrigger>
+                                {isBestSgP2 && (
+                                  <TooltipContent>
+                                    <p>Best SG: Total in Matchup</p>
+                                  </TooltipContent>
+                                )}
+                              </Tooltip>
+                              <span className={highlightP2 ? "font-semibold" : ""}>{formatPlayerName(matchup.p2_player_name)}</span>
+                               {!loadingSkills && skillRatingsMap.has(matchup.p2_dg_id) && (
+                                <>
+                                   <HeatmapSquare statValue={skillRatingsMap.get(matchup.p2_dg_id)?.sg_total ?? null} statKey="sg_total" label="SG:Total" />
+                                   <HeatmapSquare statValue={skillRatingsMap.get(matchup.p2_dg_id)?.sg_ott ?? null} statKey="sg_ott" label="SG:OTT" />
+                                   <HeatmapSquare statValue={skillRatingsMap.get(matchup.p2_dg_id)?.sg_app ?? null} statKey="sg_app" label="SG:APP" />
+                                   <HeatmapSquare statValue={skillRatingsMap.get(matchup.p2_dg_id)?.sg_arg ?? null} statKey="sg_arg" label="SG:ARG" />
+                                   <HeatmapSquare statValue={skillRatingsMap.get(matchup.p2_dg_id)?.sg_putt ?? null} statKey="sg_putt" label="SG:PUTT" />
+                                 </>
+                              )}
+                          </div>
+                             {/* Player 3 */}
+                             <div className="flex items-center gap-1.5">
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className={`inline-block w-[12px] ${isBestSgP3 ? 'opacity-100' : 'opacity-0'}`}>
+                                     <Award size={12} className="text-yellow-500 shrink-0" />
+                                    </span>
+                                  </TooltipTrigger>
+                                  {isBestSgP3 && (
+                                    <TooltipContent>
+                                      <p>Best SG: Total in Matchup</p>
+                                    </TooltipContent>
+                                  )}
+                                </Tooltip>
+                               <span className={highlightP3 ? "font-semibold" : ""}>{formatPlayerName(matchup.p3_player_name)}</span>
+                               {!loadingSkills && skillRatingsMap.has(matchup.p3_dg_id) && (
+                                 <>
+                                    <HeatmapSquare statValue={skillRatingsMap.get(matchup.p3_dg_id)?.sg_total ?? null} statKey="sg_total" label="SG:Total" />
+                                    <HeatmapSquare statValue={skillRatingsMap.get(matchup.p3_dg_id)?.sg_ott ?? null} statKey="sg_ott" label="SG:OTT" />
+                                    <HeatmapSquare statValue={skillRatingsMap.get(matchup.p3_dg_id)?.sg_app ?? null} statKey="sg_app" label="SG:APP" />
+                                    <HeatmapSquare statValue={skillRatingsMap.get(matchup.p3_dg_id)?.sg_arg ?? null} statKey="sg_arg" label="SG:ARG" />
+                                    <HeatmapSquare statValue={skillRatingsMap.get(matchup.p3_dg_id)?.sg_putt ?? null} statKey="sg_putt" label="SG:PUTT" />
+                                  </>
+                               )}
+                          </div>
+                        </TableCell>
+                          {selectedBookmaker === 'fanduel' && (
+                            <TableCell className="text-center">
+                              <div className={intensityClassP1}>{formatOdds(matchup.fanduel_p1_odds)}</div>
+                              <div className={intensityClassP2}>{formatOdds(matchup.fanduel_p2_odds)}</div>
+                              <div className={intensityClassP3}>{formatOdds(matchup.fanduel_p3_odds)}</div>
+                        </TableCell>
+                          )}
+                          {selectedBookmaker === 'draftkings' && (
+                            <TableCell className="text-center">
+                               <div className={intensityClassP1}>{formatOdds(matchup.draftkings_p1_odds)}</div>
+                               <div className={intensityClassP2}>{formatOdds(matchup.draftkings_p2_odds)}</div>
+                               <div className={intensityClassP3}>{formatOdds(matchup.draftkings_p3_odds)}</div>
+                        </TableCell>
+                          )}
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <div className="p-8 text-center">
+              <p className="text-gray-400">No matchups found for the selected criteria{currentEvent ? ` for ${currentEvent}`: ""}.</p>
+               {matchups.length === 0 && !loading && (
+                  <p className="text-sm text-gray-500 mt-2">Try running the data fetching API route first: /api/matchups/3ball</p>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </TooltipProvider>
   );
 }
