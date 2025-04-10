@@ -120,8 +120,8 @@ export default function PlayerTable({ initialSeasonSkills, initialLiveStats }: P
   const [currentLiveEvent, setCurrentLiveEvent] = useState<string | null>(() => 
        initialLiveStats.length > 0 ? initialLiveStats[0].event_name : null
   );
-  // State to toggle view
-  const [dataView, setDataView] = useState<"season" | "tournament">("season");
+  // State to toggle view - Default to tournament view
+  const [dataView, setDataView] = useState<"season" | "tournament">("tournament");
   // Add state for round filter - default to event_avg
   const [roundFilter, setRoundFilter] = useState<string>("event_avg"); // Default to event_avg
 
@@ -571,7 +571,24 @@ export default function PlayerTable({ initialSeasonSkills, initialLiveStats }: P
             header: ({ column }: { column: Column<DisplayPlayer, unknown> }) => (
               <div className="text-center cursor-pointer flex items-center justify-center" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>THRU <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" /></div>
             ),
-            cell: ({ row }: { row: Row<DisplayPlayer> }) => <div className="text-center">{(row.original as LiveTournamentStat).thru ?? '-'}</div>,
+            cell: ({ row }: { row: Row<DisplayPlayer> }) => {
+              const thruValue = (row.original as LiveTournamentStat).thru;
+              const position = (row.original as LiveTournamentStat).position; // Get position for F, CUT, WD check
+              let displayThru = thruValue ?? '-';
+              if (position === 'F' || thruValue === 18) {
+                  displayThru = 'F';
+              } else if (position === 'CUT') {
+                  displayThru = 'CUT';
+              } else if (position === 'WD') {
+                  displayThru = 'WD';
+              }
+              // If it's not F, CUT, WD, and thruValue exists, show the number
+              else if (typeof thruValue === 'number') {
+                  displayThru = thruValue.toString();
+              }
+              // Otherwise it remains '-'
+              return <div className="text-center">{displayThru}</div>;
+            },
             meta: { headerClassName: 'text-center', cellClassName: 'text-center' },
           },
           {
@@ -581,8 +598,6 @@ export default function PlayerTable({ initialSeasonSkills, initialLiveStats }: P
             ),
             cell: ({ row }: { row: Row<DisplayPlayer> }) => {
               const value = (row.original as LiveTournamentStat).today;
-              // Add console log here - REMOVE LATER
-              console.log(`Rendering RD for ${row.original.player_name}: raw value = ${value}`);
                let colorClass = "text-white"; // Default
                if (typeof value === 'number') {
                    if (value < 0) colorClass = "text-red-400";
@@ -793,7 +808,7 @@ export default function PlayerTable({ initialSeasonSkills, initialLiveStats }: P
                        </label>
                        <label className="flex items-center gap-1 cursor-pointer">
                           <input type="radio" name="dataView" value="tournament" checked={dataView === 'tournament'} onChange={() => setDataView('tournament')} className="form-radio h-4 w-4 text-primary focus:ring-primary border-gray-600 bg-gray-700"/>
-                          <span className="text-sm">Tournament Avg</span>
+                          <span className="text-sm">Current</span>
                        </label>
                   </div>
                   {dataView === 'tournament' && currentLiveEvent && (
