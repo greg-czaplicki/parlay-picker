@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,11 +8,11 @@ import {
     findPlayerMatchup,
     PlayerMatchupData,
     getLiveStatsForPlayers,
-    getParlaysAndPicks,
     addParlayPick,
     removeParlayPick,
     ParlayPick,
-    ParlayWithPicks
+    ParlayWithPicks,
+    ParlayPickWithData
 } from '@/app/actions/matchups';
 import { toast } from '@/components/ui/use-toast';
 import { Loader2, Check, X } from 'lucide-react';
@@ -50,14 +50,45 @@ interface ParlayCardProps {
     parlayId: number;
     parlayName: string | null;
     initialPicks: ParlayPick[];
+    initialPicksWithData?: ParlayPickWithData[];
     // Optional: Add a callback to notify parent page when parlay is deleted
     // onDelete?: (parlayId: number) => void;
 }
 
-export default function ParlayCard({ parlayId, parlayName, initialPicks /*, onDelete */ }: ParlayCardProps) {
-  // Initialize state from props
-  const [players, setPlayers] = useState<ParlayPlayer[]>(() =>
-      initialPicks.map(pick => ({
+export default function ParlayCard({ 
+  parlayId,
+  parlayName, 
+  initialPicks,
+  initialPicksWithData = [] /*, onDelete */
+}: ParlayCardProps) {
+  // Track component mount state
+  const isMounted = useRef(true);
+  
+  // Track refresh interval
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Initialize state from props - use preloaded data if available
+  const [players, setPlayers] = useState<ParlayPlayer[]>(() => {
+    return initialPicks.map(pick => {
+      // Check if we have preloaded data for this pick
+      const preloadedData = initialPicksWithData.find(data => data.pick.id === pick.id);
+      
+      if (preloadedData) {
+        // Use preloaded data
+        return {
+          name: pick.picked_player_name,
+          pickId: pick.id,
+          matchup: preloadedData.matchup,
+          liveStats: preloadedData.liveStats,
+          isLoadingMatchup: false,
+          isLoadingStats: false,
+          isPersisted: true,
+          matchupError: preloadedData.matchupError,
+          statsError: preloadedData.statsError,
+        };
+      } else {
+        // No preloaded data, use default values
+        return {
           name: pick.picked_player_name,
           pickId: pick.id,
           matchup: null,
@@ -67,8 +98,10 @@ export default function ParlayCard({ parlayId, parlayName, initialPicks /*, onDe
           isPersisted: true,
           matchupError: undefined,
           statsError: undefined,
-      }))
-  );
+        };
+      }
+    });
+  });
   const [newPlayerName, setNewPlayerName] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -79,18 +112,29 @@ export default function ParlayCard({ parlayId, parlayName, initialPicks /*, onDe
 
   // Function to load matchup data for a player
   const loadMatchupForPlayer = async (player: ParlayPlayer, index: number) => {
+    // Skip if component unmounted
+    if (!isMounted.current) return;
+    
     try {
       const { matchup, error } = await findPlayerMatchup(player.name);
+      
+      // Skip if component unmounted during async call
+      if (!isMounted.current) return;
+      
       setPlayers(prev => prev.map((p, i) =>
         i === index ? { ...p, matchup, matchupError: error, isLoadingMatchup: false } : p
       ));
       
       // If we got a matchup, immediately load stats for it
-      if (matchup) {
+      if (matchup && isMounted.current) {
         await loadStatsForPlayer({ ...player, matchup }, index);
       }
     } catch (err) {
       console.error(`Error loading matchup for ${player.name}:`, err);
+      
+      // Skip if component unmounted
+      if (!isMounted.current) return;
+      
       setPlayers(prev => prev.map((p, i) =>
         i === index ? { ...p, matchupError: "Failed to load matchup", isLoadingMatchup: false } : p
       ));
@@ -99,7 +143,8 @@ export default function ParlayCard({ parlayId, parlayName, initialPicks /*, onDe
   
   // Function to load stats for a player's matchup
   const loadStatsForPlayer = async (player: ParlayPlayer, index: number) => {
-    if (!player.matchup) return;
+    // Skip if no matchup or component unmounted
+    if (!player.matchup || !isMounted.current) return;
     
     try {
       const playerIds = [
@@ -109,11 +154,17 @@ export default function ParlayCard({ parlayId, parlayName, initialPicks /*, onDe
       ].filter((id): id is number => id !== null);
       
       if (playerIds.length === 0) {
+        // Skip if component unmounted
+        if (!isMounted.current) return;
+        
         setPlayers(prev => prev.map((p, i) => 
           i === index ? { ...p, isLoadingStats: false, statsError: "No player IDs for stats" } : p
         ));
         return;
       }
+      
+      // Skip if component unmounted
+      if (!isMounted.current) return;
       
       // Set loading state
       setPlayers(prev => prev.map((p, i) => 
@@ -121,6 +172,9 @@ export default function ParlayCard({ parlayId, parlayName, initialPicks /*, onDe
       ));
       
       const { stats, error } = await getLiveStatsForPlayers(playerIds);
+      
+      // Skip if component unmounted during async call
+      if (!isMounted.current) return;
       
       // Process and update stats
       const statsMap: Record<number, LiveTournamentStat> = {};
@@ -144,6 +198,10 @@ export default function ParlayCard({ parlayId, parlayName, initialPicks /*, onDe
       }
     } catch (err) {
       console.error(`Error loading stats for ${player.name}:`, err);
+      
+      // Skip if component unmounted
+      if (!isMounted.current) return;
+      
       setPlayers(prev => prev.map((p, i) => 
         i === index ? {
           ...p,
@@ -154,57 +212,82 @@ export default function ParlayCard({ parlayId, parlayName, initialPicks /*, onDe
     }
   };
   
-  // Load data for all players on mount and when players change
+  
+  // Load data once on component mount (only for players without preloaded data)
   useEffect(() => {
+    // Set initial mounted state
+    isMounted.current = true;
+    
     // Skip if no players
     if (players.length === 0) return;
     
-    // Create a map of pending actions to track what needs to be fetched
-    const pendingMatchupFetches = players.filter(p => !p.matchup && p.isLoadingMatchup && !p.matchupError);
-    const pendingStatsFetches = players.filter(p => p.matchup && !p.liveStats && !p.isLoadingStats && !p.statsError);
+    // Set last refreshed time if we have preloaded data
+    if (initialPicksWithData.length > 0) {
+      setLastRefreshed(new Date());
+    }
     
-    // Only proceed if there's actual work to do
-    if (pendingMatchupFetches.length === 0 && pendingStatsFetches.length === 0) {
+    // Get current players that need data loaded (don't have preloaded data)
+    const pendingMatchupFetches = players.filter(p => !p.matchup && p.isLoadingMatchup && !p.matchupError);
+    
+    // Only load if we have any players that need data
+    if (pendingMatchupFetches.length === 0) {
       return;
     }
     
     // Initial loading - happens once when the component mounts
     const loadInitialData = async () => {
-      // First load all matchups
-      await Promise.all(pendingMatchupFetches.map(async (player) => {
-        const index = players.findIndex(p => p.name === player.name && p.pickId === player.pickId);
-        if (index !== -1) {
-          await loadMatchupForPlayer(player, index);
+      try {
+        // First load all matchups one at a time to avoid race conditions
+        for (let i = 0; i < pendingMatchupFetches.length; i++) {
+          // Skip if component was unmounted
+          if (!isMounted.current) return;
+          
+          const player = pendingMatchupFetches[i];
+          const index = players.findIndex(p => p.name === player.name && p.pickId === player.pickId);
+          
+          if (index !== -1) {
+            await loadMatchupForPlayer(player, index);
+          }
+          
+          // Small delay to prevent overwhelming the server
+          await new Promise(resolve => setTimeout(resolve, 50));
         }
-      }));
-      
-      // Then load stats for any players that have matchups but no stats yet
-      const updatedPlayers = [...players];
-      const pendingStats = updatedPlayers.filter(p => p.matchup && !p.liveStats && !p.isLoadingStats);
-      
-      await Promise.all(pendingStats.map(async (player) => {
-        const index = updatedPlayers.findIndex(p => p.name === player.name && p.pickId === player.pickId);
-        if (index !== -1) {
-          await loadStatsForPlayer(player, index);
-        }
-      }));
-      
-      // Set the last refreshed time
-      setLastRefreshed(new Date());
+        
+        // Skip if component was unmounted
+        if (!isMounted.current) return;
+        
+        // Set the last refreshed time
+        setLastRefreshed(new Date());
+      } catch (error) {
+        console.error("Error loading initial data:", error);
+      }
     };
     
+    // Start initial data loading
     loadInitialData();
-  }, [players.length]);
+    
+    // Cleanup function
+    return () => {
+      isMounted.current = false;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty dependency array - only run on mount
   
   // Add a function to refresh data
   const refreshData = async () => {
-    if (isRefreshing || players.length === 0) return;
+    // Skip if already refreshing, no players, or component unmounted
+    if (isRefreshing || players.length === 0 || !isMounted.current) return;
     
     setIsRefreshing(true);
     
     try {
       // Process each player - get matchups for those without, refresh stats for those with matchups
-      const refreshPromises = players.map(async (player, index) => {
+      for (let index = 0; index < players.length; index++) {
+        // Skip if component unmounted
+        if (!isMounted.current) break;
+        
+        const player = players[index];
+        
         // If player doesn't have a matchup yet, load it first
         if (!player.matchup && !player.matchupError) {
           await loadMatchupForPlayer(player, index);
@@ -213,39 +296,64 @@ export default function ParlayCard({ parlayId, parlayName, initialPicks /*, onDe
         else if (player.matchup) {
           await loadStatsForPlayer(player, index);
         }
-      });
+        
+        // Add a small delay to prevent overwhelming the server
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
       
-      // Wait for all refresh operations to complete
-      await Promise.all(refreshPromises);
+      // Skip if component unmounted
+      if (!isMounted.current) return;
       
       // Update the last refreshed timestamp
       setLastRefreshed(new Date());
     } catch (err) {
       console.error("Error refreshing data:", err);
+      
+      // Skip if component unmounted
+      if (!isMounted.current) return;
+      
       toast({
         title: "Error Refreshing Stats",
         description: "An unexpected error occurred while refreshing stats.",
         variant: "destructive",
       });
     } finally {
-      setIsRefreshing(false);
+      // Only update state if component still mounted
+      if (isMounted.current) {
+        setIsRefreshing(false);
+      }
     }
   };
   
-  // Effect to refresh data every 5 minutes
+  
+  // Effect to refresh data every 5 minutes - with proper cleanup
   useEffect(() => {
-    // Skip if no players or no matchups to refresh
-    if (players.length === 0 || !players.some(p => p.matchup)) {
-      return;
+    // Clear any existing interval first
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
     
-    const interval = setInterval(() => {
-      refreshData();
-    }, 5 * 60 * 1000); // 5 minutes
+    // Only set up interval if we have players with matchups
+    if (players.length > 0 && players.some(p => p.matchup)) {
+      // Create a new interval that checks mounted state before refreshing
+      intervalRef.current = setInterval(() => {
+        // Only refresh if component is still mounted
+        if (isMounted.current) {
+          refreshData();
+        }
+      }, 5 * 60 * 1000); // 5 minutes
+    }
     
-    return () => clearInterval(interval);
+    // Clear interval on cleanup
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [players.length, players.some(p => p.matchup)]);
+  }, []); // Empty dependency array - set up once on mount
 
   // --- Add Player Handler ---
   const addPlayer = async () => {

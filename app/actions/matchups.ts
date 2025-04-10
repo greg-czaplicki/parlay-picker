@@ -462,6 +462,15 @@ export async function getLiveStatsForPlayers(
  * @param name - Optional name for the parlay.
  * @returns An object containing the newly created parlay or an error message.
  */
+// Helper function to invalidate the parlays cache
+function invalidateParlaysCache() {
+    parlaysCache = {
+        data: null,
+        timestamp: 0
+    };
+    console.log("[matchups] Parlays cache invalidated");
+}
+
 export async function createParlay(name?: string): Promise<{ parlay: Parlay | null; error?: string }> {
     console.log("[createParlay] Creating new parlay...");
     const supabase = createServerClient();
@@ -477,6 +486,10 @@ export async function createParlay(name?: string): Promise<{ parlay: Parlay | nu
             console.error("[createParlay] Supabase error:", error);
             throw new Error(`Database error creating parlay: ${error.message}`);
         }
+        
+        // Invalidate cache since we've created a new parlay
+        invalidateParlaysCache();
+        
         console.log("[createParlay] Successfully created parlay ID:", data?.id);
         return { parlay: data as Parlay };
     } catch (error) {
@@ -490,7 +503,26 @@ export async function createParlay(name?: string): Promise<{ parlay: Parlay | nu
  * (Assumes no user authentication for now - fetches all rows)
  * @returns An object containing an array of parlays with nested picks or an error message.
  */
+// Simple in-memory cache for parlays
+let parlaysCache: {
+    data: ParlayWithPicks[] | null;
+    timestamp: number;
+} = {
+    data: null,
+    timestamp: 0
+};
+
+// Cache expiration time (10 seconds)
+const CACHE_TTL = 10 * 1000;
+
 export async function getParlaysAndPicks(): Promise<{ parlays: ParlayWithPicks[]; error?: string }> {
+    // Check if we have fresh cached data (less than 10 seconds old)
+    const now = Date.now();
+    if (parlaysCache.data && now - parlaysCache.timestamp < CACHE_TTL) {
+        console.log(`[getParlaysAndPicks] Using cached data from ${new Date(parlaysCache.timestamp).toLocaleTimeString()}`);
+        return { parlays: parlaysCache.data };
+    }
+    
     console.log("[getParlaysAndPicks] Fetching all parlays and picks...");
     const supabase = createServerClient();
     try {
@@ -511,6 +543,13 @@ export async function getParlaysAndPicks(): Promise<{ parlays: ParlayWithPicks[]
             console.error("[getParlaysAndPicks] Supabase error fetching data:", error);
             throw new Error(`Database error fetching parlays and picks: ${error.message}`);
         }
+        
+        // Update the cache
+        parlaysCache = {
+            data: data || [],
+            timestamp: now
+        };
+        
         console.log(`[getParlaysAndPicks] Successfully fetched ${data?.length ?? 0} parlays with picks.`);
         // Now the data should correctly contain a 'picks' array
         return { parlays: data || [] };
@@ -552,6 +591,10 @@ export async function addParlayPick(pickData: Omit<ParlayPick, 'id' | 'created_a
             console.error("[addParlayPick] Supabase error inserting pick:", error);
             throw new Error(`Database error adding pick: ${error.message}`);
         }
+        
+        // Invalidate cache since we've added a pick
+        invalidateParlaysCache();
+        
         console.log("[addParlayPick] Successfully added pick ID:", data?.id);
         return { pick: data as ParlayPick };
     } catch (error) {
@@ -566,7 +609,7 @@ export async function addParlayPick(pickData: Omit<ParlayPick, 'id' | 'created_a
  * @returns An object indicating success or containing an error message.
  */
 export async function removeParlayPick(pickId: number): Promise<{ success: boolean; error?: string }> {
-    // console.log(`[removeParlayPick] Removing pick ID: ${pickId}`); // Keep removed
+    console.log(`[removeParlayPick] Removing pick ID: ${pickId}`);
     const supabase = createServerClient();
     try {
         // TODO: Add user filter if auth is implemented e.g., .eq('user_id', userId)
@@ -576,14 +619,93 @@ export async function removeParlayPick(pickId: number): Promise<{ success: boole
             .eq('id', pickId);
 
         if (error) {
-            console.error(`[removeParlayPick] Supabase error removing pick ID ${pickId}:`, error); // KEEP
+            console.error(`[removeParlayPick] Supabase error removing pick ID ${pickId}:`, error);
             throw new Error(`Database error removing pick: ${error.message}`);
         }
-        // console.log(`[removeParlayPick] Successfully removed pick ID: ${pickId}`); // Keep removed
+        
+        // Invalidate cache since we've removed a pick
+        invalidateParlaysCache();
+        
+        console.log(`[removeParlayPick] Successfully removed pick ID: ${pickId}`);
         return { success: true };
     } catch (error) {
-        console.error(`[removeParlayPick] Error for ID ${pickId}:`, error); // KEEP
+        console.error(`[removeParlayPick] Error for ID ${pickId}:`, error);
         return { success: false, error: error instanceof Error ? error.message : "Unknown error removing pick" };
+    }
+}
+
+/**
+ * Batch loads matchup data and live stats for a collection of parlay picks.
+ * This helps avoid the waterfall effect of loading data for individual picks.
+ */
+export type ParlayPickWithData = {
+    pick: ParlayPick;
+    matchup: PlayerMatchupData | null;
+    liveStats: Record<number, LiveTournamentStat> | null;
+    matchupError?: string;
+    statsError?: string;
+};
+
+export async function batchLoadParlayPicksData(
+    picks: ParlayPick[]
+): Promise<{ picksWithData: ParlayPickWithData[]; error?: string }> {
+    console.log(`[batchLoadParlayPicksData] Loading data for ${picks.length} picks`);
+    
+    if (!picks || picks.length === 0) {
+        return { picksWithData: [] };
+    }
+    
+    try {
+        const picksWithData: ParlayPickWithData[] = [];
+        
+        // Process each pick sequentially to avoid rate limits
+        for (const pick of picks) {
+            let pickResult: ParlayPickWithData = {
+                pick,
+                matchup: null,
+                liveStats: null
+            };
+            
+            // 1. Find matchup for this pick
+            const { matchup, error: matchupError } = await findPlayerMatchup(pick.picked_player_name);
+            pickResult.matchup = matchup;
+            pickResult.matchupError = matchupError;
+            
+            // 2. If we have a matchup, get the stats
+            if (matchup) {
+                const playerIds = [
+                    matchup.p1_dg_id,
+                    matchup.p2_dg_id,
+                    matchup.p3_dg_id,
+                ].filter((id): id is number => id !== null);
+                
+                if (playerIds.length > 0) {
+                    const { stats, error: statsError } = await getLiveStatsForPlayers(playerIds);
+                    
+                    // Convert stats array to map for easy lookup
+                    const statsMap: Record<number, LiveTournamentStat> = {};
+                    (stats || []).forEach(stat => {
+                        if (stat.dg_id) {
+                            statsMap[stat.dg_id] = stat;
+                        }
+                    });
+                    
+                    pickResult.liveStats = statsMap;
+                    pickResult.statsError = statsError;
+                }
+            }
+            
+            picksWithData.push(pickResult);
+        }
+        
+        console.log(`[batchLoadParlayPicksData] Successfully loaded data for ${picksWithData.length} picks`);
+        return { picksWithData };
+    } catch (error) {
+        console.error(`[batchLoadParlayPicksData] Error:`, error);
+        return { 
+            picksWithData: [], 
+            error: error instanceof Error ? error.message : "Error loading parlay picks data" 
+        };
     }
 }
 
