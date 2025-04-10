@@ -86,133 +86,119 @@ if (!dataGolfApiKey) {
 
 const DATA_GOLF_FIELD_URL = `https://feeds.datagolf.com/field-updates?tour=pga&file_format=json&key=${dataGolfApiKey}`;
 const requiredStats = "sg_app,sg_ott,sg_putt,sg_arg,sg_t2g,sg_total,accuracy,distance,gir,prox_fw,scrambling,position,thru,today,total";
-const LIVE_STATS_BASE_URL = `https://feeds.datagolf.com/preds/live-tournament-stats?tour=pga&stats=${requiredStats}&display=value&file_format=json&key=${dataGolfApiKey}`;
+const LIVE_STATS_BASE_URL = `https://feeds.datagolf.com/preds/live-tournament-stats?tour=pga&stats=sg_app,sg_ott,sg_putt,sg_arg,sg_t2g,sg_total,accuracy,distance,gir,prox_fw,scrambling,position,thru,today,total&display=value&file_format=json&key=${dataGolfApiKey}`;
+
+// Rounds we want to fetch data for
+const ROUNDS_TO_FETCH = ["1", "2", "3", "4", "event_avg"];
 
 export async function GET() {
-  let roundToFetch = "event_avg"; // Default
-  let currentEventName = "Unknown Event";
+  console.log("Starting multi-round live stats sync...");
+  let totalInsertedCount = 0;
+  let lastSourceTimestamp: string | null = null;
+  let fetchedEventName: string | null = null;
+  const errors: string[] = [];
 
   try {
-    // 1. Fetch Field update to determine current round
-    console.log("Fetching field update to determine current round...");
-    const fieldResponse = await fetch(DATA_GOLF_FIELD_URL, { cache: 'no-store' });
-    if (!fieldResponse.ok) {
-        console.warn(`Failed to fetch field update (status: ${fieldResponse.status}), defaulting to round=event_avg.`);
-        // Continue with default round
-    } else {
-        const fieldData: DataGolfFieldResponse = await fieldResponse.json();
-        currentEventName = fieldData.event_name;
-        if (fieldData.current_round && [1, 2, 3, 4].includes(fieldData.current_round)) {
-            roundToFetch = fieldData.current_round.toString();
-            console.log(`Current round determined as: ${roundToFetch} for ${currentEventName}`);
-        } else {
-            console.log(`No active round found (current_round: ${fieldData.current_round}), defaulting to event_avg for ${currentEventName}.`);
+    for (const round of ROUNDS_TO_FETCH) {
+        const liveStatsUrl = `${LIVE_STATS_BASE_URL}&round=${round}`;
+        console.log(`Fetching live stats for round: ${round} from URL: ${liveStatsUrl}`);
+
+        try {
+            const response = await fetch(liveStatsUrl, { cache: 'no-store' });
+            console.log(`Data Golf Response Status for round ${round}: ${response.status}`);
+
+            if (!response.ok) {
+              // If a specific round isn't available yet (e.g., R3/R4 early), it might 404 - treat as warning, not error
+              if (response.status === 404) {
+                 console.warn(`Round ${round} data not found (404), skipping.`);
+                 continue; // Skip to the next round
+              }
+              const errorText = await response.text();
+              console.error(`Failed to fetch live stats for round ${round}:`, errorText);
+              errors.push(`Fetch failed for round ${round}: ${response.status}`);
+              continue; // Skip to next round on other errors
+            }
+
+            const data: DataGolfLiveStatsResponse = await response.json();
+            // Use the timestamp from THIS specific round's data
+            const currentRoundTimestamp = new Date(data.last_updated.replace(" UTC", "Z")).toISOString();
+            lastSourceTimestamp = currentRoundTimestamp; // Keep track of the latest one processed
+            fetchedEventName = data.event_name;
+            console.log(`Received data for ${data.event_name}, round ${data.stat_round}. Processing ${data.live_stats?.length ?? 0} records...`);
+
+            if (!data.live_stats || data.live_stats.length === 0) {
+                console.log(`No player data in live_stats array for round ${round}.`);
+                continue;
+            }
+
+            const statsToInsert: SupabaseLiveStat[] = data.live_stats.map((player) => ({
+                dg_id: player.dg_id,
+                player_name: player.player_name,
+                event_name: data.event_name,
+                course_name: data.course_name,
+                round_num: data.stat_round, // Use actual round from response
+                sg_app: player.sg_app,
+                sg_ott: player.sg_ott,
+                sg_putt: player.sg_putt,
+                sg_arg: player.sg_arg ?? null,
+                sg_t2g: player.sg_t2g ?? null,
+                sg_total: player.sg_total ?? null,
+                accuracy: player.accuracy ?? null,
+                distance: player.distance ?? null,
+                gir: player.gir ?? null,
+                prox_fw: player.prox_fw ?? null,
+                scrambling: player.scrambling ?? null,
+                "position": player.position ?? null,
+                thru: player.thru ?? null,
+                today: player.round ?? null,
+                total: player.total ?? null,
+                data_golf_updated_at: currentRoundTimestamp,
+            }));
+
+            if (statsToInsert.length > 0) {
+                console.log(`Attempting to insert ${statsToInsert.length} records for round ${round} into live_tournament_stats...`);
+                const { error: insertError } = await supabase
+                    .from("live_tournament_stats")
+                    .insert(statsToInsert);
+
+                if (insertError) {
+                    console.error(`SUPABASE INSERT ERROR for round ${round}:`, insertError);
+                    errors.push(`Insert failed for round ${round}: ${insertError.message}`);
+                    // Decide whether to continue or stop on insert error
+                } else {
+                    console.log(`Successfully inserted ${statsToInsert.length} records for round ${round}.`);
+                    totalInsertedCount += statsToInsert.length;
+                }
+            }
+        } catch (fetchError: any) {
+            console.error(`Error processing round ${round}:`, fetchError);
+            errors.push(`Processing failed for round ${round}: ${fetchError.message}`);
         }
     }
 
-    // 2. Fetch Live Stats for the determined round
-    const liveStatsUrl = `${LIVE_STATS_BASE_URL}&round=${roundToFetch}`;
-    console.log(`Fetching live stats from URL: ${liveStatsUrl}`);
-    const response = await fetch(liveStatsUrl, { cache: 'no-store' });
-    console.log(`Data Golf Live Stats Response Status: ${response.status}`);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Failed to fetch live stats from Data Golf:", errorText);
-      throw new Error(`Failed to fetch live stats (${roundToFetch}): ${response.status} ${errorText}`);
-    }
-
-    const data: DataGolfLiveStatsResponse = await response.json();
-    console.log(`Received live stats data for ${data.event_name}, round ${data.stat_round}. Sample:`, data.live_stats?.slice(0, 2));
-
-    // Validate if the fetched round matches the requested one (or event_avg if that was requested)
-    if (data.stat_round !== roundToFetch) {
-        console.warn(`Requested round '${roundToFetch}' but received data for '${data.stat_round}'. Proceeding with received data.`);
-        // Update roundToFetch to match what was actually returned, ensuring consistency
-        roundToFetch = data.stat_round;
-    }
-
-    if (!data.live_stats || data.live_stats.length === 0) {
-        console.log("Data Golf API returned empty live_stats array.");
-        // Return success but indicate no data was processed
-        return NextResponse.json({
-          success: true,
-          message: `No live stats data available from Data Golf for ${data.event_name} (${data.stat_round}).`,
-          processedCount: 0,
-          sourceTimestamp: new Date(data.last_updated.replace(" UTC", "Z")).toISOString(),
-          eventName: data.event_name,
-          round: data.stat_round,
-        });
-    }
-
-    const sourceUpdateTime = new Date(data.last_updated.replace(" UTC", "Z")).toISOString();
-    console.log(`Processing ${data.live_stats.length} records for round ${roundToFetch}...`);
-
-    // 3. Map data using the actual fetched round number
-    console.log("Mapping received player data...");
-    const statsToInsert: SupabaseLiveStat[] = data.live_stats.map((player, index) => {
-        // Log the 'round' field for the first few players
-        if (index < 3) {
-            console.log(`Player ${player.player_name} - Raw round value: ${player.round}`);
-        }
-        return {
-            dg_id: player.dg_id,
-            player_name: player.player_name,
-            event_name: data.event_name,
-            course_name: data.course_name,
-            round_num: data.stat_round,
-            sg_app: player.sg_app,
-            sg_ott: player.sg_ott,
-            sg_putt: player.sg_putt,
-            sg_arg: player.sg_arg ?? null,
-            sg_t2g: player.sg_t2g ?? null,
-            sg_total: player.sg_total ?? null,
-            accuracy: player.accuracy ?? null,
-            distance: player.distance ?? null,
-            gir: player.gir ?? null,
-            prox_fw: player.prox_fw ?? null,
-            scrambling: player.scrambling ?? null,
-            "position": player.position ?? null,
-            thru: player.thru ?? null,
-            today: player.round ?? null, // Map player.round to Supabase.today
-            total: player.total ?? null,
-            data_golf_updated_at: sourceUpdateTime,
-        };
-    });
-
-    // 4. Insert into historical table
-    if (statsToInsert.length > 0) {
-        console.log("Sample record to insert:", JSON.stringify(statsToInsert[0], null, 2));
-        console.log("Attempting to insert records into live_tournament_stats...");
-        const { error: insertError } = await supabase
-            .from("live_tournament_stats")
-            .insert(statsToInsert);
-
-        if (insertError) {
-            console.error("SUPABASE INSERT ERROR:", insertError);
-            throw new Error(`Supabase live stats insert failed: ${insertError.message}`);
-        } else {
-            console.log(`Successfully inserted ${statsToInsert.length} live stat records.`);
-        }
-    } else {
-        console.log("No mapped live stats to insert.")
+    // Final Response
+    const finalMessage = `Sync complete. Total records inserted/updated: ${totalInsertedCount} across attempted rounds for ${fetchedEventName ?? 'event'}.`;
+    console.log(finalMessage);
+    if (errors.length > 0) {
+        console.warn("Sync completed with errors:", errors);
     }
 
     return NextResponse.json({
-      success: true,
-      message: `Successfully recorded ${statsToInsert.length} live stat records for ${data.event_name} (Round: ${data.stat_round}).`,
-      processedCount: statsToInsert.length,
-      sourceTimestamp: sourceUpdateTime,
-      eventName: data.event_name,
-      round: data.stat_round,
+      success: errors.length === 0,
+      message: finalMessage + (errors.length > 0 ? ` Errors: ${errors.join(', ')}` : ''),
+      processedCount: totalInsertedCount,
+      sourceTimestamp: lastSourceTimestamp, // Timestamp of the last successfully fetched round
+      eventName: fetchedEventName,
+      errors: errors,
     });
 
   } catch (error) {
-    console.error("Error in GET /api/live-stats/sync:", error);
+    // Catch unexpected errors outside the loop
+    console.error("Unexpected error during multi-round sync:", error);
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error during sync process",
       },
       { status: 500 },
     );

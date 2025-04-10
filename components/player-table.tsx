@@ -96,12 +96,14 @@ export default function PlayerTable() {
   const [currentLiveEvent, setCurrentLiveEvent] = useState<string | null>(null);
   // State to toggle view
   const [dataView, setDataView] = useState<"season" | "tournament">("season");
+  // Add state for round filter - default to event_avg
+  const [roundFilter, setRoundFilter] = useState<string>("event_avg"); // Default to event_avg
 
   // Fetch both data types on mount
   useEffect(() => {
     fetchSeasonSkills();
     fetchLiveStats();
-  }, []);
+  }, [roundFilter]);
 
   const fetchSeasonSkills = async () => {
     setLoadingSeason(true);
@@ -129,31 +131,48 @@ export default function PlayerTable() {
   };
 
   const fetchLiveStats = async () => {
-    console.log("@@@ fetchLiveStats CALLED @@@");
     setLoadingLive(true);
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("latest_live_tournament_stats_view")
-        .select("*", {
-          // Add head: true and count: 'exact' if needed, but focus on cache for now
-          // Try forcing no cache on the read
-          // Note: Standard Supabase JS client might not directly support fetch options like cache.
-          // This might require lower-level fetch or acknowledging potential slight delays.
-          // For now, let's assume standard behavior and see if recreating view helps.
-          // If issue persists, we might need RPC or direct table query with JS filtering.
-        })
-        // Removed: .eq('round_num', 'event_avg')
-        .order("event_name", { ascending: false })
-        .order("total", { ascending: true });
+        .select("*");
+
+      // Apply round filter
+      if (roundFilter !== "latest") {
+          query = query.eq('round_num', roundFilter);
+      }
+      // Else (if latest), don't filter by round_num, just order by time descending later?
+      // The view already gives latest per player/event/round.
+      // To get absolute latest *across rounds*, we might need different logic/view.
+      // For now, assume 'latest' means highest round number or event_avg from the view.
+
+      // Add ordering
+      query = query.order("event_name", { ascending: false })
+                   .order("total", { ascending: true });
+
+      // If filter is 'latest', maybe add ordering by round_num desc?
+      // This depends on how 'latest' should be interpreted when view has multiple rounds.
+      // Let's stick to view's default of latest timestamp per round for now.
+
+      const { data, error } = await query;
 
       if (error) throw error;
       setLiveStats(data || []);
       if (data && data.length > 0) {
-        // Update state based on the fetched data (could be any round now)
-        setLastLiveUpdate(data[0].data_golf_updated_at);
-        setCurrentLiveEvent(data[0].event_name);
+        // Update state based on the fetched data
+        // Need to handle which event/timestamp to show if multiple rounds exist in view data
+        const latestRecord = data.reduce((latest, current) => 
+            new Date(current.data_golf_updated_at ?? 0) > new Date(latest.data_golf_updated_at ?? 0) ? current : latest
+        );
+        setLastLiveUpdate(latestRecord.data_golf_updated_at);
+        setCurrentLiveEvent(latestRecord.event_name);
       } else {
-        // ... handle no live data ...
+        setLastLiveUpdate(null);
+        setCurrentLiveEvent(null);
+        // If specific round filter has no data, maybe show message?
+        if (roundFilter !== 'latest') {
+           console.log(`No live stats found for round: ${roundFilter}`);
+        }
       }
     } catch (error) {
        // ... error handling ...
@@ -231,63 +250,69 @@ export default function PlayerTable() {
     }
   };
 
-  // Combine/Select data based on the current view
-  // Use a more robust type guard or mapping if merging later
+  // Combine/Select data based on the current view and filter round for tournament view
   const displayPlayers: (PlayerSkillRating | LiveTournamentStat)[] = useMemo(() => {
-    return dataView === "season" ? seasonSkills : liveStats;
-  }, [dataView, seasonSkills, liveStats]);
+    if (dataView === "season") {
+      return seasonSkills;
+    } else { // dataView === "tournament"
+      // Remove logic for 'latest', just filter by roundFilter directly
+      return liveStats.filter(p => p.round_num === roundFilter);
+    }
+  }, [dataView, seasonSkills, liveStats, roundFilter]);
 
-  // Calculate percentiles dynamically based on the current view
+  // Calculate percentiles based on the *filtered* displayPlayers for the tournament view
   const statPercentiles = useMemo(() => {
-    const playersToAnalyze = dataView === "season" ? seasonSkills : liveStats;
+    // Use displayPlayers which is already filtered for the correct view and round
+    const playersToAnalyze = displayPlayers;
     if (playersToAnalyze.length === 0) return {};
 
-    // Type guard to check if an object is PlayerSkillRating
-    const isSkillRating = (p: any): p is PlayerSkillRating => dataView === 'season';
-    // Type guard to check if an object is LiveTournamentStat
-    const isLiveStat = (p: any): p is LiveTournamentStat => dataView === 'tournament';
+    // Type guards might need adjustment if displayPlayers type isn't specific enough
+    // Or rely on optional chaining/null checks within calculations
 
     const calculatePercentiles = (values: (number | null)[]) => {
-        const validValues = values.filter(v => v !== null) as number[];
-        if (validValues.length === 0) return new Map<number, number>();
-        const sortedValues = [...validValues].sort((a, b) => a - b);
-        const percentileMap = new Map<number, number>();
-        sortedValues.forEach((value, index) => {
-            if (!percentileMap.has(value)) {
-                percentileMap.set(value, index / sortedValues.length);
-            }
-        });
-        return percentileMap;
+      const validValues = values.filter(v => v !== null) as number[];
+      if (validValues.length === 0) return new Map<number, number>();
+      const sortedValues = [...validValues].sort((a, b) => a - b);
+      const percentileMap = new Map<number, number>();
+      sortedValues.forEach((value, index) => {
+          if (!percentileMap.has(value)) {
+              percentileMap.set(value, index / sortedValues.length);
+          }
+      });
+      return percentileMap;
     };
 
     // Define keys based on the view
     if (dataView === "season") {
-        const skills = playersToAnalyze as PlayerSkillRating[];
-        return {
-            sg_total: calculatePercentiles(skills.map(p => p.sg_total)),
-            sg_ott: calculatePercentiles(skills.map(p => p.sg_ott)),
-            sg_app: calculatePercentiles(skills.map(p => p.sg_app)),
-            sg_arg: calculatePercentiles(skills.map(p => p.sg_arg)),
-            sg_putt: calculatePercentiles(skills.map(p => p.sg_putt)),
-            driving_acc: calculatePercentiles(skills.map(p => p.driving_acc)),
-            driving_dist: calculatePercentiles(skills.map(p => p.driving_dist)),
-        };
+       const skills = playersToAnalyze as PlayerSkillRating[];
+       return {
+           sg_total: calculatePercentiles(skills.map(p => p.sg_total)),
+           sg_ott: calculatePercentiles(skills.map(p => p.sg_ott)),
+           sg_app: calculatePercentiles(skills.map(p => p.sg_app)),
+           sg_arg: calculatePercentiles(skills.map(p => p.sg_arg)),
+           sg_putt: calculatePercentiles(skills.map(p => p.sg_putt)),
+           driving_acc: calculatePercentiles(skills.map(p => p.driving_acc)),
+           driving_dist: calculatePercentiles(skills.map(p => p.driving_dist)),
+       };
     } else { // dataView === "tournament"
         const live = playersToAnalyze as LiveTournamentStat[];
+        // Calculate percentiles based only on the players visible for the selected round
         return {
             sg_ott: calculatePercentiles(live.map(p => p.sg_ott)),
             sg_app: calculatePercentiles(live.map(p => p.sg_app)),
             sg_putt: calculatePercentiles(live.map(p => p.sg_putt)),
+            sg_arg: calculatePercentiles(live.map(p => p.sg_arg)),
             sg_t2g: calculatePercentiles(live.map(p => p.sg_t2g)),
             sg_total: calculatePercentiles(live.map(p => p.sg_total)),
-            accuracy: calculatePercentiles(live.map(p => p.accuracy)),
-            distance: calculatePercentiles(live.map(p => p.distance)),
-            gir: calculatePercentiles(live.map(p => p.gir)),
-            scrambling: calculatePercentiles(live.map(p => p.scrambling)),
-            sg_arg: calculatePercentiles(live.map(p => p.sg_arg)),
+            // accuracy: calculatePercentiles(live.map(p => p.accuracy)), // Add if needed
+            // distance: calculatePercentiles(live.map(p => p.distance)), // Add if needed
+            // gir: calculatePercentiles(live.map(p => p.gir)),          // Add if needed
+            // scrambling: calculatePercentiles(live.map(p => p.scrambling)), // Add if needed
         };
     }
-  }, [dataView, seasonSkills, liveStats]); // Recalculate when view or data changes
+    // Return empty object if view type mismatch (shouldn't happen)
+    return {};
+  }, [dataView, displayPlayers]); // Update dependency to displayPlayers
 
   // getHeatmapColor function remains largely the same, but needs careful key usage
   const getHeatmapColor = (value: number | null, statKey: string, isHigherBetter = true) => {
@@ -545,6 +570,9 @@ export default function PlayerTable() {
 
   const loading = loadingSeason || loadingLive; // Overall loading state
 
+  // Round filter options - Remove 'latest'
+  const roundOptions = ["1", "2", "3", "4", "event_avg"];
+
   return (
     <Card className="glass-card">
       <CardContent className="p-6">
@@ -603,6 +631,26 @@ export default function PlayerTable() {
                  </div>
             </div>
         </div>
+
+        {/* Add Round Filter Row */}
+        {dataView === 'tournament' && (
+            <div className="flex items-center gap-2 mb-4 border-t border-gray-700 pt-3 mt-3">
+                 <span className="text-sm font-medium text-gray-300 mr-2">Round:</span>
+                 {roundOptions.map((round) => (
+                    <label key={round} className="flex items-center gap-1 cursor-pointer">
+                        <input
+                            type="radio"
+                            name="roundFilter"
+                            value={round}
+                            checked={roundFilter === round}
+                            onChange={() => setRoundFilter(round)}
+                            className="form-radio h-4 w-4 text-primary focus:ring-primary border-gray-600 bg-gray-700"
+                        />
+                        <span className="text-sm capitalize">{round.replace("_", " ")}</span>
+                    </label>
+                 ))}
+             </div>
+        )}
 
         {/* Loading State */}
         {(loadingSeason || loadingLive) && displayPlayers.length === 0 ? (
