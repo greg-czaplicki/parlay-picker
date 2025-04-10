@@ -23,6 +23,7 @@ import TopNavigation from "./top-navigation"
 import Sidebar from "./sidebar"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from "@/components/ui/use-toast"
+import { PlayerSkillRating, LiveTournamentStat } from "@/types/definitions"
 
 const filters = [
   { name: "Balanced", icon: <Filter className="w-4 h-4" /> },
@@ -33,7 +34,13 @@ const filters = [
   { name: "Custom", icon: <Settings className="w-4 h-4" /> },
 ]
 
-export default function Dashboard() {
+// Define props for Dashboard
+interface DashboardProps {
+  initialSeasonSkills: PlayerSkillRating[];
+  initialLiveStats: LiveTournamentStat[];
+}
+
+export default function Dashboard({ initialSeasonSkills, initialLiveStats }: DashboardProps) {
   const [activeFilter, setActiveFilter] = useState("Balanced")
   const [activeTab, setActiveTab] = useState("matchups")
   const [showCustom, setShowCustom] = useState(false)
@@ -168,10 +175,14 @@ export default function Dashboard() {
         )}
 
         {activeTab === "players" && (
-           <>
-             {/* ... Filters ... */}
-             <PlayerTable />
-           </>
+          <>
+            {/* ... Player Filters Card ... */}
+            {/* Pass initial data down to PlayerTable */}
+            <PlayerTable
+                initialSeasonSkills={initialSeasonSkills}
+                initialLiveStats={initialLiveStats}
+            />
+          </>
         )}
         {activeTab === "parlay" && <ParlayBuilder matchupType={matchupType} />}
 
