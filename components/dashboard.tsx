@@ -24,6 +24,7 @@ import Sidebar from "./sidebar"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from "@/components/ui/use-toast"
 import { PlayerSkillRating, LiveTournamentStat } from "@/types/definitions"
+import RecommendedPicks from "./recommended-picks"
 
 const filters = [
   { name: "Balanced", icon: <Filter className="w-4 h-4" /> },
@@ -114,64 +115,63 @@ export default function Dashboard({ initialSeasonSkills, initialLiveStats }: Das
         </div>
 
         {activeTab === "matchups" && (
-          <>
-            {/* Restore original Filter/Parlay Stats layout */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-              <div className="md:col-span-3">
-                  {/* Filters Card */}
-                  <Card className="glass-card">
-                      <CardContent className="p-6">
-                           <h2 className="text-xl font-bold mb-4">Filters</h2>
-                           <div className="flex flex-wrap gap-2">
-                              {filters.map((filter) => (
-                                  <Button
-                                  key={filter.name}
-                                  variant={activeFilter === filter.name ? "default" : "outline"}
-                                  onClick={() => handleFilterChange(filter.name)}
-                                  className={activeFilter === filter.name ? "filter-button-active" : "filter-button"}
-                                  >
-                                  {filter.icon}
-                                  {filter.name}
-                                  </Button>
-                              ))}
-                           </div>
-                           {showCustom && (
-                             <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
-                               <div className="space-y-2">
-                                 <label className="text-sm text-gray-400">SG: Tee-to-Green</label>
-                                 <Input type="number" placeholder="Weight" className="bg-[#1e1e23] border-none" />
-                               </div>
-                               <div className="space-y-2">
-                                 <label className="text-sm text-gray-400">SG: Approach</label>
-                                 <Input type="number" placeholder="Weight" className="bg-[#1e1e23] border-none" />
-                               </div>
-                               <div className="space-y-2">
-                                 <label className="text-sm text-gray-400">SG: Around-the-Green</label>
-                                 <Input type="number" placeholder="Weight" className="bg-[#1e1e23] border-none" />
-                               </div>
-                               <div className="space-y-2">
-                                 <label className="text-sm text-gray-400">SG: Putting</label>
-                                 <Input type="number" placeholder="Weight" className="bg-[#1e1e23] border-none" />
-                               </div>
-                             </div>
-                           )}
-                      </CardContent>
-                  </Card>
-              </div>
-              <div className="md:col-span-1">
-                  {/* Parlay Stats Card */}
-                  <Card className="glass-card h-full"> ... </Card>
-              </div>
+          // Use a single grid for the main content area of this tab
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+
+            {/* Row 1: Filters (Spanning full width) */}
+            <div className="md:col-span-4">
+              <Card className="glass-card">
+                 <CardContent className="p-6">
+                      <h2 className="text-xl font-bold mb-4">Filters</h2>
+                      <div className="flex flex-wrap gap-2">
+                         {filters.map((filter) => (
+                             <Button
+                             key={filter.name}
+                             variant={activeFilter === filter.name ? "default" : "outline"}
+                             onClick={() => handleFilterChange(filter.name)}
+                             className={activeFilter === filter.name ? "filter-button-active" : "filter-button"}
+                             >
+                             {filter.icon}
+                             {filter.name}
+                             </Button>
+                         ))}
+                      </div>
+                      {showCustom && (
+                        <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+                          {/* Custom filter inputs */}
+                          <div className="space-y-2">
+                            <label className="text-sm text-gray-400">SG: Tee-to-Green</label>
+                            <Input type="number" placeholder="Weight" className="bg-[#1e1e23] border-none" />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-sm text-gray-400">SG: Approach</label>
+                            <Input type="number" placeholder="Weight" className="bg-[#1e1e23] border-none" />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-sm text-gray-400">SG: Around-the-Green</label>
+                            <Input type="number" placeholder="Weight" className="bg-[#1e1e23] border-none" />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-sm text-gray-400">SG: Putting</label>
+                            <Input type="number" placeholder="Weight" className="bg-[#1e1e23] border-none" />
+                          </div>
+                        </div>
+                      )}
+                 </CardContent>
+               </Card>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <div className="md:col-span-3">
-                {/* Call MatchupsTable with NO extra props */}
-                {/* Remove key={matchupRefreshKey} if not needed by other Dashboard actions */}
-                <MatchupsTable />
-              </div>
+            {/* Row 2: Main Matchups Table (Left) */}
+            <div className="md:col-span-3">
+               <MatchupsTable />
             </div>
-          </>
+
+            {/* Row 2: Recommended Picks (Right) */}
+            <div className="md:col-span-1">
+               <RecommendedPicks matchupType="3ball" limit={10} />
+            </div>
+
+          </div>
         )}
 
         {activeTab === "players" && (
