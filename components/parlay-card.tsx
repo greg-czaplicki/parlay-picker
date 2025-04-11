@@ -51,6 +51,7 @@ interface ParlayCardProps {
     parlayName: string | null;
     initialPicks: ParlayPick[];
     initialPicksWithData?: ParlayPickWithData[];
+    selectedRound?: number | null; // Allow the parent to specify which round to display
     // Optional: Add a callback to notify parent page when parlay is deleted
     // onDelete?: (parlayId: number) => void;
 }
@@ -59,7 +60,8 @@ export default function ParlayCard({
   parlayId,
   parlayName, 
   initialPicks,
-  initialPicksWithData = [] /*, onDelete */
+  initialPicksWithData = [],
+  selectedRound = null /*, onDelete */
 }: ParlayCardProps) {
   // Track component mount state
   const isMounted = useRef(true);
@@ -465,23 +467,29 @@ export default function ParlayCard({
       searchedPlayerName: string,
       groupIsLoadingStats: boolean,
       statusStyle?: string, // Optional style for the searched player
-      statusIcon?: React.ReactNode // Optional icon for the searched player
+      statusIcon?: React.ReactNode, // Optional icon for the searched player
+      pickRoundNum?: number | null // Round number this pick is for
   ) => {
     if (!dgId || !playerName) return null;
 
     const liveStat = liveStatsMap?.[dgId];
-    const displayScore = formatScore(liveStat?.today);
+    
+    // Always use the player's score for the round in their parlay pick
+    // The data should already be filtered by round at the API level
+    const displayScore = liveStat?.today !== undefined ? formatScore(liveStat?.today) : "-";
 
-    // Update Thru display logic
+    // Status information
     let displayThru = ""; // Default to empty
-    if (liveStat?.position === "F" || liveStat?.thru === 18) {
+    if (liveStat) {
+      if (liveStat.position === "F" || liveStat.thru === 18) {
         displayThru = " (F)"; // Show F if position is F OR thru is 18
-    } else if (liveStat?.thru) {
+      } else if (liveStat.thru) {
         displayThru = ` (Thru ${liveStat.thru})`; // Show Thru X otherwise
-    } else if (liveStat?.position === "CUT") {
+      } else if (liveStat.position === "CUT") {
         displayThru = " (CUT)";
-    } else if (liveStat?.position === "WD") {
+      } else if (liveStat.position === "WD") {
         displayThru = " (WD)";
+      }
     }
 
     const formattedPlayerName = formatPlayerNameDisplay(playerName);
@@ -534,14 +542,30 @@ export default function ParlayCard({
 
           const selectedLiveStat = selectedPlayerId ? player.liveStats[selectedPlayerId] : undefined;
 
+          // Check if the stats are relevant for the selected round
+          const isP1StatRelevant = !selectedRound || !p1Stat?.round_num || 
+            (selectedRound && p1Stat?.round_num && String(p1Stat.round_num) === String(selectedRound));
+          const isP2StatRelevant = !selectedRound || !p2Stat?.round_num || 
+            (selectedRound && p2Stat?.round_num && String(p2Stat.round_num) === String(selectedRound));
+          const isP3StatRelevant = !selectedRound || !p3Stat?.round_num || 
+            (selectedRound && p3Stat?.round_num && String(p3Stat.round_num) === String(selectedRound));
+          const isSelectedStatRelevant = !selectedRound || !selectedLiveStat?.round_num || 
+            (selectedRound && selectedLiveStat?.round_num && String(selectedLiveStat.round_num) === String(selectedRound));
+
+          // If we're viewing a different round than the picks, don't show win/loss styling
+          if (selectedRound && player.matchup.round_num !== selectedRound) {
+            return { playerLineStyle, playerLineIcon, groupContainerStyle };
+          }
+
           // Ensure all 3 players and the selected player's stats are available for comparison
-          if (p1Stat && p2Stat && p3Stat && selectedLiveStat && selectedPlayerId) {
+          if (p1Stat && p2Stat && p3Stat && selectedLiveStat && selectedPlayerId &&
+              isP1StatRelevant && isP2StatRelevant && isP3StatRelevant && isSelectedStatRelevant) {
               const scores = [
-                  p1Stat.today ?? Infinity,
-                  p2Stat.today ?? Infinity,
-                  p3Stat.today ?? Infinity,
+                  isP1StatRelevant ? (p1Stat.today ?? Infinity) : Infinity,
+                  isP2StatRelevant ? (p2Stat.today ?? Infinity) : Infinity,
+                  isP3StatRelevant ? (p3Stat.today ?? Infinity) : Infinity,
               ];
-              const selectedScore = selectedLiveStat.today ?? Infinity;
+              const selectedScore = isSelectedStatRelevant ? (selectedLiveStat.today ?? Infinity) : Infinity;
 
               const finished = [
                   p1Stat.thru === 18 || p1Stat.position === 'F' || p1Stat.position === 'CUT' || p1Stat.position === 'WD',
@@ -705,10 +729,18 @@ export default function ParlayCard({
                         )}
                         {!player.isLoadingMatchup && !player.matchupError && player.matchup && (
                             <div className={`text-sm text-muted-foreground space-y-0.5 ${groupContainerStyle}`}>
-                               <p className="text-xs font-medium mb-1 text-muted-foreground/80">Group (R{player.matchup.round_num}):</p>
-                               {renderMatchupPlayerLine(player.matchup.p1_dg_id, player.matchup.p1_player_name, player.liveStats, player.name, groupIsLoadingStats, playerLineStyle, playerLineIcon)}
-                               {renderMatchupPlayerLine(player.matchup.p2_dg_id, player.matchup.p2_player_name, player.liveStats, player.name, groupIsLoadingStats, playerLineStyle, playerLineIcon)}
-                               {renderMatchupPlayerLine(player.matchup.p3_dg_id, player.matchup.p3_player_name, player.liveStats, player.name, groupIsLoadingStats, playerLineStyle, playerLineIcon)}
+                               <p className="text-xs font-medium mb-1 text-muted-foreground/80">
+                                 Group (R{player.matchup.round_num})
+                                 {player.matchup.round_num === 1 && (
+                                   <span className="text-blue-500 ml-1">Round 1</span>
+                                 )}
+                                 {player.matchup.round_num === 2 && (
+                                   <span className="text-green-500 ml-1">Round 2 (Current)</span>
+                                 )}
+                               </p>
+                               {renderMatchupPlayerLine(player.matchup.p1_dg_id, player.matchup.p1_player_name, player.liveStats, player.name, groupIsLoadingStats, playerLineStyle, playerLineIcon, player.matchup.round_num)}
+                               {renderMatchupPlayerLine(player.matchup.p2_dg_id, player.matchup.p2_player_name, player.liveStats, player.name, groupIsLoadingStats, playerLineStyle, playerLineIcon, player.matchup.round_num)}
+                               {renderMatchupPlayerLine(player.matchup.p3_dg_id, player.matchup.p3_player_name, player.liveStats, player.name, groupIsLoadingStats, playerLineStyle, playerLineIcon, player.matchup.round_num)}
                                {player.statsError && !groupIsLoadingStats && (
                                    <p className="text-xs text-destructive mt-1">Error loading scores: {player.statsError}</p>
                                )}

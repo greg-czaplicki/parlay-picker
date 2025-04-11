@@ -425,16 +425,16 @@ export async function getLiveStatsForPlayers(
         // console.log("[getLiveStatsForPlayers] Received empty or invalid player ID list."); // REMOVE
         return { stats: [] };
     }
-    // console.log(`[getLiveStatsForPlayers] Fetching live stats for ${playerIds.length} player IDs:`, playerIds); // REMOVE
+    console.log(`[getLiveStatsForPlayers] Fetching live stats for ${playerIds.length} player IDs:`, playerIds);
     const supabase = createServerClient();
 
     try {
+        // Get all rounds' stats for these players - we need both Round 1 and Round 2 data
         const { data, error } = await supabase
-            .from('latest_live_tournament_stats_view')
+            .from('live_tournament_stats') // Use the actual table, not the view
             .select('*') // Select all columns from the view for now
             .in('dg_id', playerIds)
-            // Assuming the view inherently provides the latest available stat per player
-            // based on its definition (e.g., using DISTINCT ON or ROW_NUMBER in the view query)
+            .order('round_num', { ascending: true }) // Order by round number 
             .returns<LiveTournamentStat[]>();
 
         if (error) {
@@ -683,10 +683,20 @@ export async function batchLoadParlayPicksData(
                     const { stats, error: statsError } = await getLiveStatsForPlayers(playerIds);
                     
                     // Convert stats array to map for easy lookup
+                    // Group stats by player ID and round number for easy access
                     const statsMap: Record<number, LiveTournamentStat> = {};
+                    
+                    // For each player, find the stats for the specific round of this pick
                     (stats || []).forEach(stat => {
                         if (stat.dg_id) {
-                            statsMap[stat.dg_id] = stat;
+                            // If the stat's round matches the pick's round, use it
+                            if (String(stat.round_num) === String(pick.round_num)) {
+                                statsMap[stat.dg_id] = stat;
+                            }
+                            // If we don't have a stat for this player yet, use any stat as fallback
+                            else if (!statsMap[stat.dg_id]) {
+                                statsMap[stat.dg_id] = stat;
+                            }
                         }
                     });
                     

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import ParlayCard from '@/components/parlay-card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,18 +8,86 @@ import { toast } from '@/components/ui/use-toast';
 import { Loader2, PlusCircle } from 'lucide-react';
 import { createParlay, ParlayWithPicks, ParlayPickWithData } from '@/app/actions/matchups';
 import { useRouter } from 'next/navigation';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface ParlaysClientProps {
   initialParlays: ParlayWithPicks[];
   initialPicksWithData: ParlayPickWithData[];
+  currentRound: number | null;
   error?: string;
 }
 
-export default function ParlaysClient({ initialParlays, initialPicksWithData, error }: ParlaysClientProps) {
+export default function ParlaysClient({ initialParlays, initialPicksWithData, currentRound, error }: ParlaysClientProps) {
   const [parlays, setParlays] = useState<ParlayWithPicks[]>(initialParlays);
   const [isCreating, setIsCreating] = useState(false);
   const [newParlayName, setNewParlayName] = useState('');
+  const [selectedRound, setSelectedRound] = useState<string>('current');
+  const [filteredParlays, setFilteredParlays] = useState<ParlayWithPicks[]>([]);
   const router = useRouter();
+  
+  // Log current round value from server
+  console.log("ParlaysClient received currentRound:", currentRound);
+  
+  // Find unique round numbers from all picks
+  const uniqueRounds = Array.from(
+    new Set(
+      initialPicksWithData
+        .map(pickData => pickData.pick.round_num)
+        .filter(round => round !== null)
+    )
+  ).sort((a, b) => Number(a) - Number(b));
+  
+  // Add current round to uniqueRounds if it doesn't exist
+  if (currentRound !== null && !uniqueRounds.includes(currentRound)) {
+    uniqueRounds.push(currentRound);
+    uniqueRounds.sort((a, b) => Number(a) - Number(b));
+  }
+
+  // Filter parlays based on selected round
+  useEffect(() => {
+    // Log for debugging
+    console.log("Current server-side round:", currentRound);
+    console.log("Unique rounds from picks:", uniqueRounds);
+    
+    if (selectedRound === 'all') {
+      console.log("Showing all rounds");
+      setFilteredParlays(parlays);
+    } else if (selectedRound === 'current' && currentRound !== null) {
+      console.log(`Filtering for current round: ${currentRound}`);
+      // Filter to show only parlays that have at least one pick in the current round
+      setFilteredParlays(
+        parlays.filter(parlay => {
+          // Find this parlay's picks with data
+          const parlayPicksWithData = initialPicksWithData.filter(
+            pickData => pickData.pick.parlay_id === parlay.id
+          );
+          
+          // Check if any pick is from the current round
+          return parlayPicksWithData.some(
+            pickData => pickData.pick.round_num === currentRound
+          );
+        })
+      );
+    } else if (selectedRound && !isNaN(Number(selectedRound))) {
+      // Filter to show parlays with picks from the selected round
+      const roundNum = Number(selectedRound);
+      console.log(`Filtering for specific round: ${roundNum}`);
+      setFilteredParlays(
+        parlays.filter(parlay => {
+          const parlayPicksWithData = initialPicksWithData.filter(
+            pickData => pickData.pick.parlay_id === parlay.id
+          );
+          
+          return parlayPicksWithData.some(
+            pickData => pickData.pick.round_num === roundNum
+          );
+        })
+      );
+    } else {
+      console.log("Default case - showing all parlays");
+      setFilteredParlays(parlays);
+    }
+  }, [selectedRound, parlays, initialPicksWithData, currentRound]);
 
   // Show error toast if there was an error loading parlays
   if (error) {
@@ -58,28 +126,47 @@ export default function ParlaysClient({ initialParlays, initialPicksWithData, er
 
   return (
     <div className="container mx-auto p-4 space-y-6">
-      <div className="flex justify-between items-center">
-         <h1 className="text-2xl font-bold">My Active Parlays</h1>
-         {/* Button/Input to create new parlay */}
-         <div className="flex items-center space-x-2">
-             <Input
-                type="text"
-                placeholder="New parlay name (optional)"
-                value={newParlayName}
-                onChange={(e) => setNewParlayName(e.target.value)}
-                className="w-48 h-9"
-                disabled={isCreating}
-             />
-             <Button onClick={handleCreateParlay} disabled={isCreating} size="sm">
-                 {isCreating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
-                 Add Parlay
-             </Button>
-         </div>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <h1 className="text-2xl font-bold">My Active Parlays</h1>
+        
+        <div className="flex items-center space-x-2 w-full sm:w-auto">
+          <Input
+            type="text"
+            placeholder="New parlay name (optional)"
+            value={newParlayName}
+            onChange={(e) => setNewParlayName(e.target.value)}
+            className="w-full sm:w-48 h-9"
+            disabled={isCreating}
+          />
+          <Button onClick={handleCreateParlay} disabled={isCreating} size="sm">
+            {isCreating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
+            Add Parlay
+          </Button>
+        </div>
+      </div>
+      
+      {/* Round filter dropdown */}
+      <div className="flex items-center gap-3">
+        <span className="text-sm text-muted-foreground">Round:</span>
+        <Select value={selectedRound} onValueChange={setSelectedRound}>
+          <SelectTrigger className="w-32">
+            <SelectValue placeholder="Select round" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="current">Current ({currentRound || 'N/A'})</SelectItem>
+            <SelectItem value="all">All Rounds</SelectItem>
+            {uniqueRounds.map(round => (
+              <SelectItem key={round} value={String(round)}>
+                Round {round} {round === currentRound ? '(Current)' : (round === 1 ? '(Complete)' : '')}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
-      {parlays.length > 0 ? (
+      {filteredParlays.length > 0 ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-          {parlays.map((parlay) => {
+          {filteredParlays.map((parlay) => {
             // Find preloaded data for this parlay's picks
             const parlayPicksWithData = initialPicksWithData.filter(
               pickData => pickData.pick.parlay_id === parlay.id
@@ -92,14 +179,17 @@ export default function ParlaysClient({ initialParlays, initialPicksWithData, er
                   parlayName={parlay.name}
                   initialPicks={parlay.picks} // Pass initial picks for this parlay
                   initialPicksWithData={parlayPicksWithData} // Pass preloaded data
+                  selectedRound={selectedRound === 'current' ? currentRound : selectedRound === 'all' ? null : Number(selectedRound)}
               />
             );
           })}
         </div>
       ) : (
         <div className="text-center py-10 border border-dashed border-border/50 rounded-lg">
-            <p className="text-muted-foreground">No parlays created yet.</p>
-            <p className="text-sm text-muted-foreground mt-1">Click "Add Parlay" to get started.</p>
+          <p className="text-muted-foreground">No parlays found for {selectedRound === 'current' ? `Round ${currentRound}` : selectedRound === 'all' ? 'any round' : `Round ${selectedRound}`}.</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Click "Add Parlay" to create a new one.
+          </p>
         </div>
       )}
     </div>
