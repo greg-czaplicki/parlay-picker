@@ -77,7 +77,11 @@ export async function GET() {
     (tournaments || []).forEach(t => eventNameToId.set(t.event_name, t.event_id));
 
     const results = [];
-    for (const [res, label] of [[pgaRes, 'PGA'], [oppRes, 'OPP']]) {
+    const sources: [Response, string][] = [
+      [pgaRes, 'PGA'],
+      [oppRes, 'OPP'],
+    ];
+    for (const [res, label] of sources) {
       if (!res.ok) {
         const errorText = await res.text();
         console.error(`Failed to fetch data from Data Golf (${label}):`, res.status, errorText);
