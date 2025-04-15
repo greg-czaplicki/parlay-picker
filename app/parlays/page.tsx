@@ -20,7 +20,7 @@ export default async function ParlaysPage() {
   }
   
   // Hardcode Round 2 as the current round for Masters 2025
-  const currentRound = 2;
+  const currentRound = 2; // This is now hardcoded and not fetched from DB
   
   // Pass the data to a client component
   return (

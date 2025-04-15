@@ -68,97 +68,100 @@ if (!dataGolfApiKey) {
     throw new Error("Data Golf API Key is missing in environment variables.");
 }
 
-const DATA_GOLF_URL = `https://feeds.datagolf.com/betting-tools/matchups?tour=pga&market=3_balls&odds_format=decimal&file_format=json&key=${dataGolfApiKey}`;
+const DATA_GOLF_PGA_URL = `https://feeds.datagolf.com/betting-tools/matchups?tour=pga&market=3_balls&odds_format=decimal&file_format=json&key=${dataGolfApiKey}`;
+const DATA_GOLF_OPP_URL = `https://feeds.datagolf.com/betting-tools/matchups?tour=opp&market=3_balls&odds_format=decimal&file_format=json&key=${dataGolfApiKey}`;
 
 export async function GET() {
-  console.log("Fetching 3-ball matchups from Data Golf...");
+  console.log("Fetching 3-ball matchups from Data Golf (PGA and Opposite Field)...");
 
   try {
-    const response = await fetch(DATA_GOLF_URL, {
-        next: { revalidate: 3600 } // Revalidate data every hour
-    });
+    // Fetch both PGA and Opposite Field events in parallel
+    const [pgaRes, oppRes] = await Promise.all([
+      fetch(DATA_GOLF_PGA_URL, { next: { revalidate: 3600 } }),
+      fetch(DATA_GOLF_OPP_URL, { next: { revalidate: 3600 } })
+    ]);
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Failed to fetch data from Data Golf:", response.status, errorText);
-      throw new Error(
-        `Failed to fetch data from Data Golf: ${response.status} ${errorText}`,
-      );
+    // Fetch tournaments from Supabase to map event_name to event_id
+    const { data: tournaments, error: tournamentsError } = await supabase
+      .from("tournaments")
+      .select("event_id, event_name");
+    if (tournamentsError) {
+      throw new Error(`Failed to fetch tournaments: ${tournamentsError.message}`);
     }
+    const eventNameToId = new Map<string, number>();
+    (tournaments || []).forEach(t => eventNameToId.set(t.event_name, t.event_id));
 
-    const data: DataGolfResponse = await response.json();
-    console.log(`Successfully fetched data for event: ${data.event_name}, round: ${data.round_num}`);
-
-    const matchupsToInsert: SupabaseMatchup[] = data.match_list.map((matchup) => {
+    const results = [];
+    for (const [res, label] of [[pgaRes, 'PGA'], [oppRes, 'OPP']]) {
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error(`Failed to fetch data from Data Golf (${label}):`, res.status, errorText);
+        continue;
+      }
+      const data: DataGolfResponse = await res.json();
+      console.log(`Full Data Golf API response (${label}):`, data);
+      if (!Array.isArray(data.match_list)) {
+        console.error(`Data Golf API (${label}): match_list is not an array`, data.match_list);
+        continue;
+      }
+      const event_id = eventNameToId.get(data.event_name) || null;
+      const matchupsToInsert: (SupabaseMatchup & { event_id: number | null })[] = data.match_list.map((matchup) => {
         const fanduelOdds = matchup.odds.fanduel;
         const draftkingsOdds = matchup.odds.draftkings;
-
         return {
-            event_name: data.event_name,
-            round_num: data.round_num,
-            // Convert UTC time string to a format Supabase understands (ISO 8601)
-            data_golf_update_time: new Date(data.last_updated.replace(" UTC", "Z")).toISOString(),
-            p1_dg_id: matchup.p1_dg_id,
-            p1_player_name: matchup.p1_player_name,
-            p2_dg_id: matchup.p2_dg_id,
-            p2_player_name: matchup.p2_player_name,
-            p3_dg_id: matchup.p3_dg_id,
-            p3_player_name: matchup.p3_player_name,
-            ties_rule: matchup.ties,
-            fanduel_p1_odds: fanduelOdds?.p1 ?? null,
-            fanduel_p2_odds: fanduelOdds?.p2 ?? null,
-            fanduel_p3_odds: fanduelOdds?.p3 ?? null,
-            draftkings_p1_odds: draftkingsOdds?.p1 ?? null,
-            draftkings_p2_odds: draftkingsOdds?.p2 ?? null,
-            draftkings_p3_odds: draftkingsOdds?.p3 ?? null,
+          event_id,
+          event_name: data.event_name,
+          round_num: data.round_num,
+          data_golf_update_time: new Date(data.last_updated.replace(" UTC", "Z")).toISOString(),
+          p1_dg_id: matchup.p1_dg_id,
+          p1_player_name: matchup.p1_player_name,
+          p2_dg_id: matchup.p2_dg_id,
+          p2_player_name: matchup.p2_player_name,
+          p3_dg_id: matchup.p3_dg_id,
+          p3_player_name: matchup.p3_player_name,
+          ties_rule: matchup.ties,
+          fanduel_p1_odds: fanduelOdds?.p1 ?? null,
+          fanduel_p2_odds: fanduelOdds?.p2 ?? null,
+          fanduel_p3_odds: fanduelOdds?.p3 ?? null,
+          draftkings_p1_odds: draftkingsOdds?.p1 ?? null,
+          draftkings_p2_odds: draftkingsOdds?.p2 ?? null,
+          draftkings_p3_odds: draftkingsOdds?.p3 ?? null,
         };
-    });
-
-    console.log(`Processed ${matchupsToInsert.length} matchups for insertion.`);
-
-    if (matchupsToInsert.length > 0) {
-
-      // 1. Insert into historical table
-      const { error: insertError } = await supabase
-        .from("three_ball_matchups") // Historical table
-        .insert(matchupsToInsert);
-
-      if (insertError) {
-          // Log error but potentially continue to upsert latest, or handle differently
-          console.error("Error inserting historical matchups into Supabase:", insertError);
-          // Optional: Decide if you want to stop the process here
-          // throw new Error(`Supabase historical insertion failed: ${insertError.message}`);
+      });
+      if (matchupsToInsert.length > 0) {
+        // Insert into historical table
+        const { error: insertError } = await supabase
+          .from("three_ball_matchups")
+          .insert(matchupsToInsert);
+        if (insertError) {
+          console.error(`Error inserting historical matchups into Supabase (${label}):`, insertError);
+        } else {
+          console.log(`Successfully inserted ${matchupsToInsert.length} historical matchups for ${label}.`);
+        }
+        // Upsert into latest odds table
+        const { error: upsertError } = await supabase
+          .from("latest_three_ball_matchups")
+          .upsert(matchupsToInsert, {
+            onConflict: 'event_id, event_name, round_num, p1_dg_id, p2_dg_id, p3_dg_id',
+          });
+        if (upsertError) {
+          console.error(`Error upserting latest matchups into Supabase (${label}):`, upsertError);
+          throw new Error(`Supabase latest upsert failed (${label}): ${upsertError.message}`);
+        }
+        console.log(`Successfully upserted ${matchupsToInsert.length} latest matchups for ${label}.`);
       } else {
-        console.log(`Successfully inserted ${matchupsToInsert.length} historical matchups.`);
+        console.log(`No matchups found in the fetched data to insert for ${label}.`);
       }
-
-      // 2. Upsert into latest odds table
-      const { error: upsertError } = await supabase
-        .from("latest_three_ball_matchups") // Latest odds table
-        .upsert(matchupsToInsert, {
-          // Specify the columns that define a unique matchup
-          onConflict: 'event_name, round_num, p1_dg_id, p2_dg_id, p3_dg_id',
-          // ignoreDuplicates: false // Default is false, ensures updates happen
-        });
-
-      if (upsertError) {
-        // This is more critical, as it affects the main display
-        console.error("Error upserting latest matchups into Supabase:", upsertError);
-        throw new Error(`Supabase latest upsert failed: ${upsertError.message}`);
-      }
-        console.log(`Successfully upserted ${matchupsToInsert.length} latest matchups.`);
-
-    } else {
-        console.log("No matchups found in the fetched data to insert.")
+      results.push({
+        event: data.event_name,
+        round: data.round_num,
+        processedCount: matchupsToInsert.length
+      });
     }
-
-
     return NextResponse.json({
       success: true,
-      message: `Successfully fetched and stored ${matchupsToInsert.length} 3-ball matchups for ${data.event_name}, round ${data.round_num}.`,
-      event: data.event_name,
-      round: data.round_num,
-      processedCount: matchupsToInsert.length,
+      message: `Fetched and stored 3-ball matchups for ${results.length} event(s).`,
+      results
     });
   } catch (error) {
     console.error("Error in GET /api/matchups/3ball:", error);

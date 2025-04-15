@@ -381,9 +381,25 @@ export async function findPlayerMatchup(playerName: string): Promise<{ matchup: 
 
     const supabase = createServerClient();
     try {
-        // console.log(`[findPlayerMatchup] Searching latest_three_ball_matchups with pattern: '${dbSearchPattern}'`); // REMOVE
+        // First, try to find matchup in round 2 (current round)
         const orFilterString = `p1_player_name.ilike."${dbSearchPattern}",p2_player_name.ilike."${dbSearchPattern}",p3_player_name.ilike."${dbSearchPattern}"`;
-        // console.log(`[findPlayerMatchup] Constructed OR filter string: ${orFilterString}`); // REMOVE
+        
+        // Try to find a round 2 matchup first
+        const { data: round2Matchup, error: round2MatchupError } = await supabase
+            .from('latest_three_ball_matchups')
+            .select('*')
+            .or(orFilterString)
+            .eq('round_num', 2) // Specifically look for Round 2 matchups
+            .order('data_golf_update_time', { ascending: false })
+            .limit(1)
+            .maybeSingle<LatestThreeBallMatchupRow>();
+            
+        // If we found a round 2 matchup, return it
+        if (round2Matchup && !round2MatchupError) {
+            return { matchup: round2Matchup };
+        }
+        
+        // Otherwise, fall back to any matchup (will typically be round 1)
         const { data: matchup, error: matchupError } = await supabase
             .from('latest_three_ball_matchups')
             .select('*')
@@ -422,19 +438,31 @@ export async function getLiveStatsForPlayers(
     playerIds: number[]
 ): Promise<{ stats: LiveTournamentStat[]; error?: string }> {
     if (!playerIds || playerIds.length === 0) {
-        // console.log("[getLiveStatsForPlayers] Received empty or invalid player ID list."); // REMOVE
         return { stats: [] };
     }
     console.log(`[getLiveStatsForPlayers] Fetching live stats for ${playerIds.length} player IDs:`, playerIds);
     const supabase = createServerClient();
 
     try {
-        // Get all rounds' stats for these players - we need both Round 1 and Round 2 data
-        const { data, error } = await supabase
-            .from('live_tournament_stats') // Use the actual table, not the view
-            .select('*') // Select all columns from the view for now
+        // First try to get specifically round 2 stats for the current tournament
+        const { data: round2Stats, error: round2Error } = await supabase
+            .from('live_tournament_stats')
+            .select('*')
             .in('dg_id', playerIds)
-            .order('round_num', { ascending: true }) // Order by round number 
+            .eq('round_num', '2') // Explicitly fetch Round 2 stats
+            .returns<LiveTournamentStat[]>();
+            
+        if (round2Stats && round2Stats.length > 0) {
+            console.log(`Found ${round2Stats.length} Round 2 stats records`);
+            return { stats: round2Stats };
+        }
+            
+        // If we don't find round 2 stats, get any stats for these players
+        const { data, error } = await supabase
+            .from('live_tournament_stats')
+            .select('*')
+            .in('dg_id', playerIds)
+            .order('round_num', { ascending: false }) // Get most recent round first
             .returns<LiveTournamentStat[]>();
 
         if (error) {
@@ -683,20 +711,20 @@ export async function batchLoadParlayPicksData(
                     const { stats, error: statsError } = await getLiveStatsForPlayers(playerIds);
                     
                     // Convert stats array to map for easy lookup
-                    // Group stats by player ID and round number for easy access
+                    // Group stats by player ID - prioritize round 2 stats
                     const statsMap: Record<number, LiveTournamentStat> = {};
                     
-                    // For each player, find the stats for the specific round of this pick
+                    // First look for round 2 stats for each player
                     (stats || []).forEach(stat => {
-                        if (stat.dg_id) {
-                            // If the stat's round matches the pick's round, use it
-                            if (String(stat.round_num) === String(pick.round_num)) {
-                                statsMap[stat.dg_id] = stat;
-                            }
-                            // If we don't have a stat for this player yet, use any stat as fallback
-                            else if (!statsMap[stat.dg_id]) {
-                                statsMap[stat.dg_id] = stat;
-                            }
+                        if (stat.dg_id && String(stat.round_num) === '2') {
+                            statsMap[stat.dg_id] = stat;
+                        }
+                    });
+                    
+                    // Fill in any players without round 2 stats
+                    (stats || []).forEach(stat => {
+                        if (stat.dg_id && !statsMap[stat.dg_id]) {
+                            statsMap[stat.dg_id] = stat;
                         }
                     });
                     
@@ -719,8 +747,7 @@ export async function batchLoadParlayPicksData(
     }
 }
 
-/*
-// Optional: Action to delete a whole parlay (will cascade delete picks)
+// Action to delete a parlay (will cascade delete all its picks)
 export async function deleteParlay(parlayId: number): Promise<{ success: boolean; error?: string }> {
     console.log(`[deleteParlay] Deleting parlay ID: ${parlayId}`);
     const supabase = createServerClient();
@@ -735,6 +762,10 @@ export async function deleteParlay(parlayId: number): Promise<{ success: boolean
             console.error(`[deleteParlay] Supabase error deleting parlay ID ${parlayId}:`, error);
             throw new Error(`Database error deleting parlay: ${error.message}`);
         }
+        
+        // Invalidate cache since we've deleted a parlay
+        invalidateParlaysCache();
+        
         console.log(`[deleteParlay] Successfully deleted parlay ID: ${parlayId}`);
         return { success: true };
     } catch (error) {
@@ -742,4 +773,3 @@ export async function deleteParlay(parlayId: number): Promise<{ success: boolean
         return { success: false, error: error instanceof Error ? error.message : "Unknown error deleting parlay" };
     }
 }
-*/

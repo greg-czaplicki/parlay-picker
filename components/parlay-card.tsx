@@ -10,6 +10,7 @@ import {
     getLiveStatsForPlayers,
     addParlayPick,
     removeParlayPick,
+    deleteParlay,
     ParlayPick,
     ParlayWithPicks,
     ParlayPickWithData
@@ -52,8 +53,7 @@ interface ParlayCardProps {
     initialPicks: ParlayPick[];
     initialPicksWithData?: ParlayPickWithData[];
     selectedRound?: number | null; // Allow the parent to specify which round to display
-    // Optional: Add a callback to notify parent page when parlay is deleted
-    // onDelete?: (parlayId: number) => void;
+    onDelete?: (parlayId: number) => void; // Callback to notify parent when parlay is deleted
 }
 
 export default function ParlayCard({ 
@@ -61,13 +61,17 @@ export default function ParlayCard({
   parlayName, 
   initialPicks,
   initialPicksWithData = [],
-  selectedRound = null /*, onDelete */
+  selectedRound = null,
+  onDelete
 }: ParlayCardProps) {
   // Track component mount state
   const isMounted = useRef(true);
   
   // Track refresh interval
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Delete state
+  const [isDeleting, setIsDeleting] = useState(false);
   
   // Initialize state from props - use preloaded data if available
   const [players, setPlayers] = useState<ParlayPlayer[]>(() => {
@@ -474,9 +478,9 @@ export default function ParlayCard({
 
     const liveStat = liveStatsMap?.[dgId];
     
-    // Always use the player's score for the round in their parlay pick
-    // The data should already be filtered by round at the API level
-    const displayScore = liveStat?.today !== undefined ? formatScore(liveStat?.today) : "-";
+    // Use round 2 scores if this card is showing a round 2 parlay
+    const isRound2 = pickRoundNum === 2 || (!pickRoundNum && selectedRound === 2);
+    const displayScore = (liveStat?.today !== undefined) ? formatScore(liveStat?.today) : "-";
 
     // Status information
     let displayThru = ""; // Default to empty
@@ -624,18 +628,28 @@ export default function ParlayCard({
       return { playerLineStyle, playerLineIcon, groupContainerStyle };
   };
 
-  // Optional: Handler to delete the entire parlay
-  // const handleDeleteParlay = async () => {
-  //    if (confirm(`Are you sure you want to delete the parlay "${parlayName || `ID: ${parlayId}`}"? This cannot be undone.`)) {
-  //       const { success, error } = await deleteParlay(parlayId); // Assuming deleteParlay action exists
-  //       if (success) {
-  //          toast({ title: "Parlay Deleted" });
-  //          onDelete?.(parlayId); // Notify parent page
-  //       } else {
-  //          toast({ title: "Error Deleting Parlay", description: error, variant: "destructive" });
-  //       }
-  //    }
-  // };
+  // Handler to delete the entire parlay
+  const handleDeleteParlay = async () => {
+    if (!confirm(`Are you sure you want to delete this parlay?`)) {
+      return;
+    }
+    
+    setIsDeleting(true);
+    try {
+      const { success, error } = await deleteParlay(parlayId);
+      if (success) {
+        toast({ title: "Parlay Deleted", description: "Parlay has been successfully deleted." });
+        onDelete?.(parlayId); // Notify parent page
+      } else {
+        toast({ title: "Error Deleting Parlay", description: error, variant: "destructive" });
+      }
+    } catch (err) {
+      console.error("Error deleting parlay:", err);
+      toast({ title: "Error Deleting Parlay", description: "An unexpected error occurred.", variant: "destructive" });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   // Format the last refreshed time in 12-hour format
   const formatRefreshTime = () => {
@@ -679,10 +693,17 @@ export default function ParlayCard({
             <span>{isRefreshing ? "Refreshing..." : "Refresh"}</span>
           </Button>
           
-          {/* Optional: Delete Parlay Button */}
-          {/* <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive" onClick={handleDeleteParlay} title="Delete Parlay"> 
-             <Trash2 size={16} />
-          </Button> */}
+          {/* Delete Parlay Button */}
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="text-muted-foreground hover:text-destructive" 
+            onClick={handleDeleteParlay} 
+            disabled={isDeleting}
+            title="Delete Parlay"
+          > 
+            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 size={16} />}
+          </Button>
         </div>
       </CardHeader>
       {/* Content takes remaining space and scrolls internally if needed */}
@@ -760,6 +781,7 @@ export default function ParlayCard({
           )}
         </div>
       </CardContent>
+      {/* No dialog needed for this simpler implementation */}
     </Card>
   );
-} 
+}

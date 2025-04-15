@@ -108,8 +108,13 @@ function getHighlightIntensityClass(probDiff: number): string {
     }
 }
 
-// Remove props from component definition
-export default function MatchupsTable() {
+// Add prop for eventId
+interface MatchupsTableProps {
+  eventId: number | null;
+}
+
+// Accept eventId as prop
+export default function MatchupsTable({ eventId }: MatchupsTableProps) {
   const [matchups, setMatchups] = useState<SupabaseMatchupRow[]>([]);
   const [skillRatingsMap, setSkillRatingsMap] = useState<Map<number, PlayerSkillRating>>(new Map()); // State for skills
   const [loadingMatchups, setLoadingMatchups] = useState(true);
@@ -118,7 +123,6 @@ export default function MatchupsTable() {
   const [error, setError] = useState<string | null>(null);
   const [selectedBookmaker, setSelectedBookmaker] = useState<"fanduel" | "draftkings">("fanduel");
   const [totalCount, setTotalCount] = useState(0);
-  const [currentEvent, setCurrentEvent] = useState<string | null>(null);
   const [lastUpdateTime, setLastUpdateTime] = useState<string | null>(null);
   // Revert state back to probability difference
   const [probDiffThreshold, setProbDiffThreshold] = useState<number>(10); // Default to 10%
@@ -129,64 +133,44 @@ export default function MatchupsTable() {
   useEffect(() => {
     fetchMatchupsFromSupabase();
     fetchSkillRatings(); // Fetch skills on mount too
-  }, []);
+  }, [eventId]); // refetch when eventId changes
 
   const fetchMatchupsFromSupabase = async () => {
+    if (!eventId) {
+      setMatchups([]);
+      setTotalCount(0);
+      setLastUpdateTime(null);
+      return;
+    }
     if (!isRefreshingApi) {
-        setLoadingMatchups(true);
+      setLoadingMatchups(true);
     }
     setError(null);
     let fetchedTimestamp: string | null = null;
     try {
-      // Fetch the latest event name first
-      const { data: latestEventData, error: eventError } = await supabase
-          .from('latest_three_ball_matchups')
-          .select('event_name')
-          .order('data_golf_update_time', { ascending: false })
-          .limit(1)
-          .single();
-
-      if (eventError) throw eventError;
-      if (!latestEventData) {
-          setMatchups([]);
-          setTotalCount(0);
-          setCurrentEvent(null);
-          console.log("No matchup data found in Supabase.")
-          setLastUpdateTime(null); // Set timestamp state
-          return;
-      }
-
-      const eventName = latestEventData.event_name;
-      setCurrentEvent(eventName);
-
-      // Fetch matchups for the latest event
+      // Fetch matchups for the selected event
       const { data, error: dataError, count } = await supabase
         .from("latest_three_ball_matchups")
         .select("*", { count: "exact" })
-        .eq('event_name', eventName)
-        .order("data_golf_update_time", { ascending: false }) // Order by time to easily get latest
-        .order("p1_player_name", { ascending: true }); // Secondary sort for display
-
+        .eq("event_id", eventId)
+        .order("data_golf_update_time", { ascending: false })
+        .order("p1_player_name", { ascending: true });
       if (dataError) throw dataError;
-
       setMatchups(data || []);
       setTotalCount(count || 0);
-
-      // Get and set the timestamp state
       if (data && data.length > 0) {
-          fetchedTimestamp = data[0].data_golf_update_time;
+        fetchedTimestamp = data[0].data_golf_update_time;
       }
-      setLastUpdateTime(fetchedTimestamp); // Set timestamp state
-
+      setLastUpdateTime(fetchedTimestamp);
     } catch (err: any) {
       console.error("Error fetching matchups from Supabase:", err);
       setError(`Failed to fetch matchups: ${err.message}`);
       setMatchups([]);
       setTotalCount(0);
-      setLastUpdateTime(null); // Set timestamp state on error
+      setLastUpdateTime(null);
     } finally {
       if (!isRefreshingApi) {
-          setLoadingMatchups(false);
+        setLoadingMatchups(false);
       }
     }
   };
@@ -386,7 +370,7 @@ export default function MatchupsTable() {
             <div className="flex justify-between items-start">
               <div>
                 <h2 className="text-xl font-bold">3-Ball Matchups</h2>
-                {currentEvent && <p className="text-sm text-gray-400">Event: {currentEvent}</p>}
+                {matchups.length > 0 && <p className="text-sm text-gray-400">Event: {matchups[0].event_name}</p>}
               </div>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
@@ -607,7 +591,7 @@ export default function MatchupsTable() {
             </div>
           ) : (
             <div className="p-8 text-center">
-              <p className="text-gray-400">No matchups found for the selected criteria{currentEvent ? ` for ${currentEvent}`: ""}.</p>
+              <p className="text-gray-400">No matchups found for the selected criteria{matchups.length > 0 ? ` for ${matchups[0].event_name}`: ""}.</p>
                {matchups.length === 0 && !loading && (
                   <p className="text-sm text-gray-500 mt-2">Try running the data fetching API route first: /api/matchups/3ball</p>
               )}

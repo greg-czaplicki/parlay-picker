@@ -52,9 +52,12 @@ export default function ParlaysClient({ initialParlays, initialPicksWithData, cu
     if (selectedRound === 'all') {
       console.log("Showing all rounds");
       setFilteredParlays(parlays);
-    } else if (selectedRound === 'current' && currentRound !== null) {
-      console.log(`Filtering for current round: ${currentRound}`);
-      // Filter to show only parlays that have at least one pick in the current round
+    } else if (selectedRound === 'current') {
+      console.log(`Filtering for current round (Round 2)`);
+      
+      // Round 2 is the current round, show:
+      // 1. Parlays that have picks from Round 2
+      // 2. Empty parlays (no picks yet) since they should be for Round 2
       setFilteredParlays(
         parlays.filter(parlay => {
           // Find this parlay's picks with data
@@ -62,9 +65,14 @@ export default function ParlaysClient({ initialParlays, initialPicksWithData, cu
             pickData => pickData.pick.parlay_id === parlay.id
           );
           
-          // Check if any pick is from the current round
+          // If there are no picks yet, show this parlay in Round 2
+          if (parlay.picks.length === 0) {
+            return true;
+          }
+          
+          // Otherwise, check if any pick is from Round 2
           return parlayPicksWithData.some(
-            pickData => pickData.pick.round_num === currentRound
+            pickData => pickData.pick.round_num === 2
           );
         })
       );
@@ -74,6 +82,11 @@ export default function ParlaysClient({ initialParlays, initialPicksWithData, cu
       console.log(`Filtering for specific round: ${roundNum}`);
       setFilteredParlays(
         parlays.filter(parlay => {
+          // Don't show empty parlays for non-current rounds
+          if (parlay.picks.length === 0) {
+            return false;
+          }
+          
           const parlayPicksWithData = initialPicksWithData.filter(
             pickData => pickData.pick.parlay_id === parlay.id
           );
@@ -107,7 +120,14 @@ export default function ParlaysClient({ initialParlays, initialPicksWithData, cu
       } else {
         setParlays(prev => [...prev, { ...newParlay, picks: [] }]); // Add new parlay with empty picks
         setNewParlayName(''); // Clear input
-        toast({ title: "Parlay Created", description: `Parlay "${newParlay.name || `ID: ${newParlay.id}`}" added.` });
+        
+        // Make sure we're viewing the current round so the new parlay is visible
+        setSelectedRound('current');
+        
+        toast({ 
+          title: "Round 2 Parlay Created", 
+          description: `Parlay "${newParlay.name || `ID: ${newParlay.id}`}" added for Round 2.` 
+        });
         
         // Refresh the page data to ensure we have the latest data
         router.refresh();
@@ -153,11 +173,11 @@ export default function ParlaysClient({ initialParlays, initialPicksWithData, cu
             <SelectValue placeholder="Select round" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="current">Current ({currentRound || 'N/A'})</SelectItem>
+            <SelectItem value="current">Round 2 (Current)</SelectItem>
             <SelectItem value="all">All Rounds</SelectItem>
             {uniqueRounds.map(round => (
               <SelectItem key={round} value={String(round)}>
-                Round {round} {round === currentRound ? '(Current)' : (round === 1 ? '(Complete)' : '')}
+                Round {round} {round === 2 ? '(Current)' : (round === 1 ? '(Complete)' : '')}
               </SelectItem>
             ))}
           </SelectContent>
@@ -180,6 +200,10 @@ export default function ParlaysClient({ initialParlays, initialPicksWithData, cu
                   initialPicks={parlay.picks} // Pass initial picks for this parlay
                   initialPicksWithData={parlayPicksWithData} // Pass preloaded data
                   selectedRound={selectedRound === 'current' ? currentRound : selectedRound === 'all' ? null : Number(selectedRound)}
+                  onDelete={(deletedId) => {
+                    setParlays(prev => prev.filter(p => p.id !== deletedId));
+                    router.refresh(); // Refresh to update server data
+                  }}
               />
             );
           })}
