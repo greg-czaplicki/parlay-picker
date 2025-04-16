@@ -1,5 +1,7 @@
 "use client"
 
+// TODO: Move live stats caching to the backend for global (multi-user) support. Current localStorage cache is per-browser only.
+
 import { useState, useEffect, useMemo } from "react"
 import { createClient } from "@supabase/supabase-js"
 import { toast } from "@/components/ui/use-toast"
@@ -15,6 +17,34 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 const supabase = createClient(supabaseUrl!, supabaseAnonKey!)
+
+const LIVE_STATS_CACHE_KEY = 'gpp_live_stats_cache_v1';
+const LIVE_STATS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes in ms
+
+function getCachedLiveStats(roundFilter: string) {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(LIVE_STATS_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed[roundFilter]) return null;
+    const { data, timestamp } = parsed[roundFilter];
+    if (Date.now() - timestamp > LIVE_STATS_CACHE_TTL) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function setCachedLiveStats(roundFilter: string, data: any) {
+  if (typeof window === 'undefined') return;
+  try {
+    const raw = localStorage.getItem(LIVE_STATS_CACHE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    parsed[roundFilter] = { data, timestamp: Date.now() };
+    localStorage.setItem(LIVE_STATS_CACHE_KEY, JSON.stringify(parsed));
+  } catch {}
+}
 
 interface UsePlayerDataProps {
   initialSeasonSkills: PlayerSkillRating[]
@@ -75,13 +105,64 @@ export function usePlayerData({
     initialLiveStats.length > 0 ? initialLiveStats[0].event_name : null
   )
 
-  // Re-fetch live stats when round filter changes
+  // Re-fetch live stats when round filter changes or on mount
   useEffect(() => {
-    if (roundFilter === 'event_avg' && initialLiveStats.length > 0) {
-      return
+    let didCancel = false;
+    async function maybeFetchLiveStats() {
+      // Only cache for tournament view
+      if (dataView !== 'tournament') return;
+      // Try cache first
+      const cached = getCachedLiveStats(roundFilter);
+      if (cached) {
+        setLiveStats(cached);
+        setLoadingLive(false);
+        if (cached.length > 0) {
+          setLastLiveUpdate(cached[0].data_golf_updated_at);
+          setCurrentLiveEvent(cached[0].event_name);
+        }
+        return;
+      }
+      // Otherwise, fetch and cache
+      setLoadingLive(true);
+      try {
+        let query = supabase
+          .from("latest_live_tournament_stats_view")
+          .select("*");
+        if (roundFilter !== "latest") {
+          query = query.eq('round_num', roundFilter);
+        }
+        query = query.order("event_name", { ascending: false })
+                     .order("total", { ascending: true });
+        const { data, error } = await query;
+        if (didCancel) return;
+        if (error) throw error;
+        setLiveStats(data || []);
+        setCachedLiveStats(roundFilter, data || []);
+        if (data && data.length > 0) {
+          const latestRecord = data.reduce((latest, current) =>
+            new Date(current.data_golf_updated_at ?? 0) > new Date(latest.data_golf_updated_at ?? 0) ? current : latest
+          );
+          setLastLiveUpdate(latestRecord.data_golf_updated_at);
+          setCurrentLiveEvent(latestRecord.event_name);
+        } else {
+          setLastLiveUpdate(null);
+          setCurrentLiveEvent(null);
+        }
+      } catch (error) {
+        if (!didCancel) {
+          console.error("Error fetching live stats:", error);
+          toast({ title: "Error Fetching Live Stats", variant: "destructive" });
+          setLiveStats([]);
+          setLastLiveUpdate(null);
+          setCurrentLiveEvent(null);
+        }
+      } finally {
+        if (!didCancel) setLoadingLive(false);
+      }
     }
-    fetchLiveStats()
-  }, [roundFilter])
+    maybeFetchLiveStats();
+    return () => { didCancel = true; };
+  }, [roundFilter, dataView]);
 
   const fetchSeasonSkills = async () => {
     setLoadingSeason(true)
@@ -118,52 +199,42 @@ export function usePlayerData({
     }
   }
 
+  // Patch: manual sync always fetches fresh and updates cache
   const fetchLiveStats = async () => {
-    setLoadingLive(true)
+    setLoadingLive(true);
     try {
       let query = supabase
         .from("latest_live_tournament_stats_view")
-        .select("*")
-
+        .select("*");
       if (roundFilter !== "latest") {
-        query = query.eq('round_num', roundFilter)
+        query = query.eq('round_num', roundFilter);
       }
-
       query = query.order("event_name", { ascending: false })
-                   .order("total", { ascending: true })
-
-      const { data, error } = await query
-
-      if (error) throw error
-      
-      setLiveStats(data || [])
-      
+                   .order("total", { ascending: true });
+      const { data, error } = await query;
+      if (error) throw error;
+      setLiveStats(data || []);
+      setCachedLiveStats(roundFilter, data || []);
       if (data && data.length > 0) {
-        const latestRecord = data.reduce((latest, current) => 
+        const latestRecord = data.reduce((latest, current) =>
           new Date(current.data_golf_updated_at ?? 0) > new Date(latest.data_golf_updated_at ?? 0) ? current : latest
-        )
-        setLastLiveUpdate(latestRecord.data_golf_updated_at)
-        setCurrentLiveEvent(latestRecord.event_name)
+        );
+        setLastLiveUpdate(latestRecord.data_golf_updated_at);
+        setCurrentLiveEvent(latestRecord.event_name);
       } else {
-        setLastLiveUpdate(null)
-        setCurrentLiveEvent(null)
-        if (roundFilter !== 'latest') {
-          console.log(`No live stats found for round: ${roundFilter}`)
-        }
+        setLastLiveUpdate(null);
+        setCurrentLiveEvent(null);
       }
     } catch (error) {
-      console.error("Error fetching live stats:", error)
-      toast({ 
-        title: "Error Fetching Live Stats", 
-        variant: "destructive" 
-      })
-      setLiveStats([])
-      setLastLiveUpdate(null)
-      setCurrentLiveEvent(null)
+      console.error("Error fetching live stats:", error);
+      toast({ title: "Error Fetching Live Stats", variant: "destructive" });
+      setLiveStats([]);
+      setLastLiveUpdate(null);
+      setCurrentLiveEvent(null);
     } finally {
-      setLoadingLive(false)
+      setLoadingLive(false);
     }
-  }
+  };
 
   const triggerSkillSyncAndRefetch = async () => {
     setIsSyncingSkills(true)
