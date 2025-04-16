@@ -104,10 +104,19 @@ export async function GET() {
       }
       const data: DataGolfResponse = await res.json();
       console.log(`Full Data Golf API response (${label}):`, data);
+
+      // Fix: Only process if match_list is an array
       if (!Array.isArray(data.match_list)) {
-        console.error(`Data Golf API (${label}): match_list is not an array`, data.match_list);
-        throw new Error(`Data Golf API (${label}): match_list is not an array`);
+        console.warn(`Data Golf API (${label}): match_list is not an array`, data.match_list);
+        results.push({
+          event: data.event_name,
+          round: data.round_num,
+          processedCount: 0,
+          warning: typeof data.match_list === "string" ? data.match_list : "No matchups available"
+        });
+        continue; // Skip to next source
       }
+
       const event_id = eventNameToId.get(data.event_name) || null;
       const matchupsToInsert: (SupabaseMatchup & { event_id: number | null })[] = data.match_list.map((matchup) => {
         const fanduelOdds = matchup.odds.fanduel;

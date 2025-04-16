@@ -108,13 +108,14 @@ function getHighlightIntensityClass(probDiff: number): string {
     }
 }
 
-// Add prop for eventId
+// Add prop for eventId and matchupType
 interface MatchupsTableProps {
   eventId: number | null;
+  matchupType: "3ball" | "2ball";
 }
 
-// Accept eventId as prop
-export default function MatchupsTable({ eventId }: MatchupsTableProps) {
+// Accept eventId and matchupType as props
+export default function MatchupsTable({ eventId, matchupType }: MatchupsTableProps) {
   const [matchups, setMatchups] = useState<SupabaseMatchupRow[]>([]);
   const [skillRatingsMap, setSkillRatingsMap] = useState<Map<number, PlayerSkillRating>>(new Map()); // State for skills
   const [loadingMatchups, setLoadingMatchups] = useState(true);
@@ -130,10 +131,13 @@ export default function MatchupsTable({ eventId }: MatchupsTableProps) {
   // Combined loading state
   const loading = loadingMatchups || loadingSkills;
 
+  // Update SupabaseMatchupRow to support both 2ball and 3ball
+  type SupabaseMatchupRow2Ball = Omit<SupabaseMatchupRow, "p3_dg_id" | "p3_player_name" | "fanduel_p3_odds" | "draftkings_p3_odds">;
+
   useEffect(() => {
     fetchMatchupsFromSupabase();
     fetchSkillRatings(); // Fetch skills on mount too
-  }, [eventId]); // refetch when eventId changes
+  }, [eventId, matchupType]); // refetch when eventId or type changes
 
   const fetchMatchupsFromSupabase = async () => {
     if (!eventId) {
@@ -148,9 +152,10 @@ export default function MatchupsTable({ eventId }: MatchupsTableProps) {
     setError(null);
     let fetchedTimestamp: string | null = null;
     try {
-      // Fetch matchups for the selected event
+      // Fetch matchups for the selected event and type
+      const table = matchupType === "3ball" ? "latest_three_ball_matchups" : "latest_two_ball_matchups";
       const { data, error: dataError, count } = await supabase
-        .from("latest_three_ball_matchups")
+        .from(table)
         .select("*", { count: "exact" })
         .eq("event_id", eventId)
         .order("data_golf_update_time", { ascending: false })
@@ -204,20 +209,31 @@ export default function MatchupsTable({ eventId }: MatchupsTableProps) {
     setIsRefreshingApi(true);
     setLastUpdateTime(null); // Indicate update is in progress
     try {
-      const response = await fetch("/api/matchups/3ball");
+      const apiUrl = matchupType === "2ball" ? "/api/matchups/2ball" : "/api/matchups/3ball";
+      const response = await fetch(apiUrl);
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: "Failed to parse error response" }));
         throw new Error(errorData.error || `Server responded with status: ${response.status}`);
       }
       const data = await response.json();
+      // Sum processedCount for all results
+      const processedCount = Array.isArray(data.results)
+        ? data.results.reduce((sum: number, r: { processedCount?: number }) => sum + (r.processedCount ?? 0), 0)
+        : 0;
       if (data.success) {
-        toast({
-          title: "Matchups Refreshed",
-          description: `${data.processedCount} 3-ball matchups updated from Data Golf.`,
-        });
-        // After successful API update, re-fetch data for the table display
+        if (processedCount > 0) {
+          toast({
+            title: "Matchups Refreshed",
+            description: `${processedCount} ${matchupType === "2ball" ? "2-ball" : "3-ball"} matchups updated from Data Golf.`,
+          });
+        } else {
+          toast({
+            title: "No Matchups Found",
+            description: `No ${matchupType === "2ball" ? "2-ball" : "3-ball"} matchups available from Data Golf right now.`,
+            variant: "destructive",
+          });
+        }
         await fetchMatchupsFromSupabase();
-        // Optional: await fetchSkillRatings(); // Re-fetch skills too?
       } else {
         throw new Error(data.error || "Unknown error occurred during refresh");
       }
@@ -256,8 +272,9 @@ export default function MatchupsTable({ eventId }: MatchupsTableProps) {
     return decimalToAmerican(odds);
   };
 
-  const formatPlayerName = (name: string): string => {
-      return name.split(",").reverse().join(" ").trim();
+  const formatPlayerName = (name: string | null | undefined): string => {
+    if (!name || typeof name !== "string") return "";
+    return name.split(",").reverse().join(" ").trim();
   }
 
   // Calculate Percentiles based on players *in the current matchups*
@@ -369,7 +386,7 @@ export default function MatchupsTable({ eventId }: MatchupsTableProps) {
           <div className="flex flex-col gap-4 mb-4">
             <div className="flex justify-between items-start">
               <div>
-                <h2 className="text-xl font-bold">3-Ball Matchups</h2>
+                <h2 className="text-xl font-bold">{matchupType === "3ball" ? "3-Ball Matchups" : "2-Ball Matchups"}</h2>
                 {matchups.length > 0 && <p className="text-sm text-gray-400">Event: {matchups[0].event_name}</p>}
               </div>
             </div>
@@ -440,9 +457,10 @@ export default function MatchupsTable({ eventId }: MatchupsTableProps) {
                 </TableHeader>
                 <TableBody>
                   {displayData.map((matchup) => {
+                    const is2Ball = matchupType === "2ball";
                     const p1_odds = selectedBookmaker === 'fanduel' ? matchup.fanduel_p1_odds : matchup.draftkings_p1_odds;
                     const p2_odds = selectedBookmaker === 'fanduel' ? matchup.fanduel_p2_odds : matchup.draftkings_p2_odds;
-                    const p3_odds = selectedBookmaker === 'fanduel' ? matchup.fanduel_p3_odds : matchup.draftkings_p3_odds;
+                    const p3_odds = is2Ball ? null : (selectedBookmaker === 'fanduel' ? matchup.fanduel_p3_odds : matchup.draftkings_p3_odds);
 
                     const prob1 = decimalToImpliedProbability(p1_odds);
                     const prob2 = decimalToImpliedProbability(p2_odds);
@@ -454,16 +472,16 @@ export default function MatchupsTable({ eventId }: MatchupsTableProps) {
                     let highlightP1 = false, highlightP2 = false, highlightP3 = false;
                     let p1Diff = 0, p2Diff = 0, p3Diff = 0;
 
-                    if (prob1 > 0 && prob1 >= prob2 + threshold && prob1 >= prob3 + threshold) {
+                    if (prob1 > 0 && prob1 >= prob2 + threshold && (!is2Ball && prob1 >= prob3 + threshold)) {
                         highlightP1 = true;
                         // Calculate the minimum difference to the other two
-                        p1Diff = Math.min(prob1 - prob2, prob1 - prob3);
+                        p1Diff = is2Ball ? prob1 - prob2 : Math.min(prob1 - prob2, prob1 - prob3);
                     }
-                    if (prob2 > 0 && prob2 >= prob1 + threshold && prob2 >= prob3 + threshold) {
+                    if (prob2 > 0 && prob2 >= prob1 + threshold && (!is2Ball && prob2 >= prob3 + threshold)) {
                         highlightP2 = true;
-                        p2Diff = Math.min(prob2 - prob1, prob2 - prob3);
+                        p2Diff = is2Ball ? prob2 - prob1 : Math.min(prob2 - prob1, prob2 - prob3);
                     }
-                    if (prob3 > 0 && prob3 >= prob1 + threshold && prob3 >= prob2 + threshold) {
+                    if (!is2Ball && prob3 > 0 && prob3 >= prob1 + threshold && prob3 >= prob2 + threshold) {
                         highlightP3 = true;
                         p3Diff = Math.min(prob3 - prob1, prob3 - prob2);
                     }
@@ -476,7 +494,7 @@ export default function MatchupsTable({ eventId }: MatchupsTableProps) {
                     // --- Add logic to find player with best SG: Total ---
                     const p1_sg_total = skillRatingsMap.get(matchup.p1_dg_id)?.sg_total ?? -Infinity;
                     const p2_sg_total = skillRatingsMap.get(matchup.p2_dg_id)?.sg_total ?? -Infinity;
-                    const p3_sg_total = skillRatingsMap.get(matchup.p3_dg_id)?.sg_total ?? -Infinity;
+                    const p3_sg_total = is2Ball ? -Infinity : (skillRatingsMap.get(matchup.p3_dg_id)?.sg_total ?? -Infinity);
 
                     const max_sg_total = Math.max(p1_sg_total, p2_sg_total, p3_sg_total);
 
@@ -544,43 +562,45 @@ export default function MatchupsTable({ eventId }: MatchupsTableProps) {
                               )}
                           </div>
                              {/* Player 3 */}
-                             <div className="flex items-center gap-1.5">
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span className={`inline-block w-[12px] ${isBestSgP3 ? 'opacity-100' : 'opacity-0'}`}>
-                                     <Award size={12} className="text-yellow-500 shrink-0" />
-                                    </span>
-                                  </TooltipTrigger>
-                                  {isBestSgP3 && (
-                                    <TooltipContent>
-                                      <p>Best SG: Total in Matchup</p>
-                                    </TooltipContent>
-                                  )}
-                                </Tooltip>
-                               <span className={highlightP3 ? "font-semibold" : ""}>{formatPlayerName(matchup.p3_player_name)}</span>
-                               {!loadingSkills && skillRatingsMap.has(matchup.p3_dg_id) && (
-                                 <>
-                                    <HeatmapSquare statValue={skillRatingsMap.get(matchup.p3_dg_id)?.sg_total ?? null} statKey="sg_total" label="SG:Total" />
-                                    <HeatmapSquare statValue={skillRatingsMap.get(matchup.p3_dg_id)?.sg_ott ?? null} statKey="sg_ott" label="SG:OTT" />
-                                    <HeatmapSquare statValue={skillRatingsMap.get(matchup.p3_dg_id)?.sg_app ?? null} statKey="sg_app" label="SG:APP" />
-                                    <HeatmapSquare statValue={skillRatingsMap.get(matchup.p3_dg_id)?.sg_arg ?? null} statKey="sg_arg" label="SG:ARG" />
-                                    <HeatmapSquare statValue={skillRatingsMap.get(matchup.p3_dg_id)?.sg_putt ?? null} statKey="sg_putt" label="SG:PUTT" />
-                                  </>
-                               )}
-                          </div>
+                             {!is2Ball && (
+                               <div className="flex items-center gap-1.5">
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className={`inline-block w-[12px] ${isBestSgP3 ? 'opacity-100' : 'opacity-0'}`}>
+                                       <Award size={12} className="text-yellow-500 shrink-0" />
+                                      </span>
+                                    </TooltipTrigger>
+                                    {isBestSgP3 && (
+                                      <TooltipContent>
+                                        <p>Best SG: Total in Matchup</p>
+                                      </TooltipContent>
+                                    )}
+                                  </Tooltip>
+                                 <span className={highlightP3 ? "font-semibold" : ""}>{formatPlayerName(matchup.p3_player_name)}</span>
+                                 {!loadingSkills && skillRatingsMap.has(matchup.p3_dg_id) && (
+                                   <>
+                                      <HeatmapSquare statValue={skillRatingsMap.get(matchup.p3_dg_id)?.sg_total ?? null} statKey="sg_total" label="SG:Total" />
+                                      <HeatmapSquare statValue={skillRatingsMap.get(matchup.p3_dg_id)?.sg_ott ?? null} statKey="sg_ott" label="SG:OTT" />
+                                      <HeatmapSquare statValue={skillRatingsMap.get(matchup.p3_dg_id)?.sg_app ?? null} statKey="sg_app" label="SG:APP" />
+                                      <HeatmapSquare statValue={skillRatingsMap.get(matchup.p3_dg_id)?.sg_arg ?? null} statKey="sg_arg" label="SG:ARG" />
+                                      <HeatmapSquare statValue={skillRatingsMap.get(matchup.p3_dg_id)?.sg_putt ?? null} statKey="sg_putt" label="SG:PUTT" />
+                                    </>
+                                 )}
+                              </div>
+                             )}
                         </TableCell>
                           {selectedBookmaker === 'fanduel' && (
                             <TableCell className="text-center">
                               <div className={intensityClassP1}>{formatOdds(matchup.fanduel_p1_odds)}</div>
                               <div className={intensityClassP2}>{formatOdds(matchup.fanduel_p2_odds)}</div>
-                              <div className={intensityClassP3}>{formatOdds(matchup.fanduel_p3_odds)}</div>
+                              {!is2Ball && <div className={intensityClassP3}>{formatOdds(matchup.fanduel_p3_odds)}</div>}
                         </TableCell>
                           )}
                           {selectedBookmaker === 'draftkings' && (
                             <TableCell className="text-center">
                                <div className={intensityClassP1}>{formatOdds(matchup.draftkings_p1_odds)}</div>
                                <div className={intensityClassP2}>{formatOdds(matchup.draftkings_p2_odds)}</div>
-                               <div className={intensityClassP3}>{formatOdds(matchup.draftkings_p3_odds)}</div>
+                               {!is2Ball && <div className={intensityClassP3}>{formatOdds(matchup.draftkings_p3_odds)}</div>}
                         </TableCell>
                           )}
                       </TableRow>

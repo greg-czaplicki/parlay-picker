@@ -79,6 +79,39 @@ export default function Dashboard({ initialSeasonSkills, initialLiveStats }: Das
     fetchCurrentWeekEvents();
   }, []);
 
+  // Add: auto-detect matchup type (3ball preferred, fallback to 2ball)
+  useEffect(() => {
+    if (!selectedEventId) return;
+    let cancelled = false;
+    const supabase = createBrowserClient();
+    const checkMatchupType = async () => {
+      // Try 3ball first
+      const { data: threeBall, error: err3 } = await supabase
+        .from("latest_three_ball_matchups")
+        .select("id")
+        .eq("event_id", selectedEventId)
+        .limit(1);
+      if (!cancelled && threeBall && threeBall.length > 0) {
+        setMatchupType("3ball");
+        return;
+      }
+      // If no 3ball, try 2ball
+      const { data: twoBall, error: err2 } = await supabase
+        .from("latest_two_ball_matchups")
+        .select("id")
+        .eq("event_id", selectedEventId)
+        .limit(1);
+      if (!cancelled && twoBall && twoBall.length > 0) {
+        setMatchupType("2ball");
+        return;
+      }
+      // If neither, default to 3ball
+      if (!cancelled) setMatchupType("3ball");
+    };
+    checkMatchupType();
+    return () => { cancelled = true; };
+  }, [selectedEventId]);
+
   const handleFilterChange = (filterName: string) => {
     setActiveFilter(filterName)
     setShowCustom(filterName === "Custom")
@@ -195,12 +228,12 @@ export default function Dashboard({ initialSeasonSkills, initialLiveStats }: Das
 
             {/* Row 2: Main Matchups Table (Left) */}
             <div className="md:col-span-3">
-              <MatchupsTable eventId={selectedEventId} />
+              <MatchupsTable eventId={selectedEventId} matchupType={matchupType as "3ball" | "2ball"} />
             </div>
 
             {/* Row 2: Recommended Picks (Right) */}
             <div className="md:col-span-1">
-              <RecommendedPicks matchupType="3ball" limit={10} eventId={selectedEventId} />
+              <RecommendedPicks matchupType={matchupType as "3ball" | "2ball"} limit={10} />
             </div>
           </div>
         )}
