@@ -1,14 +1,18 @@
 require('dotenv').config({ path: '.env.local' });
 import { GET } from "../../../../app/api/matchups/3ball/route";
 
-// Mock fetch and Supabase
+// Enhanced Supabase mock to handle per-table upsert/insert
+const upsertMock = jest.fn(() => ({ error: null } as any));
+const insertMock = jest.fn(() => ({ error: null } as any));
+const selectMock = jest.fn(() => ({ data: [{ event_id: 1, event_name: "Test Event" }], error: null } as any));
+
 jest.mock("@supabase/supabase-js", () => {
   return {
     createClient: jest.fn(() => ({
       from: jest.fn(() => ({
-        select: jest.fn(() => ({ data: [{ event_id: 1, event_name: "Test Event" }], error: null })),
-        insert: jest.fn(() => ({ error: null })),
-        upsert: jest.fn(() => ({ error: null })),
+        select: selectMock,
+        insert: insertMock,
+        upsert: upsertMock,
       })),
     })),
   };
@@ -53,5 +57,23 @@ describe("GET /api/matchups/3ball", () => {
     expect(json.success).toBe(true);
     expect(json.results[0].event).toBe("Test Event");
     expect(json.results[0].processedCount).toBeGreaterThan(0);
+  });
+
+  it("should handle fetch error gracefully", async () => {
+    (global.fetch as jest.Mock).mockImplementationOnce(() =>
+      Promise.resolve(new Response("fail", { status: 500 }))
+    );
+    const response = await GET();
+    const json = await response.json();
+    expect(json.success).toBe(false);
+    expect(json.error).toMatch(/Failed to fetch/);
+  });
+
+  it("should handle supabase upsert error", async () => {
+    upsertMock.mockResolvedValueOnce({ error: { message: "upsert failed" } } as any);
+    const response = await GET();
+    const json = await response.json();
+    expect(json.success).toBe(false);
+    expect(json.error).toMatch(/upsert failed/);
   });
 });

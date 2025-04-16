@@ -89,6 +89,7 @@ export async function GET() {
 
     console.log(`Processed ${tournamentsToUpsert.length} tournaments for upsert.`);
 
+    let processedCount = 0;
     if (tournamentsToUpsert.length > 0) {
       const { error: upsertError } = await supabase
         .from("tournaments")
@@ -101,17 +102,27 @@ export async function GET() {
         console.error("Error upserting tournaments into Supabase:", upsertError);
         throw new Error(`Supabase tournaments upsert failed: ${upsertError.message}`);
       }
-        console.log(`Successfully upserted ${tournamentsToUpsert.length} tournaments into Supabase.`);
+      processedCount = tournamentsToUpsert.length;
+      console.log(`Successfully upserted ${processedCount} tournaments into Supabase.`);
     } else {
-        console.log("No tournaments found in the fetched schedule to upsert.")
+      console.log("No tournaments found in the fetched schedule to upsert.");
+    }
+
+    // Try to get a source timestamp if available (use the latest start_date as a proxy)
+    let sourceTimestamp: string | undefined = undefined;
+    if (data.schedule.length > 0) {
+      // Use the latest event's start_date as a proxy for freshness
+      const latest = data.schedule.reduce((a, b) => a.start_date > b.start_date ? a : b);
+      sourceTimestamp = new Date(latest.start_date + 'T00:00:00Z').toISOString();
     }
 
     return NextResponse.json({
       success: true,
-      message: `Successfully synced ${tournamentsToUpsert.length} tournaments for the ${data.tour} ${data.current_season} season.`,
-      processedCount: tournamentsToUpsert.length,
+      message: `Synced schedule for ${data.tour} ${data.current_season} season. ${processedCount} tournaments processed.`,
+      processedCount,
       tour: data.tour,
       season: data.current_season,
+      sourceTimestamp,
     });
 
   } catch (error) {

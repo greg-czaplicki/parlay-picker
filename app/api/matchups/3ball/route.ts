@@ -100,13 +100,13 @@ export async function GET() {
       if (!res.ok) {
         const errorText = await res.text();
         console.error(`Failed to fetch data from Data Golf (${label}):`, res.status, errorText);
-        continue;
+        throw new Error(`Failed to fetch data from Data Golf (${label}): ${res.status} ${errorText}`);
       }
       const data: DataGolfResponse = await res.json();
       console.log(`Full Data Golf API response (${label}):`, data);
       if (!Array.isArray(data.match_list)) {
         console.error(`Data Golf API (${label}): match_list is not an array`, data.match_list);
-        continue;
+        throw new Error(`Data Golf API (${label}): match_list is not an array`);
       }
       const event_id = eventNameToId.get(data.event_name) || null;
       const matchupsToInsert: (SupabaseMatchup & { event_id: number | null })[] = data.match_list.map((matchup) => {
@@ -139,8 +139,7 @@ export async function GET() {
           .insert(matchupsToInsert);
         if (insertError) {
           console.error(`Error inserting historical matchups into Supabase (${label}):`, insertError);
-        } else {
-          console.log(`Successfully inserted ${matchupsToInsert.length} historical matchups for ${label}.`);
+          throw new Error(`Supabase historical insert failed (${label}): ${insertError.message}`);
         }
         // Upsert into latest odds table
         const { error: upsertError } = await supabase

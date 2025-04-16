@@ -2,14 +2,24 @@ require('dotenv').config({ path: '.env.local' });
 
 import { GET } from "../../../../app/api/matchups/2ball/route";
 
-// Mock fetch and Supabase
+// Define a type for Supabase responses
+interface SupabaseResponse {
+  error: { message: string } | null;
+  data?: any;
+}
+
+// Enhanced Supabase mock to handle per-table upsert/insert
+const upsertMock: jest.Mock<Promise<SupabaseResponse>, any> = jest.fn(() => Promise.resolve({ error: null }));
+const insertMock: jest.Mock<Promise<SupabaseResponse>, any> = jest.fn(() => Promise.resolve({ error: null }));
+const selectMock: jest.Mock<Promise<SupabaseResponse>, any> = jest.fn(() => Promise.resolve({ data: [{ event_id: 1, event_name: "Test Event" }], error: null }));
+
 jest.mock("@supabase/supabase-js", () => {
   return {
     createClient: jest.fn(() => ({
       from: jest.fn(() => ({
-        select: jest.fn(() => ({ data: [{ event_id: 1, event_name: "Test Event" }], error: null })),
-        insert: jest.fn(() => ({ error: null })),
-        upsert: jest.fn(() => ({ error: null })),
+        select: selectMock,
+        insert: insertMock,
+        upsert: upsertMock,
       })),
     })),
   };
@@ -52,5 +62,23 @@ describe("GET /api/matchups/2ball", () => {
     expect(json.success).toBe(true);
     expect(json.results[0].event).toBe("Test Event");
     expect(json.results[0].processedCount).toBeGreaterThan(0);
+  });
+
+  it("should handle fetch error gracefully", async () => {
+    (global.fetch as jest.Mock).mockImplementationOnce(() =>
+      Promise.resolve(new Response("fail", { status: 500 }))
+    );
+    const response = await GET();
+    const json = await response.json();
+    expect(json.success).toBe(false);
+    expect(json.error).toMatch(/Failed to fetch/);
+  });
+
+  it("should handle supabase upsert error", async () => {
+    upsertMock.mockResolvedValueOnce({ error: { message: "upsert failed" } });
+    const response = await GET();
+    const json = await response.json();
+    expect(json.success).toBe(false);
+    expect(json.error).toMatch(/upsert failed/);
   });
 });
