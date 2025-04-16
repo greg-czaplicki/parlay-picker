@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
+import { createClient } from "@supabase/supabase-js"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { Card, CardContent } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -22,8 +23,74 @@ interface PlayerTableProps {
 }
 
 export default function PlayerTable({ initialSeasonSkills, initialLiveStats }: PlayerTableProps) {
-  const [dataView, setDataView] = useState<"season" | "tournament">("tournament")
+  const [dataView, setDataView] = useState<"season" | "tournament">("season")
   const [roundFilter, setRoundFilter] = useState<string>("event_avg")
+  const [currentEventEnded, setCurrentEventEnded] = useState<boolean | null>(null) // null = loading
+  const [eventOptions, setEventOptions] = useState<{ event_id: number, event_name: string }[]>([])
+  const [selectedEventId, setSelectedEventId] = useState<number | null>(null)
+  const eventOptionsLoaded = useRef(false)
+
+  useEffect(() => {
+    let mounted = true;
+    async function checkEventOngoing() {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      if (!supabaseUrl || !supabaseAnonKey) {
+        if (mounted) setCurrentEventEnded(true)
+        return
+      }
+      const supabase = createClient(supabaseUrl, supabaseAnonKey)
+      const today = new Date().toISOString().split('T')[0]
+      // Find an event where start_date <= today <= end_date
+      const { data, error } = await supabase
+        .from('tournaments')
+        .select('event_name, start_date, end_date')
+        .lte('start_date', today)
+        .gte('end_date', today)
+        .order('end_date', { ascending: false })
+        .limit(1)
+      if (!mounted) return
+      if (error || !data || data.length === 0) {
+        setCurrentEventEnded(true)
+        setDataView('season')
+        return
+      }
+      setCurrentEventEnded(false)
+      setDataView('tournament')
+    }
+    checkEventOngoing()
+    return () => { mounted = false }
+  }, [])
+
+  // Fetch all events for this week (or next 7 days)
+  useEffect(() => {
+    async function fetchEventsForWeek() {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      if (!supabaseUrl || !supabaseAnonKey) return
+      const supabase = createClient(supabaseUrl, supabaseAnonKey)
+      const today = new Date()
+      const weekFromToday = new Date(today)
+      weekFromToday.setDate(today.getDate() + 7)
+      const todayStr = today.toISOString().split('T')[0]
+      const weekStr = weekFromToday.toISOString().split('T')[0]
+      // Find tournaments where any part of the event is in this week
+      const { data, error } = await supabase
+        .from('tournaments')
+        .select('event_id, event_name, start_date, end_date')
+        .lte('start_date', weekStr)
+        .gte('end_date', todayStr)
+        .order('start_date', { ascending: true })
+      if (!error && data) {
+        setEventOptions(data)
+        if (!eventOptionsLoaded.current && data.length > 0) {
+          setSelectedEventId(data[0].event_id)
+          eventOptionsLoaded.current = true
+        }
+      }
+    }
+    fetchEventsForWeek()
+  }, [])
 
   const {
     sorting,
@@ -42,7 +109,8 @@ export default function PlayerTable({ initialSeasonSkills, initialLiveStats }: P
     initialSeasonSkills,
     initialLiveStats,
     dataView,
-    roundFilter
+    roundFilter,
+    selectedEventId // pass to hook
   })
 
   const columns = useColumns({ dataView, getHeatmapColor })
@@ -79,30 +147,51 @@ export default function PlayerTable({ initialSeasonSkills, initialLiveStats }: P
             {/* Title and View Toggle */}
             <div>
               <h2 className="text-xl font-bold">Player Stats</h2>
-              <div className="mt-2 flex items-center gap-2">
-                <label className="flex items-center gap-1 cursor-pointer">
-                  <input 
-                    type="radio" 
-                    name="dataView" 
-                    value="season" 
-                    checked={dataView === 'season'} 
-                    onChange={() => setDataView('season')} 
-                    className="form-radio h-4 w-4 text-primary focus:ring-primary border-gray-600 bg-gray-700"
-                  />
-                  <span className="text-sm">Season Skills</span>
-                </label>
-                <label className="flex items-center gap-1 cursor-pointer">
-                  <input 
-                    type="radio" 
-                    name="dataView" 
-                    value="tournament" 
-                    checked={dataView === 'tournament'} 
-                    onChange={() => setDataView('tournament')} 
-                    className="form-radio h-4 w-4 text-primary focus:ring-primary border-gray-600 bg-gray-700"
-                  />
-                  <span className="text-sm">Current</span>
-                </label>
-              </div>
+              {/* Event selector if multiple events */}
+              {eventOptions.length > 1 && (
+                <div className="mt-2 mb-2">
+                  <label className="text-sm mr-2">Event:</label>
+                  <select
+                    value={selectedEventId ?? ''}
+                    onChange={e => setSelectedEventId(Number(e.target.value))}
+                    className="bg-gray-800 text-white border border-gray-700 rounded px-2 py-1 text-sm"
+                  >
+                    {eventOptions.map(ev => (
+                      <option key={ev.event_id} value={ev.event_id}>{ev.event_name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {/* Only render radio group after async check completes */}
+              {currentEventEnded !== null && (
+                <div className="mt-2 flex items-center gap-2">
+                  <label className="flex items-center gap-1 cursor-pointer">
+                    <input 
+                      type="radio" 
+                      name="dataView" 
+                      value="season" 
+                      checked={dataView === 'season'} 
+                      onChange={() => setDataView('season')} 
+                      className="form-radio h-4 w-4 text-primary focus:ring-primary border-gray-600 bg-gray-700"
+                    />
+                    <span className="text-sm">Season Skills</span>
+                  </label>
+                  {/* Only show Current radio if event is not ended */}
+                  {!currentEventEnded && (
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input 
+                        type="radio" 
+                        name="dataView" 
+                        value="tournament" 
+                        checked={dataView === 'tournament'} 
+                        onChange={() => setDataView('tournament')} 
+                        className="form-radio h-4 w-4 text-primary focus:ring-primary border-gray-600 bg-gray-700"
+                      />
+                      <span className="text-sm">Current</span>
+                    </label>
+                  )}
+                </div>
+              )}
               {dataView === 'tournament' && currentLiveEvent && (
                 <p className="text-xs text-gray-400 mt-1">Event: {currentLiveEvent}</p>
               )}
@@ -218,9 +307,27 @@ export default function PlayerTable({ initialSeasonSkills, initialLiveStats }: P
                             key={cell.id}
                             style={{ 
                               padding: 0, 
-                              border: '1px solid rgba(75, 85, 99, 0.15)',
+                              borderTopWidth: 1,
+                              borderRightWidth: 1,
+                              borderBottomWidth: 1,
+                              borderLeftWidth: 1,
+                              borderTopStyle: 'solid',
+                              borderRightStyle: 'solid',
+                              borderBottomStyle: 'solid',
+                              borderLeftStyle: 'solid',
+                              borderTopColor: 'rgba(75, 85, 99, 0.15)',
+                              borderRightColor: 'rgba(75, 85, 99, 0.15)',
+                              borderBottomColor: 'rgba(75, 85, 99, 0.15)',
+                              borderLeftColor: 'rgba(75, 85, 99, 0.15)',
                               borderCollapse: 'collapse',
-                              ...(cell.column.columnDef.meta as any)?.customStyles?.cell
+                              // Only allow customStyles to override individual border sides, not any border shorthand
+                              ...(cell.column.columnDef.meta && cell.column.columnDef.meta.customStyles && cell.column.columnDef.meta.customStyles.cell
+                                ? Object.fromEntries(Object.entries(cell.column.columnDef.meta.customStyles.cell).filter(([k]) => !k.startsWith('border') || [
+                                  'borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth',
+                                  'borderTopStyle','borderRightStyle','borderBottomStyle','borderLeftStyle',
+                                  'borderTopColor','borderRightColor','borderBottomColor','borderLeftColor'
+                                ].includes(k)))
+                                : {})
                             }}
                             className={`p-0 text-xs sm:text-sm ${(cell.column.columnDef.meta as any)?.cellClassName}`}
                           >

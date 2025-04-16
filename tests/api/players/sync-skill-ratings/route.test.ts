@@ -3,15 +3,45 @@ require('dotenv').config({ path: '.env.local' });
 import { GET } from '../../../../app/api/players/sync-skill-ratings/route';
 
 jest.mock('@supabase/supabase-js', () => {
-  const mClient = {
+  // Chainable mock for Supabase query builder
+  const chain = {
     from: jest.fn().mockReturnThis(),
+    select: jest.fn().mockReturnThis(),
+    eq: jest.fn().mockReturnThis(),
+    limit: jest.fn().mockReturnThis(),
+    order: jest.fn().mockReturnThis(),
+    lte: jest.fn().mockReturnThis(),
+    gte: jest.fn().mockReturnThis(),
     delete: jest.fn().mockReturnThis(),
     neq: jest.fn().mockResolvedValue({ error: null }),
     upsert: jest.fn().mockResolvedValue({ error: null }),
     insert: jest.fn().mockResolvedValue({ error: null }),
+    // For select().eq().limit() chain, return event_id for event_name
+    mockReturnValueOnce: jest.fn(),
   };
+  chain.select.mockImplementation(function() { return this; });
+  chain.eq.mockImplementation(function() { return this; });
+  chain.limit.mockImplementation(function() { return this; });
+  chain.order.mockImplementation(function() { return this; });
+  chain.lte.mockImplementation(function() { return this; });
+  chain.gte.mockImplementation(function() { return this; });
+  chain.from.mockImplementation(function() {
+    // If select() is called after from(), return event_id for event_name
+    chain.select.mockImplementation(function() {
+      return {
+        eq: jest.fn().mockImplementation(function(_, eventName) {
+          return {
+            limit: jest.fn().mockImplementation(function() {
+              return Promise.resolve({ data: [{ event_id: 123 }], error: null });
+            })
+          };
+        })
+      };
+    });
+    return chain;
+  });
   return {
-    createClient: jest.fn(() => mClient),
+    createClient: jest.fn(() => chain),
   };
 });
 
@@ -81,9 +111,9 @@ describe('GET /api/players/sync-skill-ratings', () => {
     const response = await GET();
     const json = await response.json();
     expect(json.success).toBe(true);
-    expect(json.processedCount).toBe(2);
-    expect(json.eventName).toBe('Test Event');
-    expect(json.message).toContain('Synced skill ratings');
+    expect(json.processedCount).toBe(3); // all players in mockSkills
+    expect(json.mainEventName).toBe('Test Event');
+    expect(json.message).toContain('Synced player fields');
   });
 
   it('should handle fetch error gracefully', async () => {
@@ -92,7 +122,7 @@ describe('GET /api/players/sync-skill-ratings', () => {
     const response = await GET();
     const json = await response.json();
     expect(json.success).toBe(false);
-    expect(json.error).toMatch(/Failed to fetch field data/);
+    expect(json.error).toMatch(/Failed to fetch PGA field/);
   });
 
   it('should handle supabase upsert error', async () => {

@@ -55,30 +55,65 @@ if (!dataGolfApiKey) {
 }
 
 const DATA_GOLF_SKILL_URL = `https://feeds.datagolf.com/preds/skill-ratings?display=value&file_format=json&key=${dataGolfApiKey}`;
-const DATA_GOLF_FIELD_URL = `https://feeds.datagolf.com/field-updates?tour=pga&file_format=json&key=${dataGolfApiKey}`;
 
 export async function GET() {
   console.log("Fetching player skill ratings and field data from Data Golf...");
+  let sourceTimestamp: string | null = null;
   try {
-    const [fieldRes, skillRes] = await Promise.all([
-      fetch(DATA_GOLF_FIELD_URL, { cache: 'no-store' }),
-      fetch(DATA_GOLF_SKILL_URL, { cache: 'no-store' })
-    ]);
+    // Fetch main event field (PGA)
+    const pgaFieldRes = await fetch(`https://feeds.datagolf.com/field-updates?tour=pga&key=${dataGolfApiKey}`, { cache: 'no-store' });
+    if (!pgaFieldRes.ok) throw new Error('Failed to fetch PGA field');
+    const pgaFieldData: DataGolfFieldResponse = await pgaFieldRes.json();
 
-    if (!fieldRes.ok) {
-      const errorText = await fieldRes.text();
-      throw new Error(`Failed to fetch field data: ${fieldRes.status} ${errorText}`);
-    }
-    if (!skillRes.ok) {
-      const errorText = await skillRes.text();
-      throw new Error(`Failed to fetch skill data: ${skillRes.status} ${errorText}`);
+    // Fetch opposite field event (OPP)
+    const oppFieldRes = await fetch(`https://feeds.datagolf.com/field-updates?tour=opp&key=${dataGolfApiKey}`, { cache: 'no-store' });
+    let oppFieldData: DataGolfFieldResponse | null = null;
+    if (oppFieldRes.ok) {
+      oppFieldData = await oppFieldRes.json();
     }
 
-    const fieldData: DataGolfFieldResponse = await fieldRes.json();
+    // Fetch skill ratings (for main event only)
+    const skillRes = await fetch(DATA_GOLF_SKILL_URL, { cache: 'no-store' });
+    if (!skillRes.ok) throw new Error('Failed to fetch skill data');
     const skillData: DataGolfSkillResponse = await skillRes.json();
-    const sourceUpdateTime = new Date(skillData.last_updated.replace(" UTC", "Z")).toISOString();
-    const fieldPlayerIds = new Set(fieldData.field.map(p => p.dg_id));
+    sourceTimestamp = new Date(skillData.last_updated.replace(" UTC", "Z")).toISOString();
 
+    // Helper to upsert a field into player_field
+    async function upsertField(fieldData: DataGolfFieldResponse) {
+      // Find event_id in tournaments table
+      const { data: eventRows } = await supabase
+        .from("tournaments")
+        .select("event_id")
+        .eq("event_name", fieldData.event_name)
+        .limit(1);
+      if (!eventRows || eventRows.length === 0) return;
+      const event_id = eventRows[0].event_id;
+      const fieldRows = (fieldData.field || []).map((p) => ({
+        event_id,
+        event_name: fieldData.event_name,
+        dg_id: p.dg_id,
+        player_name: p.player_name, // Always use player_name from field API
+      }));
+      if (fieldRows.length > 0) {
+        await supabase.from("player_field").delete().eq("event_id", event_id);
+        const { error: fieldUpsertError } = await supabase
+          .from("player_field")
+          .upsert(fieldRows, { onConflict: "event_id,dg_id", ignoreDuplicates: false });
+        if (fieldUpsertError) {
+          console.error("Error upserting player_field for event:", fieldData.event_name, fieldUpsertError);
+          throw new Error(`upsert failed: ${fieldUpsertError.message}`);
+        }
+      }
+    }
+
+    // Upsert main event field
+    await upsertField(pgaFieldData);
+    // Upsert opposite field event if available
+    if (oppFieldData && oppFieldData.field && oppFieldData.field.length > 0) {
+      await upsertField(oppFieldData);
+    }
+
+    // Update player_skill_ratings for ALL players in the skill ratings feed
     const allPlayersSkill: SupabasePlayerSkill[] = skillData.players.map(player => ({
       dg_id: player.dg_id,
       player_name: player.player_name,
@@ -89,36 +124,35 @@ export async function GET() {
       sg_total: player.sg_total,
       driving_acc: player.driving_acc,
       driving_dist: player.driving_dist,
-      data_golf_updated_at: sourceUpdateTime,
+      data_golf_updated_at: sourceTimestamp,
     }));
-    const playersToUpsert = allPlayersSkill.filter(player => fieldPlayerIds.has(player.dg_id));
-
     let processedCount = 0;
-    if (playersToUpsert.length > 0) {
+    if (allPlayersSkill.length > 0) {
       const { error: deleteError } = await supabase.from("player_skill_ratings").delete().neq('dg_id', 0);
       if (deleteError) {
         console.error("Error clearing player_skill_ratings table:", deleteError);
       }
       const { error: upsertError } = await supabase
         .from("player_skill_ratings")
-        .upsert(playersToUpsert, { onConflict: 'dg_id', ignoreDuplicates: false });
+        .upsert(allPlayersSkill, { onConflict: 'dg_id', ignoreDuplicates: false });
       if (upsertError) {
         throw new Error(`Supabase latest upsert failed: ${upsertError.message}`);
       }
       const { error: insertHistError } = await supabase
         .from("historical_player_skill_ratings")
-        .insert(playersToUpsert);
+        .insert(allPlayersSkill);
       if (insertHistError) {
         console.error("Error inserting historical player skill ratings:", insertHistError);
       }
-      processedCount = playersToUpsert.length;
+      processedCount = allPlayersSkill.length;
     }
     return NextResponse.json({
       success: true,
-      message: `Synced skill ratings for ${playersToUpsert.length} players in the current field (${fieldData.event_name}).`,
+      message: `Synced player fields for PGA and Opposite Field events. Main event: ${pgaFieldData.event_name} (${processedCount} players).`,
       processedCount,
-      sourceTimestamp: sourceUpdateTime,
-      eventName: fieldData.event_name,
+      sourceTimestamp,
+      mainEventName: pgaFieldData.event_name,
+      oppEventName: oppFieldData?.event_name || null
     });
   } catch (error) {
     console.error("Error in GET /api/players/sync-skill-ratings:", error);
@@ -126,6 +160,7 @@ export async function GET() {
       {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
+        sourceTimestamp
       },
       { status: 500 },
     );

@@ -2,7 +2,7 @@
 
 // TODO: Move live stats caching to the backend for global (multi-user) support. Current localStorage cache is per-browser only.
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { createClient } from "@supabase/supabase-js"
 import { toast } from "@/components/ui/use-toast"
 import type { PlayerSkillRating, LiveTournamentStat, DisplayPlayer, TrendIndicator } from "@/types/definitions"
@@ -81,8 +81,9 @@ export function usePlayerData({
   initialSeasonSkills,
   initialLiveStats,
   dataView,
-  roundFilter
-}: UsePlayerDataProps) {
+  roundFilter,
+  selectedEventId
+}: UsePlayerDataProps & { selectedEventId?: number | null }) {
   const [sorting, setSorting] = useState<any>([])
   const [seasonSkills, setSeasonSkills] = useState<PlayerSkillRating[]>(initialSeasonSkills)
   const [liveStats, setLiveStats] = useState<LiveTournamentStat[]>(initialLiveStats)
@@ -104,6 +105,60 @@ export function usePlayerData({
   const [currentLiveEvent, setCurrentLiveEvent] = useState<string | null>(() => 
     initialLiveStats.length > 0 ? initialLiveStats[0].event_name : null
   )
+  const [fieldDgIds, setFieldDgIds] = useState<number[] | null>(null)
+  const [fieldLoading, setFieldLoading] = useState(false)
+  const lastFieldEventId = useRef<number | null>(null)
+
+  // Fetch field for selected event if in season view
+  useEffect(() => {
+    async function fetchFieldForEvent() {
+      if (dataView !== "season" || !selectedEventId) return;
+      setFieldLoading(true)
+      try {
+        // 1. Get event info for debug
+        const { data: eventData, error: eventError } = await supabase
+          .from("tournaments")
+          .select("event_id, event_name, start_date")
+          .eq("event_id", selectedEventId)
+          .limit(1)
+        if (eventError || !eventData || eventData.length === 0) {
+          setFieldDgIds(null)
+          setFieldLoading(false)
+          return
+        }
+        const event = eventData[0]
+        console.log('[PlayerData] Selected event:', event)
+        if (lastFieldEventId.current === event.event_id) {
+          setFieldLoading(false)
+          return // already loaded
+        }
+        lastFieldEventId.current = event.event_id
+        // 2. Get field for that event
+        const { data: fieldData, error: fieldError } = await supabase
+          .from("player_field")
+          .select("dg_id")
+          .eq("event_id", event.event_id)
+        if (fieldError || !fieldData) {
+          setFieldDgIds(null)
+        } else {
+          setFieldDgIds(fieldData.map(f => f.dg_id))
+          console.log('[PlayerData] Field dg_ids:', fieldData.map(f => f.dg_id))
+        }
+        // Debug: print all player_skill_ratings dg_ids
+        const { data: allSkills } = await supabase
+          .from("player_skill_ratings")
+          .select("dg_id")
+        if (allSkills) {
+          console.log('[PlayerData] player_skill_ratings dg_ids:', allSkills.map(s => s.dg_id))
+        }
+      } catch (e) {
+        setFieldDgIds(null)
+      } finally {
+        setFieldLoading(false)
+      }
+    }
+    fetchFieldForEvent()
+  }, [dataView, selectedEventId])
 
   // Re-fetch live stats when round filter changes or on mount
   useEffect(() => {
@@ -303,7 +358,10 @@ export function usePlayerData({
   // Combine/Select data AND pre-calculate trends
   const displayPlayers: DisplayPlayer[] = useMemo(() => {
     if (dataView === "season") {
-      return seasonSkills
+      if (fieldDgIds && fieldDgIds.length > 0) {
+        return seasonSkills.filter(p => fieldDgIds.includes(p.dg_id))
+      }
+      return []
     } else {
       let targetRound = roundFilter
       if (targetRound === 'latest') {
@@ -338,7 +396,7 @@ export function usePlayerData({
         return { ...livePlayer, trends }
       })
     }
-  }, [dataView, seasonSkills, liveStats, roundFilter, seasonSkillsMap])
+  }, [dataView, seasonSkills, liveStats, roundFilter, seasonSkillsMap, fieldDgIds])
 
   // Calculate percentiles dynamically based on the current view
   const statPercentiles = useMemo(() => {
@@ -485,7 +543,7 @@ export function usePlayerData({
     }
   }
 
-  const loading = loadingSeason || loadingLive
+  const loading = (dataView === 'season' && fieldLoading) || loadingSeason || loadingLive
 
   return {
     sorting,
