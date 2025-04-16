@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 interface LivePlayerData {
   dg_id: number;
   player_name: string;
-  accuracy?: number | null; // Make optional as stats might vary
+  accuracy?: number | null;
   distance?: number | null;
   gir?: number | null;
   position?: string | null;
@@ -20,7 +20,7 @@ interface LivePlayerData {
   thru?: number | null;
   today?: number | null;
   total?: number | null;
-  round?: number | null; // Score relative to par for the current round
+  round?: number | null;
 }
 
 interface DataGolfLiveStatsResponse {
@@ -52,7 +52,7 @@ interface SupabaseLiveStat {
   scrambling?: number | null;
   position?: string | null;
   thru?: number | null;
-  today?: number | null; // This column will store the player's round score
+  today?: number | null;
   total?: number | null;
   data_golf_updated_at: string;
 }
