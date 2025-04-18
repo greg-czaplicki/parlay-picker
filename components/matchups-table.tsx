@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Loader2, AlertTriangle } from "lucide-react"
+import { Loader2, AlertTriangle, DollarSign } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Tooltip,
@@ -140,7 +140,6 @@ export default function MatchupsTable({ eventId }: { eventId: number | null }) {
                     <TableHead className="text-white text-center">Players</TableHead>
                     <TableHead className="text-white text-center">FanDuel Odds</TableHead>
                     <TableHead className="text-white text-center">Data Golf Odds</TableHead>
-                    <TableHead className="text-white text-center">Divergence</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -170,40 +169,95 @@ export default function MatchupsTable({ eventId }: { eventId: number | null }) {
                           <div>{formatPlayerName(matchup.p3_player_name)}</div>
                         </TableCell>
                         <TableCell className="text-center">
-                          <div className={divergence?.isDivergence && divergence.datagolfFavorite === 'p1' ? 'border-2 border-green-500 rounded' : ''}>{formatOdds(matchup.fanduel_p1_odds)}</div>
-                          <div className={divergence?.isDivergence && divergence.datagolfFavorite === 'p2' ? 'border-2 border-green-500 rounded' : ''}>{formatOdds(matchup.fanduel_p2_odds)}</div>
-                          <div className={divergence?.isDivergence && divergence.datagolfFavorite === 'p3' ? 'border-2 border-green-500 rounded' : ''}>{formatOdds(matchup.fanduel_p3_odds)}</div>
+                          <div className="flex items-center justify-center">
+                            {formatOdds(matchup.fanduel_p1_odds)}
+                            {divergence?.isDivergence && divergence.datagolfFavorite === 'p1' ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="ml-1 bg-green-600 text-green-100 rounded-full p-1 flex items-center justify-center cursor-pointer">
+                                    <DollarSign size={14} className="text-green-100" aria-label="Data Golf value" />
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent className="z-50">
+                                  <span>
+                                    Divergence: FanDuel favorite is <b>{
+                                      divergence.fanduelFavorite === 'p1' ? formatPlayerName(matchup.p1_player_name) :
+                                      divergence.fanduelFavorite === 'p2' ? formatPlayerName(matchup.p2_player_name) :
+                                      divergence.fanduelFavorite === 'p3' ? formatPlayerName(matchup.p3_player_name) :
+                                      'N/A'
+                                    }</b>, Data Golf favorite is <b>{
+                                      formatPlayerName(matchup.p1_player_name)
+                                    }</b>.
+                                  </span>
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : (
+                              <span className="ml-1 p-1 flex items-center justify-center invisible">
+                                <DollarSign size={14} className="text-green-100" aria-label="Data Golf value" />
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center justify-center">
+                            {formatOdds(matchup.fanduel_p2_odds)}
+                            {divergence?.isDivergence && divergence.datagolfFavorite === 'p2' ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="ml-1 bg-green-600 text-green-100 rounded-full p-1 flex items-center justify-center cursor-pointer">
+                                    <DollarSign size={14} className="text-green-100" aria-label="Data Golf value" />
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent className="z-50">
+                                  <span>
+                                    Divergence: FanDuel favorite is <b>{
+                                      divergence.fanduelFavorite === 'p1' ? formatPlayerName(matchup.p1_player_name) :
+                                      divergence.fanduelFavorite === 'p2' ? formatPlayerName(matchup.p2_player_name) :
+                                      divergence.fanduelFavorite === 'p3' ? formatPlayerName(matchup.p3_player_name) :
+                                      'N/A'
+                                    }</b>, Data Golf favorite is <b>{
+                                      formatPlayerName(matchup.p2_player_name)
+                                    }</b>.
+                                  </span>
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : (
+                              <span className="ml-1 p-1 flex items-center justify-center invisible">
+                                <DollarSign size={14} className="text-green-100" aria-label="Data Golf value" />
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center justify-center">
+                            {formatOdds(matchup.fanduel_p3_odds)}
+                            {divergence?.isDivergence && divergence.datagolfFavorite === 'p3' ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="ml-1 bg-green-600 text-green-100 rounded-full p-1 flex items-center justify-center cursor-pointer">
+                                    <DollarSign size={14} className="text-green-100" aria-label="Data Golf value" />
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent className="z-50">
+                                  <span>
+                                    Divergence: FanDuel favorite is <b>{
+                                      divergence.fanduelFavorite === 'p1' ? formatPlayerName(matchup.p1_player_name) :
+                                      divergence.fanduelFavorite === 'p2' ? formatPlayerName(matchup.p2_player_name) :
+                                      divergence.fanduelFavorite === 'p3' ? formatPlayerName(matchup.p3_player_name) :
+                                      'N/A'
+                                    }</b>, Data Golf favorite is <b>{
+                                      formatPlayerName(matchup.p3_player_name)
+                                    }</b>.
+                                  </span>
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : (
+                              <span className="ml-1 p-1 flex items-center justify-center invisible">
+                                <DollarSign size={14} className="text-green-100" aria-label="Data Golf value" />
+                              </span>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="text-center">
                           <div>{formatOdds(dg_p1_odds)}</div>
                           <div>{formatOdds(dg_p2_odds)}</div>
                           <div>{formatOdds(dg_p3_odds)}</div>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {divergence?.isDivergence && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className="inline-block align-middle">
-                                  <AlertTriangle size={18} className="text-yellow-400" />
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent className="z-50">
-                                <span>
-                                  Divergence: FanDuel favorite is <b>{
-                                    divergence.fanduelFavorite === 'p1' ? formatPlayerName(matchup.p1_player_name) :
-                                    divergence.fanduelFavorite === 'p2' ? formatPlayerName(matchup.p2_player_name) :
-                                    divergence.fanduelFavorite === 'p3' ? formatPlayerName(matchup.p3_player_name) :
-                                    'N/A'
-                                  }</b>, Data Golf favorite is <b>{
-                                    divergence.datagolfFavorite === 'p1' ? formatPlayerName(matchup.p1_player_name) :
-                                    divergence.datagolfFavorite === 'p2' ? formatPlayerName(matchup.p2_player_name) :
-                                    divergence.datagolfFavorite === 'p3' ? formatPlayerName(matchup.p3_player_name) :
-                                    'N/A'
-                                  }</b>.
-                                </span>
-                              </TooltipContent>
-                            </Tooltip>
-                          )}
                         </TableCell>
                       </TableRow>
                     );

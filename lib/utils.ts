@@ -46,6 +46,22 @@ export function detect3BallDivergence(matchup: any) {
     return null;
   }
 
+  // Check for unique lowest odds for FanDuel
+  const fanduelValues = [fanduelOdds.p1, fanduelOdds.p2, fanduelOdds.p3];
+  const minFanduel = Math.min(...fanduelValues);
+  const fanduelMinCount = fanduelValues.filter(v => v === minFanduel).length;
+  if (fanduelMinCount !== 1) {
+    return null;
+  }
+
+  // Check for unique lowest odds for Data Golf
+  const datagolfValues = [datagolfOdds.p1, datagolfOdds.p2, datagolfOdds.p3];
+  const minDatagolf = Math.min(...datagolfValues);
+  const datagolfMinCount = datagolfValues.filter(v => v === minDatagolf).length;
+  if (datagolfMinCount !== 1) {
+    return null;
+  }
+
   const fanduelFavorite = Object.entries(fanduelOdds)
     .reduce<{ key: string | null, value: number }>(
       (fav, [key, value]) =>
