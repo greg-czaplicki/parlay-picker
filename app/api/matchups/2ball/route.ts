@@ -60,6 +60,44 @@ const DATA_GOLF_PGA_URL = `https://feeds.datagolf.com/betting-tools/matchups?tou
 const DATA_GOLF_OPP_URL = `https://feeds.datagolf.com/betting-tools/matchups?tour=opp&market=round_matchups&odds_format=decimal&file_format=json&key=${dataGolfApiKey}`;
 
 export async function GET() {
+  // 1. Fetch Data Golf's last_updated timestamp (PGA only, as a reference)
+  const dataGolfRes = await fetch(DATA_GOLF_PGA_URL, { next: { revalidate: 3600 } });
+  if (!dataGolfRes.ok) {
+    const errorText = await dataGolfRes.text();
+    return NextResponse.json({ success: false, error: `Failed to fetch Data Golf: ${errorText}` }, { status: 500 });
+  }
+  const dataGolfJson: DataGolfResponse = await dataGolfRes.json();
+  const dataGolfLastUpdated = new Date(dataGolfJson.last_updated.replace(" UTC", "Z"));
+
+  // 2. Check for recent matchups in the DB (by data_golf_update_time)
+  const { data: recentMatchups, error: recentError } = await supabase
+    .from("latest_two_ball_matchups")
+    .select("*")
+    .order("data_golf_update_time", { ascending: false })
+    .limit(1);
+
+  if (recentError) {
+    console.error("Error checking for recent 2-ball matchups:", recentError);
+  }
+
+  if (recentMatchups && recentMatchups.length > 0) {
+    const latest = recentMatchups[0];
+    const dbLastUpdated = new Date(latest.data_golf_update_time);
+    // If DB is as fresh as Data Golf, serve from cache
+    if (dbLastUpdated >= dataGolfLastUpdated) {
+      const { data: allRecent, error: allRecentError } = await supabase
+        .from("latest_two_ball_matchups")
+        .select("*")
+        .eq("event_name", latest.event_name)
+        .eq("round_num", latest.round_num)
+        .eq("data_golf_update_time", latest.data_golf_update_time);
+      if (allRecentError) {
+        return NextResponse.json({ success: false, error: allRecentError.message }, { status: 500 });
+      }
+      return NextResponse.json({ success: true, cached: true, matchups: allRecent });
+    }
+  }
+
   console.log("Fetching 2-ball matchups from Data Golf (PGA and Opposite Field)...");
   try {
     const [pgaRes, oppRes] = await Promise.all([
@@ -75,6 +113,17 @@ export async function GET() {
     }
     const eventNameToId = new Map<string, number>();
     (tournaments || []).forEach(t => eventNameToId.set(t.event_name, t.event_id));
+
+    // 2b. Check latest data_golf_update_time in historical table
+    const { data: latestHist, error: histError } = await supabase
+      .from("two_ball_matchups")
+      .select("data_golf_update_time")
+      .order("data_golf_update_time", { ascending: false })
+      .limit(1);
+    let histLastUpdated = null;
+    if (latestHist && latestHist.length > 0) {
+      histLastUpdated = new Date(latestHist[0].data_golf_update_time);
+    }
 
     const results = [];
     const sources: [Response, string][] = [
@@ -119,13 +168,17 @@ export async function GET() {
         new Map(matchupsToInsert.map(m => [uniqueKey(m), m])).values()
       );
       if (dedupedMatchups.length > 0) {
-        // Insert into historical table
-        const { error: insertError } = await supabase
-          .from("two_ball_matchups")
-          .insert(dedupedMatchups);
-        if (insertError) {
-          console.error(`Error inserting historical matchups into Supabase (${label}):`, insertError);
-          throw new Error(`Supabase historical insert failed (${label}): ${insertError.message}`);
+        // Only insert into historical table if Data Golf last_updated is newer
+        if (!histLastUpdated || new Date(data.last_updated.replace(" UTC", "Z")) > histLastUpdated) {
+          const { error: insertError } = await supabase
+            .from("two_ball_matchups")
+            .insert(dedupedMatchups);
+          if (insertError) {
+            console.error(`Error inserting historical matchups into Supabase (${label}):`, insertError);
+            throw new Error(`Supabase historical insert failed (${label}): ${insertError.message}`);
+          }
+        } else {
+          console.log(`Historical odds not updated for ${label} (no new Data Golf update).`);
         }
         // Upsert into latest odds table
         const { error: upsertError } = await supabase

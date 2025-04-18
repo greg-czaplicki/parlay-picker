@@ -49,6 +49,9 @@ interface SupabaseMatchup {
   draftkings_p1_odds: number | null;
   draftkings_p2_odds: number | null;
   draftkings_p3_odds: number | null;
+  datagolf_p1_odds: number | null;
+  datagolf_p2_odds: number | null;
+  datagolf_p3_odds: number | null;
 }
 
 // Initialize Supabase client - Ensure these environment variables are set!
@@ -110,6 +113,17 @@ export async function GET() {
     }
   }
 
+  // 2b. Check latest data_golf_update_time in historical table
+  const { data: latestHist, error: histError } = await supabase
+    .from("three_ball_matchups")
+    .select("data_golf_update_time")
+    .order("data_golf_update_time", { ascending: false })
+    .limit(1);
+  let histLastUpdated = null;
+  if (latestHist && latestHist.length > 0) {
+    histLastUpdated = new Date(latestHist[0].data_golf_update_time);
+  }
+
   console.log("Fetching 3-ball matchups from Data Golf (PGA and Opposite Field)...");
 
   try {
@@ -159,6 +173,7 @@ export async function GET() {
       const matchupsToInsert: (SupabaseMatchup & { event_id: number | null })[] = data.match_list.map((matchup) => {
         const fanduelOdds = matchup.odds.fanduel;
         const draftkingsOdds = matchup.odds.draftkings;
+        const datagolfOdds = matchup.odds.datagolf;
         return {
           event_id,
           event_name: data.event_name,
@@ -177,16 +192,23 @@ export async function GET() {
           draftkings_p1_odds: draftkingsOdds?.p1 ?? null,
           draftkings_p2_odds: draftkingsOdds?.p2 ?? null,
           draftkings_p3_odds: draftkingsOdds?.p3 ?? null,
+          datagolf_p1_odds: datagolfOdds?.p1 ?? null,
+          datagolf_p2_odds: datagolfOdds?.p2 ?? null,
+          datagolf_p3_odds: datagolfOdds?.p3 ?? null,
         };
       });
       if (matchupsToInsert.length > 0) {
-        // Insert into historical table
-        const { error: insertError } = await supabase
-          .from("three_ball_matchups")
-          .insert(matchupsToInsert);
-        if (insertError) {
-          console.error(`Error inserting historical matchups into Supabase (${label}):`, insertError);
-          throw new Error(`Supabase historical insert failed (${label}): ${insertError.message}`);
+        // Only insert into historical table if Data Golf last_updated is newer
+        if (!histLastUpdated || new Date(data.last_updated.replace(" UTC", "Z")) > histLastUpdated) {
+          const { error: insertError } = await supabase
+            .from("three_ball_matchups")
+            .insert(matchupsToInsert);
+          if (insertError) {
+            console.error(`Error inserting historical matchups into Supabase (${label}):`, insertError);
+            throw new Error(`Supabase historical insert failed (${label}): ${insertError.message}`);
+          }
+        } else {
+          console.log(`Historical odds not updated for ${label} (no new Data Golf update).`);
         }
         // Upsert into latest odds table
         const { error: upsertError } = await supabase

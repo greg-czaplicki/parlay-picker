@@ -21,3 +21,43 @@ export function formatRelativeTime(isoTimestamp: string | null): string {
 export function formatPlayerName(name: string): string {
   return name.includes(",") ? name.split(",").reverse().join(" ").trim() : name;
 }
+
+// Detects divergence between FanDuel and Data Golf favorites in a 3-ball matchup
+export function detect3BallDivergence(matchup: any) {
+  if (!matchup?.odds?.fanduel || !matchup?.odds?.datagolf) return null;
+  const fanduelOdds = matchup.odds.fanduel;
+  const datagolfOdds = matchup.odds.datagolf;
+
+  // Find the favorite (lowest odds) for each source
+  const datagolfFavorite = Object.entries(datagolfOdds)
+    .reduce<{ key: string | null, value: number }>(
+      (fav, [key, value]) =>
+        typeof value === "number" && value < fav.value
+          ? { key, value }
+          : fav,
+      { key: null, value: Infinity }
+    ).key;
+
+  // If ANY FanDuel or Data Golf odds are missing, do NOT calculate divergence (return null)
+  if (
+    fanduelOdds.p1 == null || fanduelOdds.p2 == null || fanduelOdds.p3 == null ||
+    datagolfOdds.p1 == null || datagolfOdds.p2 == null || datagolfOdds.p3 == null
+  ) {
+    return null;
+  }
+
+  const fanduelFavorite = Object.entries(fanduelOdds)
+    .reduce<{ key: string | null, value: number }>(
+      (fav, [key, value]) =>
+        typeof value === "number" && value < fav.value
+          ? { key, value }
+          : fav,
+      { key: null, value: Infinity }
+    ).key;
+
+  return {
+    fanduelFavorite,
+    datagolfFavorite,
+    isDivergence: fanduelFavorite !== datagolfFavorite
+  };
+}
