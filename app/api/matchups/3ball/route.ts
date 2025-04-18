@@ -72,6 +72,44 @@ const DATA_GOLF_PGA_URL = `https://feeds.datagolf.com/betting-tools/matchups?tou
 const DATA_GOLF_OPP_URL = `https://feeds.datagolf.com/betting-tools/matchups?tour=opp&market=3_balls&odds_format=decimal&file_format=json&key=${dataGolfApiKey}`;
 
 export async function GET() {
+  // 1. Fetch Data Golf's last_updated timestamp (PGA only, as a reference)
+  const dataGolfRes = await fetch(DATA_GOLF_PGA_URL, { next: { revalidate: 3600 } });
+  if (!dataGolfRes.ok) {
+    const errorText = await dataGolfRes.text();
+    return NextResponse.json({ success: false, error: `Failed to fetch Data Golf: ${errorText}` }, { status: 500 });
+  }
+  const dataGolfJson: DataGolfResponse = await dataGolfRes.json();
+  const dataGolfLastUpdated = new Date(dataGolfJson.last_updated.replace(" UTC", "Z"));
+
+  // 2. Check for recent matchups in the DB (by data_golf_update_time)
+  const { data: recentMatchups, error: recentError } = await supabase
+    .from("latest_three_ball_matchups")
+    .select("*")
+    .order("data_golf_update_time", { ascending: false })
+    .limit(1);
+
+  if (recentError) {
+    console.error("Error checking for recent 3-ball matchups:", recentError);
+  }
+
+  if (recentMatchups && recentMatchups.length > 0) {
+    const latest = recentMatchups[0];
+    const dbLastUpdated = new Date(latest.data_golf_update_time);
+    // If DB is as fresh as Data Golf, serve from cache
+    if (dbLastUpdated >= dataGolfLastUpdated) {
+      const { data: allRecent, error: allRecentError } = await supabase
+        .from("latest_three_ball_matchups")
+        .select("*")
+        .eq("event_name", latest.event_name)
+        .eq("round_num", latest.round_num)
+        .eq("data_golf_update_time", latest.data_golf_update_time);
+      if (allRecentError) {
+        return NextResponse.json({ success: false, error: allRecentError.message }, { status: 500 });
+      }
+      return NextResponse.json({ success: true, cached: true, matchups: allRecent });
+    }
+  }
+
   console.log("Fetching 3-ball matchups from Data Golf (PGA and Opposite Field)...");
 
   try {

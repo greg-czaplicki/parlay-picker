@@ -564,3 +564,49 @@ export function usePlayerData({
     fetchLiveStats
   }
 }
+
+export function useTournamentSchedule() {
+  const [schedule, setSchedule] = useState<any[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let ignore = false;
+    async function fetchSchedule() {
+      setLoading(true);
+      setError(null);
+      try {
+        // Cache for 30 days (in-memory, per session)
+        const cacheKey = "gpp_tournament_schedule_cache";
+        const cacheExpiryKey = "gpp_tournament_schedule_cache_expiry";
+        const cached = typeof window !== 'undefined' ? localStorage.getItem(cacheKey) : null;
+        const expiry = typeof window !== 'undefined' ? localStorage.getItem(cacheExpiryKey) : null;
+        const now = Date.now();
+        if (cached && expiry && now < Number(expiry)) {
+          setSchedule(JSON.parse(cached));
+          setLoading(false);
+          return;
+        }
+        const res = await fetch("/api/schedule/sync");
+        const data = await res.json();
+        if (data.success && data.processedCount > 0) {
+          setSchedule(data);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(cacheKey, JSON.stringify(data));
+            localStorage.setItem(cacheExpiryKey, String(now + 30 * 24 * 60 * 60 * 1000)); // 30 days
+          }
+        } else {
+          setError(data.error || "Failed to fetch schedule");
+        }
+      } catch (e: any) {
+        setError(e.message || "Unknown error fetching schedule");
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchSchedule();
+    return () => { ignore = true; };
+  }, []);
+
+  return { schedule, loading, error };
+}

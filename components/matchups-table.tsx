@@ -135,11 +135,12 @@ export default function MatchupsTable({ eventId, matchupType }: MatchupsTablePro
   type SupabaseMatchupRow2Ball = Omit<SupabaseMatchupRow, "p3_dg_id" | "p3_player_name" | "fanduel_p3_odds" | "draftkings_p3_odds">;
 
   useEffect(() => {
-    fetchMatchupsFromSupabase();
+    fetchMatchupsFromApi();
     fetchSkillRatings(); // Fetch skills on mount too
   }, [eventId, matchupType]); // refetch when eventId or type changes
 
-  const fetchMatchupsFromSupabase = async () => {
+  // Fetch matchups from the Next.js API route (not directly from Supabase)
+  const fetchMatchupsFromApi = async () => {
     if (!eventId) {
       setMatchups([]);
       setTotalCount(0);
@@ -150,25 +151,31 @@ export default function MatchupsTable({ eventId, matchupType }: MatchupsTablePro
       setLoadingMatchups(true);
     }
     setError(null);
-    let fetchedTimestamp: string | null = null;
     try {
-      // Fetch matchups for the selected event and type
-      const table = matchupType === "3ball" ? "latest_three_ball_matchups" : "latest_two_ball_matchups";
-      const { data, error: dataError, count } = await supabase
-        .from(table)
-        .select("*", { count: "exact" })
-        .eq("event_id", eventId)
-        .order("data_golf_update_time", { ascending: false })
-        .order("p1_player_name", { ascending: true });
-      if (dataError) throw dataError;
-      setMatchups(data || []);
-      setTotalCount(count || 0);
-      if (data && data.length > 0) {
-        fetchedTimestamp = data[0].data_golf_update_time;
+      const apiUrl = matchupType === "2ball" ? "/api/matchups/2ball" : "/api/matchups/3ball";
+      const response = await fetch(apiUrl);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Failed to parse error response" }));
+        throw new Error(errorData.error || `Server responded with status: ${response.status}`);
       }
-      setLastUpdateTime(fetchedTimestamp);
+      const data = await response.json();
+      if (data.success && Array.isArray(data.matchups)) {
+        // Filter by eventId if present
+        const filtered = data.matchups.filter((m: any) => m.event_id === eventId);
+        setMatchups(filtered);
+        setTotalCount(filtered.length);
+        if (filtered.length > 0) {
+          setLastUpdateTime(filtered[0].data_golf_update_time);
+        } else {
+          setLastUpdateTime(null);
+        }
+      } else {
+        setMatchups([]);
+        setTotalCount(0);
+        setLastUpdateTime(null);
+      }
     } catch (err: any) {
-      console.error("Error fetching matchups from Supabase:", err);
+      console.error("Error fetching matchups from API:", err);
       setError(`Failed to fetch matchups: ${err.message}`);
       setMatchups([]);
       setTotalCount(0);
@@ -233,7 +240,7 @@ export default function MatchupsTable({ eventId, matchupType }: MatchupsTablePro
             variant: "destructive",
           });
         }
-        await fetchMatchupsFromSupabase();
+        await fetchMatchupsFromApi();
       } else {
         throw new Error(data.error || "Unknown error occurred during refresh");
       }
@@ -245,7 +252,7 @@ export default function MatchupsTable({ eventId, matchupType }: MatchupsTablePro
         variant: "destructive",
       });
       // Optionally attempt to fetch existing data even if API refresh failed
-      // await fetchMatchupsFromSupabase();
+      // await fetchMatchupsFromApi();
     } finally {
       setIsRefreshingApi(false);
     }
@@ -371,7 +378,7 @@ export default function MatchupsTable({ eventId, matchupType }: MatchupsTablePro
       <Card className="glass-card">
         <CardContent className="p-6 text-center">
           <div className="text-red-500">Error: {error}</div>
-          <Button onClick={fetchMatchupsFromSupabase} className="mt-4">
+          <Button onClick={fetchMatchupsFromApi} className="mt-4">
             Try Again
           </Button>
         </CardContent>
