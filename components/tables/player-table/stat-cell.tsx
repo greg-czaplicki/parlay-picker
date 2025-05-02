@@ -122,14 +122,13 @@ export function StatCell({ value, colorClass, trend, precision = 2 }: StatCellPr
           aria-label={tooltipContent}
         >
           <div className="flex items-center space-x-1">
-            <span>
+            <span className="inline-block min-w-[40px] text-center">
               {value !== null ? value.toFixed(precision) : 'N/A'}
             </span>
-            {trend && (
-              <span className={`inline-flex items-center justify-center w-[20px] h-[20px] ml-1 ${trend.className}`}>
-                {trend.type === "up" ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
-              </span>
-            )}
+            {/* Always render the trend space regardless, but apply opacity if no actual trend */}
+            <span className={`inline-flex items-center justify-center w-[20px] h-[20px] ml-1 ${trend ? trend.className : 'opacity-0'}`}>
+              {trend ? (trend.type === "up" ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUp size={12} />}
+            </span>
           </div>
         </div>
         
@@ -143,7 +142,7 @@ export function StatCell({ value, colorClass, trend, precision = 2 }: StatCellPr
     );
   }
   
-  // If no trend, just render the cell without a tooltip
+  // If no trend, just render the cell without a tooltip but maintain alignment space
   return (
     <div 
       style={{
@@ -157,9 +156,13 @@ export function StatCell({ value, colorClass, trend, precision = 2 }: StatCellPr
       }}
       className={`font-medium truncate ${colorClass}`}
     >
-      <div className="flex items-center">
-        <span>
+      <div className="flex items-center space-x-1">
+        <span className="inline-block min-w-[40px] text-center">
           {value !== null ? value.toFixed(precision) : 'N/A'}
+        </span>
+        {/* Always render a placeholder for consistent alignment */}
+        <span className="inline-flex items-center justify-center w-[20px] h-[20px] ml-1 opacity-0">
+          <ArrowUp size={12} />
         </span>
       </div>
     </div>
