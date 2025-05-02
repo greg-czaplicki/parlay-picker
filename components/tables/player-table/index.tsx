@@ -1,11 +1,8 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
-import { createClient } from "@supabase/supabase-js"
-import { TooltipProvider } from "@/components/ui/tooltip"
+import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { TestColors } from "./test-colors"
 import {
   flexRender,
   getCoreRowModel,
@@ -15,6 +12,7 @@ import {
 import { useColumns } from "./columns"
 import { SyncControls } from "./sync-controls"
 import { usePlayerData } from "@/hooks/use-player-data"
+import { useInitializePlayerView } from "@/hooks/use-initialize-player-view"
 import type { PlayerSkillRating, LiveTournamentStat } from "@/types/definitions"
 
 interface PlayerTableProps {
@@ -23,74 +21,17 @@ interface PlayerTableProps {
 }
 
 export default function PlayerTable({ initialSeasonSkills, initialLiveStats }: PlayerTableProps) {
-  const [dataView, setDataView] = useState<"season" | "tournament">("season")
   const [roundFilter, setRoundFilter] = useState<string>("event_avg")
-  const [currentEventEnded, setCurrentEventEnded] = useState<boolean | null>(null) // null = loading
-  const [eventOptions, setEventOptions] = useState<{ event_id: number, event_name: string }[]>([])
-  const [selectedEventId, setSelectedEventId] = useState<number | null>(null)
-  const eventOptionsLoaded = useRef(false)
-
-  useEffect(() => {
-    let mounted = true;
-    async function checkEventOngoing() {
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-      if (!supabaseUrl || !supabaseAnonKey) {
-        if (mounted) setCurrentEventEnded(true)
-        return
-      }
-      const supabase = createClient(supabaseUrl, supabaseAnonKey)
-      const today = new Date().toISOString().split('T')[0]
-      // Find an event where start_date <= today <= end_date
-      const { data, error } = await supabase
-        .from('tournaments')
-        .select('event_name, start_date, end_date')
-        .lte('start_date', today)
-        .gte('end_date', today)
-        .order('end_date', { ascending: false })
-        .limit(1)
-      if (!mounted) return
-      if (error || !data || data.length === 0) {
-        setCurrentEventEnded(true)
-        setDataView('season')
-        return
-      }
-      setCurrentEventEnded(false)
-      setDataView('tournament')
-    }
-    checkEventOngoing()
-    return () => { mounted = false }
-  }, [])
-
-  // Fetch all events for this week (or next 7 days)
-  useEffect(() => {
-    async function fetchEventsForWeek() {
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-      if (!supabaseUrl || !supabaseAnonKey) return
-      const supabase = createClient(supabaseUrl, supabaseAnonKey)
-      const today = new Date()
-      const weekFromToday = new Date(today)
-      weekFromToday.setDate(today.getDate() + 7)
-      const todayStr = today.toISOString().split('T')[0]
-      const weekStr = weekFromToday.toISOString().split('T')[0]
-      // Find tournaments where any part of the event is in this week
-      const { data, error } = await supabase
-        .from('tournaments')
-        .select('event_id, event_name, start_date, end_date')
-        .lte('start_date', weekStr)
-        .gte('end_date', todayStr)
-        .order('start_date', { ascending: true })
-      if (!error && data) {
-        setEventOptions(data)
-        if (!eventOptionsLoaded.current && data.length > 0) {
-          setSelectedEventId(data[0].event_id)
-          eventOptionsLoaded.current = true
-        }
-      }
-    }
-    fetchEventsForWeek()
-  }, [])
+  
+  // Use custom hook to manage view state and event selection
+  const {
+    dataView,
+    setDataView,
+    selectedEventId,
+    setSelectedEventId,
+    eventOptions,
+    currentEventEnded
+  } = useInitializePlayerView()
 
   const {
     sorting,
