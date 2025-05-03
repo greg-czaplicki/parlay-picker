@@ -21,7 +21,7 @@ import TopNavigation from "./top-navigation"
 import Sidebar from "./sidebar"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from "@/components/ui/use-toast"
-import { PlayerSkillRating, LiveTournamentStat } from "@/types/definitions"
+import { PlayerSkillRating, LiveTournamentStat, PgaTourPlayerStats } from "@/types/definitions"
 import RecommendedPicks from "./recommended-picks"
 import { createBrowserClient } from "@/lib/supabase"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
@@ -39,9 +39,14 @@ const filters = [
 interface DashboardProps {
   initialSeasonSkills: PlayerSkillRating[];
   initialLiveStats: LiveTournamentStat[];
+  initialPgaTourStats?: PgaTourPlayerStats[];
 }
 
-export default function Dashboard({ initialSeasonSkills, initialLiveStats }: DashboardProps) {
+export default function Dashboard({ 
+  initialSeasonSkills, 
+  initialLiveStats,
+  initialPgaTourStats = []
+}: DashboardProps) {
   const [activeFilter, setActiveFilter] = useState("Balanced")
   const [activeTab, setActiveTab] = useState("matchups")
   const [showCustom, setShowCustom] = useState(false)
@@ -243,6 +248,7 @@ export default function Dashboard({ initialSeasonSkills, initialLiveStats }: Das
             <PlayerTable
               initialSeasonSkills={initialSeasonSkills}
               initialLiveStats={initialLiveStats}
+              initialPgaTourStats={initialPgaTourStats}
             />
           </>
         )}

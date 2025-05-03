@@ -49,7 +49,9 @@ function setCachedLiveStats(roundFilter: string, data: any) {
 interface UsePlayerDataProps {
   initialSeasonSkills: PlayerSkillRating[]
   initialLiveStats: LiveTournamentStat[]
+  initialPgaTourStats?: PgaTourPlayerStats[]
   dataView: "season" | "tournament"
+  dataSource?: "data_golf" | "pga_tour" // Default to data_golf for backward compatibility
   roundFilter: string
 }
 
@@ -80,24 +82,38 @@ function getTrendIndicator(diff: number | null): TrendIndicator {
 export function usePlayerData({
   initialSeasonSkills,
   initialLiveStats,
+  initialPgaTourStats = [],
   dataView,
+  dataSource = "data_golf", // Default to data_golf for backward compatibility
   roundFilter,
   selectedEventId
 }: UsePlayerDataProps & { selectedEventId?: number | null }) {
   const [sorting, setSorting] = useState<any>([])
   const [seasonSkills, setSeasonSkills] = useState<PlayerSkillRating[]>(initialSeasonSkills)
+  const [pgaTourStats, setPgaTourStats] = useState<PgaTourPlayerStats[]>(initialPgaTourStats)
   const [liveStats, setLiveStats] = useState<LiveTournamentStat[]>(initialLiveStats)
   const [loadingSeason, setLoadingSeason] = useState(initialSeasonSkills.length === 0)
+  // Initialize loadingPgaTour to false even if no data to avoid getting stuck in loading state
+  const [loadingPgaTour, setLoadingPgaTour] = useState(false)
   const [loadingLive, setLoadingLive] = useState(initialLiveStats.length === 0)
   const [isSyncingSkills, setIsSyncingSkills] = useState(false)
+  const [isSyncingPgaTour, setIsSyncingPgaTour] = useState(false)
   const [isSyncingLive, setIsSyncingLive] = useState(false)
   const [seasonSkillsMap, setSeasonSkillsMap] = useState<Map<number, PlayerSkillRating>>(() => {
     const map = new Map<number, PlayerSkillRating>()
     initialSeasonSkills.forEach(skill => map.set(skill.dg_id, skill))
     return map
   })
+  const [pgaTourStatsMap, setPgaTourStatsMap] = useState<Map<string, PgaTourPlayerStats>>(() => {
+    const map = new Map<string, PgaTourPlayerStats>()
+    initialPgaTourStats?.forEach(stat => map.set(stat.pga_player_id, stat))
+    return map
+  })
   const [lastSkillUpdate, setLastSkillUpdate] = useState<string | null>(() => 
     initialSeasonSkills.length > 0 ? initialSeasonSkills[0].data_golf_updated_at : null
+  )
+  const [lastPgaTourUpdate, setLastPgaTourUpdate] = useState<string | null>(() => 
+    initialPgaTourStats?.length > 0 ? initialPgaTourStats[0].source_updated_at : null
   )
   const [lastLiveUpdate, setLastLiveUpdate] = useState<string | null>(() => 
     initialLiveStats.length > 0 ? initialLiveStats[0].data_golf_updated_at : null
@@ -109,10 +125,117 @@ export function usePlayerData({
   const [fieldLoading, setFieldLoading] = useState(false)
   const lastFieldEventId = useRef<number | null>(null)
 
-  // Fetch field for selected event if in season view
+  // Define fetch functions first to avoid reference errors
+
+  const fetchPgaTourStats = async () => {
+    setLoadingPgaTour(true)
+    try {
+      const { data, error } = await supabase
+        .from("player_season_stats")
+        .select("*")
+        .order("sg_total", { ascending: false })
+
+      if (error) {
+        // If the table doesn't exist yet, this is expected on first run
+        if (error.message && error.message.includes('does not exist')) {
+          console.warn("player_season_stats table doesn't exist yet. Run the Sync PGA Stats function to set it up.");
+          
+          // Don't show an error toast for this expected condition
+          setPgaTourStats([]);
+          setLastPgaTourUpdate(null);
+          
+          // Suggest running the sync function
+          toast({
+            title: "PGA Tour Stats Not Set Up Yet",
+            description: "Click 'Sync PGA Stats' to set up the database and fetch data.",
+            duration: 5000,
+          });
+        } else {
+          // For other errors, show the error toast
+          throw error;
+        }
+      } else {
+        const fetchedStats = data || []
+        setPgaTourStats(fetchedStats)
+        
+        const map = new Map<string, PgaTourPlayerStats>()
+        fetchedStats.forEach(stat => map.set(stat.pga_player_id, stat))
+        setPgaTourStatsMap(map)
+  
+        if (data && data.length > 0) {
+          setLastPgaTourUpdate(data[0].source_updated_at)
+        } else {
+          setLastPgaTourUpdate(null)
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching PGA Tour stats:", error)
+      toast({ 
+        title: "Error Fetching PGA Tour Stats", 
+        variant: "destructive" 
+      })
+      setPgaTourStats([])
+      setLastPgaTourUpdate(null)
+    } finally {
+      setLoadingPgaTour(false)
+    }
+  }
+
+  const fetchSeasonSkills = async () => {
+    setLoadingSeason(true)
+    try {
+      const { data, error } = await supabase
+        .from("player_skill_ratings")
+        .select("*")
+        .order("sg_total", { ascending: false })
+
+      if (error) throw error
+      
+      const fetchedSkills = data || []
+      setSeasonSkills(fetchedSkills)
+      
+      const map = new Map<number, PlayerSkillRating>()
+      fetchedSkills.forEach(skill => map.set(skill.dg_id, skill))
+      setSeasonSkillsMap(map)
+
+      if (data && data.length > 0) {
+        setLastSkillUpdate(data[0].data_golf_updated_at)
+      } else {
+        setLastSkillUpdate(null)
+      }
+    } catch (error) {
+      console.error("Error fetching season skills:", error)
+      toast({ 
+        title: "Error Fetching Season Skills", 
+        variant: "destructive" 
+      })
+      setSeasonSkills([])
+      setLastSkillUpdate(null)
+    } finally {
+      setLoadingSeason(false)
+    }
+  }
+
+  // Auto-fetch PGA Tour stats if none are available when PGA Tour data source is selected
+  useEffect(() => {
+    if (dataSource === 'pga_tour' && pgaTourStats.length === 0 && !loadingPgaTour && !isSyncingPgaTour) {
+      console.log('[PlayerData] No PGA Tour stats available, fetching automatically');
+      fetchPgaTourStats();
+    }
+  }, [dataSource, pgaTourStats.length, loadingPgaTour, isSyncingPgaTour]);
+
+  // Fetch field for selected event if in season view and using DataGolf data
   useEffect(() => {
     async function fetchFieldForEvent() {
-      if (dataView !== "season" || !selectedEventId) return;
+      // Only fetch field data if we're in season view, using DataGolf data, and have a selected event
+      if (dataView !== "season" || dataSource !== "data_golf" || !selectedEventId) {
+        // If we're using PGA Tour data, we don't need field filtering
+        if (dataSource === "pga_tour") {
+          setFieldLoading(false);
+        }
+        return;
+      }
+      
       setFieldLoading(true)
       try {
         // 1. Get event info for debug
@@ -144,13 +267,6 @@ export function usePlayerData({
           setFieldDgIds(fieldData.map(f => f.dg_id))
           console.log('[PlayerData] Field dg_ids:', fieldData.map(f => f.dg_id))
         }
-        // Debug: print all player_skill_ratings dg_ids
-        const { data: allSkills } = await supabase
-          .from("player_skill_ratings")
-          .select("dg_id")
-        if (allSkills) {
-          console.log('[PlayerData] player_skill_ratings dg_ids:', allSkills.map(s => s.dg_id))
-        }
       } catch (e) {
         setFieldDgIds(null)
       } finally {
@@ -158,7 +274,7 @@ export function usePlayerData({
       }
     }
     fetchFieldForEvent()
-  }, [dataView, selectedEventId])
+  }, [dataView, dataSource, selectedEventId])
 
   // Re-fetch live stats when round filter changes or on mount
   useEffect(() => {
@@ -219,40 +335,7 @@ export function usePlayerData({
     return () => { didCancel = true; };
   }, [roundFilter, dataView]);
 
-  const fetchSeasonSkills = async () => {
-    setLoadingSeason(true)
-    try {
-      const { data, error } = await supabase
-        .from("player_skill_ratings")
-        .select("*")
-        .order("sg_total", { ascending: false })
-
-      if (error) throw error
-      
-      const fetchedSkills = data || []
-      setSeasonSkills(fetchedSkills)
-      
-      const map = new Map<number, PlayerSkillRating>()
-      fetchedSkills.forEach(skill => map.set(skill.dg_id, skill))
-      setSeasonSkillsMap(map)
-
-      if (data && data.length > 0) {
-        setLastSkillUpdate(data[0].data_golf_updated_at)
-      } else {
-        setLastSkillUpdate(null)
-      }
-    } catch (error) {
-      console.error("Error fetching season skills:", error)
-      toast({ 
-        title: "Error Fetching Season Skills", 
-        variant: "destructive" 
-      })
-      setSeasonSkills([])
-      setLastSkillUpdate(null)
-    } finally {
-      setLoadingSeason(false)
-    }
-  }
+  // fetchSeasonSkills and fetchPgaTourStats are now defined at the top of the hook
 
   // Patch: manual sync always fetches fresh and updates cache
   const fetchLiveStats = async () => {
@@ -322,6 +405,80 @@ export function usePlayerData({
       setIsSyncingSkills(false)
     }
   }
+  
+  const triggerPgaTourSyncAndRefetch = async () => {
+    setIsSyncingPgaTour(true)
+    setLastPgaTourUpdate(null)
+    try {
+      // Skip the check for now - the API will handle this check
+      
+      try {
+        console.log("Calling PGA stats sync API...");
+        // Make the API call with explicit content-type and cache settings
+        const response = await fetch("/api/players/sync-pga-stats", {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+          cache: 'no-store'
+        });
+        
+        console.log("API response status:", response.status);
+        
+        // Get the raw text first for debugging
+        const rawText = await response.text();
+        console.log("API raw response:", rawText);
+        
+        // Now parse the JSON
+        let data;
+        try {
+          data = JSON.parse(rawText);
+        } catch (parseError) {
+          console.error("Failed to parse JSON response:", parseError);
+          throw new Error("Failed to parse response from server.");
+        }
+        
+        if (data.success) {
+          toast({
+            title: "PGA Tour Data Updated",
+            description: `Latest player stats from PGA Tour refreshed`,
+          });
+          await fetchPgaTourStats();
+        } else {
+          throw new Error(data.error || "Unknown error occurred during sync");
+        }
+      } catch (apiError) {
+        console.error("API call error:", apiError);
+        throw apiError; // Re-throw to be caught by the outer catch
+      }
+    } catch (error) {
+      console.error("Error syncing PGA Tour stats via API:", error)
+      
+      // More helpful error message for setup issues
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : "Failed to connect to the server";
+        
+      toast({
+        title: "Error Syncing PGA Tour Stats",
+        description: errorMessage,
+        variant: "destructive",
+      })
+      
+      // If this is a setup issue, show a more helpful toast
+      if (errorMessage.includes("Database setup required")) {
+        toast({
+          title: "Database Setup Required",
+          description: "The required tables don't exist in your database. Check the SETUP.md file for instructions.",
+          variant: "destructive",
+          duration: 10000, // Show for longer
+        })
+      }
+    } finally {
+      setIsSyncingPgaTour(false)
+    }
+  }
 
   const triggerLiveSyncAndRefetch = async () => {
     setIsSyncingLive(true)
@@ -358,45 +515,78 @@ export function usePlayerData({
   // Combine/Select data AND pre-calculate trends
   const displayPlayers: DisplayPlayer[] = useMemo(() => {
     if (dataView === "season") {
-      if (fieldDgIds && fieldDgIds.length > 0) {
-        return seasonSkills.filter(p => fieldDgIds.includes(p.dg_id))
+      // For season view, we use either PGA Tour stats or DataGolf stats based on dataSource
+      if (dataSource === "pga_tour") {
+        // Use PGA Tour stats as the source
+        // No field filtering for PGA Tour data since it's already filtered to current players
+        return pgaTourStats.map(player => ({
+          ...player,
+          // Map property names correctly (some differ between DataGolf and PGA Tour)
+          driving_acc: player.driving_accuracy,
+          driving_dist: player.driving_distance,
+          data_source: 'pga_tour'
+        }));
+      } else {
+        // Use DataGolf stats as the source with field filtering
+        if (fieldDgIds && fieldDgIds.length > 0) {
+          return seasonSkills
+            .filter(p => fieldDgIds.includes(p.dg_id))
+            .map(player => ({
+              ...player,
+              data_source: 'data_golf'
+            }));
+        }
+        return [];
       }
-      return []
     } else {
+      // Tournament view always uses DataGolf stats for comparison, regardless of dataSource setting
+      // This fixes the issue with the Current view
       let targetRound = roundFilter
       if (targetRound === 'latest') {
         targetRound = 'event_avg'
       }
       const filteredLiveStats = liveStats.filter(p => p.round_num === targetRound)
 
-      // Pre-calculate trends
+      // Always use DataGolf stats for tournament view
       return filteredLiveStats.map(livePlayer => {
-        const seasonData = seasonSkillsMap.get(livePlayer.dg_id)
-        const trends: Record<string, ReturnType<typeof getTrendIndicator>> = {}
+        // Always use DataGolf season stats for trends in tournament view
+        const seasonData = seasonSkillsMap.get(livePlayer.dg_id);
+        const trends: Record<string, ReturnType<typeof getTrendIndicator>> = {};
 
         if (seasonData) {
-          const sgKeys: (keyof PlayerSkillRating & keyof LiveTournamentStat)[] = ['sg_putt', 'sg_arg', 'sg_app', 'sg_ott', 'sg_total']
+          const sgKeys: (keyof PlayerSkillRating & keyof LiveTournamentStat)[] = ['sg_putt', 'sg_arg', 'sg_app', 'sg_ott', 'sg_total'];
           
           sgKeys.forEach(key => {
-            const liveValue = livePlayer[key]
-            const seasonValue = seasonData[key]
-            const diff = (typeof liveValue === 'number' && typeof seasonValue === 'number') ? liveValue - seasonValue : null
-            trends[key] = getTrendIndicator(diff)
-          })
+            const liveValue = livePlayer[key];
+            const seasonValue = seasonData[key];
+              
+            const diff = (typeof liveValue === 'number' && typeof seasonValue === 'number') 
+              ? liveValue - seasonValue 
+              : null;
+              
+            trends[key] = getTrendIndicator(diff);
+          });
 
           // Calculate T2G trend separately
-          const liveT2G = livePlayer.sg_t2g
-          const seasonOtt = seasonData.sg_ott
-          const seasonApp = seasonData.sg_app
-          const seasonT2G = (typeof seasonOtt === 'number' && typeof seasonApp === 'number') ? seasonOtt + seasonApp : null
-          const diffT2G = (typeof liveT2G === 'number' && typeof seasonT2G === 'number') ? liveT2G - seasonT2G : null
-          trends['sg_t2g'] = getTrendIndicator(diffT2G)
+          const liveT2G = livePlayer.sg_t2g;
+          const seasonOtt = seasonData.sg_ott;
+          const seasonApp = seasonData.sg_app;
+            
+          const seasonT2G = (typeof seasonOtt === 'number' && typeof seasonApp === 'number') 
+            ? seasonOtt + seasonApp 
+            : null;
+            
+          const diffT2G = (typeof liveT2G === 'number' && typeof seasonT2G === 'number') 
+            ? liveT2G - seasonT2G 
+            : null;
+            
+          trends['sg_t2g'] = getTrendIndicator(diffT2G);
         }
         
-        return { ...livePlayer, trends }
-      })
+        return { ...livePlayer, trends, data_source: 'data_golf' };
+      });
     }
-  }, [dataView, seasonSkills, liveStats, roundFilter, seasonSkillsMap, fieldDgIds])
+  }, [dataView, dataSource, seasonSkills, liveStats, pgaTourStats, roundFilter, seasonSkillsMap, fieldDgIds])
 
   // Calculate percentiles dynamically based on the current view
   const statPercentiles = useMemo(() => {
@@ -543,7 +733,12 @@ export function usePlayerData({
     }
   }
 
-  const loading = (dataView === 'season' && fieldLoading) || loadingSeason || loadingLive
+  const loading = (dataView === 'season' && fieldLoading) || 
+    (dataSource === 'data_golf' ? loadingSeason : loadingPgaTour) || 
+    loadingLive
+
+  // For the UI, use the appropriate update timestamp based on data source
+  const displayedSkillsTimestamp = dataSource === 'pga_tour' ? lastPgaTourUpdate : lastSkillUpdate
 
   return {
     sorting,
@@ -551,16 +746,23 @@ export function usePlayerData({
     displayPlayers,
     loading,
     loadingSeason,
+    loadingPgaTour,
     loadingLive,
     isSyncingSkills,
+    isSyncingPgaTour,
     isSyncingLive,
     lastSkillUpdate,
+    lastPgaTourUpdate,
     lastLiveUpdate,
+    displayedSkillsTimestamp, // For UI convenience
     currentLiveEvent,
+    dataSource,
     getHeatmapColor,
     triggerSkillSyncAndRefetch,
+    triggerPgaTourSyncAndRefetch,
     triggerLiveSyncAndRefetch,
     fetchSeasonSkills,
+    fetchPgaTourStats,
     fetchLiveStats
   }
 }

@@ -1,5 +1,21 @@
 // types/definitions.ts
 
+// Type for PGA Tour Stats (from player_season_stats table)
+export type PgaTourPlayerStats = {
+  pga_player_id: string;
+  player_name: string;
+  dg_id: number | null; // Mapped DataGolf ID if available
+  sg_putt: number | null;
+  sg_arg: number | null;
+  sg_app: number | null;
+  sg_ott: number | null;
+  sg_total: number | null;
+  driving_accuracy: number | null;
+  driving_distance: number | null;
+  updated_at: string; // Supabase timestamp for this record
+  source_updated_at: string | null; // Timestamp when PGA Tour stats were updated
+};
+
 // Type for Season Skill Ratings (from player_skill_ratings table)
 export type PlayerSkillRating = {
   dg_id: number;
@@ -50,10 +66,12 @@ export type TrendIndicator = {
 } | null; // Can be null if no significant trend
 
 // Combined type used in PlayerTable, includes optional pre-calculated trends
-export type DisplayPlayer = Partial<PlayerSkillRating> & Partial<LiveTournamentStat> & {
-    dg_id: number;
+export type DisplayPlayer = Partial<PlayerSkillRating> & Partial<LiveTournamentStat> & Partial<PgaTourPlayerStats> & {
+    dg_id?: number;
+    pga_player_id?: string;
     player_name: string;
     trends?: Record<string, TrendIndicator>; // Storing pre-calculated trend objects
+    data_source?: 'pga_tour' | 'data_golf'; // Indicates which source this data came from
 };
 
 // Add other shared types below as needed...

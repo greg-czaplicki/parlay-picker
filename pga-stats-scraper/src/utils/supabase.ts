@@ -75,21 +75,27 @@ export async function storePlayerSeasonStats(playerStats: PlayerStats[]) {
 
     console.log(`Saving ${dbFormatStats.length} valid player records to database`);
     
-    // Insert data into database
-    const { error: insertError, count } = await supabase
+    // Insert data into database - don't try to return a count to avoid aggregate function error
+    const { error: insertError } = await supabase
       .from('player_season_stats')
-      .insert(dbFormatStats)
-      .select('count');
+      .insert(dbFormatStats);
 
     if (insertError) {
       console.error('Error inserting player season stats:', insertError);
       return { success: false, error: insertError.message };
     }
 
+    // Count manually after insert
+    const { count, error: countError } = await supabase
+      .from('player_season_stats')
+      .select('*', { count: 'exact', head: true });
+      
+    const recordCount = count || dbFormatStats.length;
+
     return { 
       success: true, 
-      message: `Successfully stored ${count} player season stats records with ${playerMappings.size} DataGolf ID mappings`, 
-      count 
+      message: `Successfully stored ${recordCount} player season stats records with ${playerMappings.size} DataGolf ID mappings`, 
+      count: recordCount 
     };
   } catch (error: any) {
     console.error('Unexpected error storing player season stats:', error);

@@ -235,9 +235,20 @@ async function matchPlayers(pgaPlayers) {
     if (newMappings.length > 0) {
         console.log(`Saving ${newMappings.length} new player mappings to database`);
         try {
+            // First delete existing mappings to avoid conflicts
+            for (const mapping of newMappings) {
+                const { error: deleteError } = await supabase
+                    .from('player_id_mappings')
+                    .delete()
+                    .eq('pga_player_id', mapping.pga_player_id);
+                if (deleteError) {
+                    console.warn(`Error deleting existing mapping for ${mapping.pga_player_id}:`, deleteError);
+                }
+            }
+            // Then insert new mappings
             const { error } = await supabase
                 .from('player_id_mappings')
-                .upsert(newMappings, { onConflict: 'pga_player_id' });
+                .insert(newMappings);
             if (error) {
                 console.error('Error saving new mappings:', error);
             }

@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import Dashboard from "@/components/dashboard"
 import { createClient } from "@supabase/supabase-js"
-import { PlayerSkillRating, LiveTournamentStat } from "@/types/definitions"
+import { PlayerSkillRating, LiveTournamentStat, PgaTourPlayerStats } from "@/types/definitions"
 
 export const metadata: Metadata = {
   title: "Golf Parlay Picker Dashboard",
@@ -18,13 +18,36 @@ const supabaseServerClient = createClient(supabaseUrl, supabaseKey)
 async function getInitialPlayerData() {
   console.log("Fetching initial player data on server...")
   try {
-    // Fetch Season Skills
+    // Fetch Season Skills from DataGolf
     const { data: seasonSkills, error: skillError } = await supabaseServerClient
       .from("player_skill_ratings")
       .select("*")
       .order("sg_total", { ascending: false })
 
     if (skillError) throw new Error(`Skill fetch error: ${skillError.message}`)
+    
+    // Fetch PGA Tour stats - handle missing table gracefully
+    let pgaTourStats: PgaTourPlayerStats[] = [];
+    try {
+      const { data, error } = await supabaseServerClient
+        .from("player_season_stats")
+        .select("*")
+        .order("sg_total", { ascending: false });
+        
+      if (error) {
+        // Check if the error is because the table doesn't exist
+        if (error.message.includes("does not exist")) {
+          console.warn("player_season_stats table does not exist yet. Using empty array for PGA Tour stats.");
+        } else {
+          console.error(`PGA Tour stats fetch error: ${error.message}`);
+        }
+      } else {
+        pgaTourStats = data || [];
+      }
+    } catch (error) {
+      console.warn("Error fetching PGA Tour stats:", error);
+      // Continue with empty array
+    }
 
     // Fetch Latest Event Avg Live Stats
     // 1. Get latest event name
@@ -54,25 +77,34 @@ async function getInitialPlayerData() {
       console.log("No latest event found, initial live stats will be empty.")
     }
 
-    console.log(`Server fetch complete: ${seasonSkills?.length ?? 0} skills, ${liveStats.length} live.`)
-    return { initialSeasonSkills: seasonSkills || [], initialLiveStats: liveStats }
+    console.log(`Server fetch complete: ${seasonSkills?.length ?? 0} skills, ${pgaTourStats?.length ?? 0} PGA Tour stats, ${liveStats.length} live.`)
+    return { 
+      initialSeasonSkills: seasonSkills || [], 
+      initialPgaTourStats: pgaTourStats || [],
+      initialLiveStats: liveStats 
+    }
 
   } catch (error) {
     console.error("Server-side data fetch failed:", error)
     // Return empty arrays on error so the page can still render
-    return { initialSeasonSkills: [], initialLiveStats: [] }
+    return { 
+      initialSeasonSkills: [], 
+      initialPgaTourStats: [],
+      initialLiveStats: [] 
+    }
   }
 }
 
 export default async function Home() {
   // Fetch data on the server before rendering
-  const { initialSeasonSkills, initialLiveStats } = await getInitialPlayerData()
+  const { initialSeasonSkills, initialPgaTourStats, initialLiveStats } = await getInitialPlayerData()
 
   return (
     <main className="min-h-screen bg-[#121212]">
       {/* Pass initial data down to Dashboard */}
       <Dashboard
         initialSeasonSkills={initialSeasonSkills}
+        initialPgaTourStats={initialPgaTourStats}
         initialLiveStats={initialLiveStats}
       />
     </main>

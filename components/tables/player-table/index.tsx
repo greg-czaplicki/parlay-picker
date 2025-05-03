@@ -18,10 +18,16 @@ import type { PlayerSkillRating, LiveTournamentStat } from "@/types/definitions"
 interface PlayerTableProps {
   initialSeasonSkills: PlayerSkillRating[]
   initialLiveStats: LiveTournamentStat[]
+  initialPgaTourStats?: PgaTourPlayerStats[]
 }
 
-export default function PlayerTable({ initialSeasonSkills, initialLiveStats }: PlayerTableProps) {
+export default function PlayerTable({ 
+  initialSeasonSkills, 
+  initialLiveStats, 
+  initialPgaTourStats = [] 
+}: PlayerTableProps) {
   const [roundFilter, setRoundFilter] = useState<string>("event_avg")
+  const [dataSource, setDataSource] = useState<'data_golf' | 'pga_tour'>('pga_tour') // Default to PGA Tour data
   
   // Use custom hook to manage view state and event selection
   const {
@@ -39,17 +45,23 @@ export default function PlayerTable({ initialSeasonSkills, initialLiveStats }: P
     displayPlayers,
     loading,
     isSyncingSkills,
+    isSyncingPgaTour,
     isSyncingLive,
     lastSkillUpdate,
+    lastPgaTourUpdate,
     lastLiveUpdate,
+    displayedSkillsTimestamp,
     currentLiveEvent,
     getHeatmapColor,
     triggerSkillSyncAndRefetch,
+    triggerPgaTourSyncAndRefetch,
     triggerLiveSyncAndRefetch
   } = usePlayerData({
     initialSeasonSkills,
     initialLiveStats,
+    initialPgaTourStats,
     dataView,
+    dataSource,
     roundFilter,
     selectedEventId // pass to hook
   })
@@ -141,12 +153,17 @@ export default function PlayerTable({ initialSeasonSkills, initialLiveStats }: P
             {/* Sync Buttons and Timestamps */}
             <SyncControls
               lastSkillUpdate={lastSkillUpdate}
+              lastPgaTourUpdate={lastPgaTourUpdate}
               lastLiveUpdate={lastLiveUpdate}
               isSyncingSkills={isSyncingSkills}
+              isSyncingPgaTour={isSyncingPgaTour}
               isSyncingLive={isSyncingLive}
               currentLiveEvent={currentLiveEvent}
+              dataSource={dataView === 'season' ? dataSource : undefined}
               onSyncSkills={triggerSkillSyncAndRefetch}
+              onSyncPgaTour={triggerPgaTourSyncAndRefetch}
               onSyncLive={triggerLiveSyncAndRefetch}
+              onChangeDataSource={dataView === 'season' ? setDataSource : undefined}
             />
           </div>
 
