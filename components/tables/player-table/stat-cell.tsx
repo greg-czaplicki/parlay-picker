@@ -14,9 +14,10 @@ interface StatCellProps {
   colorClass: string
   trend?: TrendIndicatorType
   precision?: number
+  isPercentage?: boolean
 }
 
-export function StatCell({ value, colorClass, trend, precision = 2 }: StatCellProps) {
+export function StatCell({ value, colorClass, trend, precision = 2, isPercentage = false }: StatCellProps) {
   // Manual tooltip handling
   const [showTooltip, setShowTooltip] = useState(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -123,7 +124,11 @@ export function StatCell({ value, colorClass, trend, precision = 2 }: StatCellPr
         >
           <div className="flex items-center space-x-1">
             <span className="inline-block min-w-[40px] text-center">
-              {value !== null ? value.toFixed(precision) : 'N/A'}
+              {value !== null 
+                ? isPercentage 
+                  ? `${(value * 100).toFixed(precision)}%` 
+                  : value.toFixed(precision)
+                : 'N/A'}
             </span>
             {/* Always render the trend space regardless, but apply opacity if no actual trend */}
             <span className={`inline-flex items-center justify-center w-[20px] h-[20px] ml-1 ${trend ? trend.className : 'opacity-0'}`}>
@@ -158,7 +163,11 @@ export function StatCell({ value, colorClass, trend, precision = 2 }: StatCellPr
     >
       <div className="flex items-center space-x-1">
         <span className="inline-block min-w-[40px] text-center">
-          {value !== null ? value.toFixed(precision) : 'N/A'}
+          {value !== null 
+            ? isPercentage 
+              ? `${(value * 100).toFixed(precision)}%` 
+              : value.toFixed(precision)
+            : 'N/A'}
         </span>
         {/* Always render a placeholder for consistent alignment */}
         <span className="inline-flex items-center justify-center w-[20px] h-[20px] ml-1 opacity-0">

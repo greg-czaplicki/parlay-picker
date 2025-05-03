@@ -548,9 +548,13 @@ export async function scrapeStatsCategory(
         
         playerName = nameCell.textContent?.trim() || '';
         
-        // Skip rows with no player name or that just show "Measured Rounds"
-        if (!playerName || playerName === 'Measured Rounds' || playerName === '-') {
-          logDebug(`Row ${rowIndex} has no valid player name (${playerName}), skipping`);
+        // Skip rows with no player name or that show special labels like "Measured Rounds" or "Tour Average"
+        if (!playerName || 
+            playerName === 'Measured Rounds' || 
+            playerName === '-' || 
+            playerName === 'Tour Average' || 
+            playerName.includes('Average')) {
+          logDebug(`Row ${rowIndex} has no valid player name or is an average/special row (${playerName}), skipping`);
           return;
         }
         
@@ -617,7 +621,17 @@ export async function scrapeStatsCategory(
             player.sgPutt = statValue;
             break;
           case 'DRIVING_ACCURACY':
-            player.drivingAccuracy = statValue;
+            // PGA Tour shows this as a percentage already, but if it's a raw value over 100, divide by 100
+            if (statValue && statValue > 100) {
+              player.drivingAccuracy = statValue / 100;
+            } else {
+              // For percentage format (e.g., "67.5%"), remove % and convert to number
+              if (typeof statValue === 'string' && statValue.includes('%')) {
+                player.drivingAccuracy = parseFloat(statValue.replace('%', '')) / 100;
+              } else {
+                player.drivingAccuracy = statValue;
+              }
+            }
             break;
           case 'DRIVING_DISTANCE':
             player.drivingDistance = statValue;

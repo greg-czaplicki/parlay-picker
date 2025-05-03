@@ -159,7 +159,7 @@ export default function PlayerTable({
               isSyncingPgaTour={isSyncingPgaTour}
               isSyncingLive={isSyncingLive}
               currentLiveEvent={currentLiveEvent}
-              dataSource={dataView === 'season' ? dataSource : undefined}
+              dataSource={dataView === 'season' ? dataSource : 'pga_tour'}
               onSyncSkills={triggerSkillSyncAndRefetch}
               onSyncPgaTour={triggerPgaTourSyncAndRefetch}
               onSyncLive={triggerLiveSyncAndRefetch}
@@ -255,7 +255,7 @@ export default function PlayerTable({
                   {table.getRowModel().rows?.length ? (
                     table.getRowModel().rows.map((row) => (
                       <TableRow
-                        key={row.original.dg_id}
+                        key={row.original.dg_id || row.original.pga_player_id || row.id}
                         data-state={row.getIsSelected() && "selected"}
                         style={{ border: 'none', margin: 0, padding: 0 }}
                         className="hover:bg-[#2a2a35] border-0"

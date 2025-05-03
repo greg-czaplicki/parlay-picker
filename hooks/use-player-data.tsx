@@ -216,13 +216,21 @@ export function usePlayerData({
     }
   }
 
-  // Auto-fetch PGA Tour stats if none are available when PGA Tour data source is selected
+  // Auto-fetch PGA Tour stats if none are available 
+  // - When PGA Tour data source is selected in season view
+  // - When in tournament view (for trends)
   useEffect(() => {
-    if (dataSource === 'pga_tour' && pgaTourStats.length === 0 && !loadingPgaTour && !isSyncingPgaTour) {
+    const needsPgaTourStats = 
+      // Season view with PGA Tour source selected
+      (dataView === 'season' && dataSource === 'pga_tour') || 
+      // Tournament view (always needs PGA Tour stats for trends now)
+      dataView === 'tournament';
+      
+    if (needsPgaTourStats && pgaTourStats.length === 0 && !loadingPgaTour && !isSyncingPgaTour) {
       console.log('[PlayerData] No PGA Tour stats available, fetching automatically');
       fetchPgaTourStats();
     }
-  }, [dataSource, pgaTourStats.length, loadingPgaTour, isSyncingPgaTour]);
+  }, [dataView, dataSource, pgaTourStats.length, loadingPgaTour, isSyncingPgaTour]);
 
   // Fetch field for selected event if in season view and using DataGolf data
   useEffect(() => {
@@ -539,26 +547,41 @@ export function usePlayerData({
         return [];
       }
     } else {
-      // Tournament view always uses DataGolf stats for comparison, regardless of dataSource setting
-      // This fixes the issue with the Current view
+      // Tournament view for current rounds
       let targetRound = roundFilter
       if (targetRound === 'latest') {
         targetRound = 'event_avg'
       }
       const filteredLiveStats = liveStats.filter(p => p.round_num === targetRound)
 
-      // Always use DataGolf stats for tournament view
+      // Use PGA Tour stats for trends in tournament view
       return filteredLiveStats.map(livePlayer => {
-        // Always use DataGolf season stats for trends in tournament view
-        const seasonData = seasonSkillsMap.get(livePlayer.dg_id);
         const trends: Record<string, ReturnType<typeof getTrendIndicator>> = {};
-
-        if (seasonData) {
-          const sgKeys: (keyof PlayerSkillRating & keyof LiveTournamentStat)[] = ['sg_putt', 'sg_arg', 'sg_app', 'sg_ott', 'sg_total'];
+        
+        // Find corresponding PGA Tour stats by dg_id
+        // First check if we have a direct match by dg_id
+        let pgaPlayerStats: PgaTourPlayerStats | undefined = undefined;
+        
+        if (livePlayer.dg_id) {
+          // Find the PGA Tour stats for this player by dg_id
+          pgaPlayerStats = pgaTourStats.find(p => p.dg_id === livePlayer.dg_id);
+          
+          // If we didn't find by dg_id, try to match by name
+          if (!pgaPlayerStats) {
+            // Try exact name match (less reliable but a fallback)
+            pgaPlayerStats = pgaTourStats.find(p => 
+              p.player_name.toLowerCase() === livePlayer.player_name.toLowerCase()
+            );
+          }
+        }
+        
+        if (pgaPlayerStats) {
+          // Calculate trends against PGA Tour stats
+          const sgKeys: (keyof PgaTourPlayerStats & keyof LiveTournamentStat)[] = ['sg_putt', 'sg_arg', 'sg_app', 'sg_ott', 'sg_total'];
           
           sgKeys.forEach(key => {
             const liveValue = livePlayer[key];
-            const seasonValue = seasonData[key];
+            const seasonValue = pgaPlayerStats![key];
               
             const diff = (typeof liveValue === 'number' && typeof seasonValue === 'number') 
               ? liveValue - seasonValue 
@@ -569,8 +592,8 @@ export function usePlayerData({
 
           // Calculate T2G trend separately
           const liveT2G = livePlayer.sg_t2g;
-          const seasonOtt = seasonData.sg_ott;
-          const seasonApp = seasonData.sg_app;
+          const seasonOtt = pgaPlayerStats.sg_ott;
+          const seasonApp = pgaPlayerStats.sg_app;
             
           const seasonT2G = (typeof seasonOtt === 'number' && typeof seasonApp === 'number') 
             ? seasonOtt + seasonApp 
@@ -583,10 +606,10 @@ export function usePlayerData({
           trends['sg_t2g'] = getTrendIndicator(diffT2G);
         }
         
-        return { ...livePlayer, trends, data_source: 'data_golf' };
+        return { ...livePlayer, trends, data_source: 'pga_tour' };
       });
     }
-  }, [dataView, dataSource, seasonSkills, liveStats, pgaTourStats, roundFilter, seasonSkillsMap, fieldDgIds])
+  }, [dataView, dataSource, seasonSkills, liveStats, pgaTourStats, roundFilter, fieldDgIds])
 
   // Calculate percentiles dynamically based on the current view
   const statPercentiles = useMemo(() => {

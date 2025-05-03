@@ -151,7 +151,7 @@ export function useColumns({ dataView, getHeatmapColor }: UseColumnsProps) {
             cell: ({ row }: { row: Row<DisplayPlayer> }) => {
               const value = (row.original as PlayerSkillRating).driving_acc
               const colorClass = getHeatmapColor(value, "driving_acc", false)
-              return <StatCell value={value} colorClass={colorClass} precision={3} />
+              return <StatCell value={value} colorClass={colorClass} precision={1} isPercentage={true} />
             },
           },
           {

@@ -66,44 +66,61 @@ export function SyncControls({
         </div>
       )}
       
-      {/* Season Sync */}
+      {/* Season/Historical Stats Sync */}
       <div className="flex items-center gap-2">
         {activeUpdateTimestamp && !isAnySyncing && (
           <span 
             className="text-xs text-gray-400" 
             title={`${dataSource === 'pga_tour' ? 'PGA Tour' : 'Data Golf'} stats updated at ${new Date(activeUpdateTimestamp).toLocaleString()}`}
           >
-            Season Source: {formatRelativeTime(activeUpdateTimestamp)}
+            {onChangeDataSource ? 'Season' : 'Historical'} Stats: {formatRelativeTime(activeUpdateTimestamp)}
           </span>
         )}
         {(isSyncingSkills || isSyncingPgaTour) && (
           <span className="text-xs text-gray-500">Syncing...</span>
         )}
         
-        {/* Show the appropriate sync button based on data source */}
-        {dataSource === 'data_golf' ? (
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={onSyncSkills} 
-            disabled={isAnySyncing} 
-            className="h-7 px-2"
-          >
-            {isSyncingSkills ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            <span className="ml-1">Sync DG Skills</span>
-          </Button>
-        ) : onSyncPgaTour ? (
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={onSyncPgaTour} 
-            disabled={isAnySyncing} 
-            className="h-7 px-2"
-          >
-            {isSyncingPgaTour ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            <span className="ml-1">Sync PGA Stats</span>
-          </Button>
-        ) : null}
+        {/* Only show appropriate sync button based on context */}
+        {onChangeDataSource ? (
+          /* Season view - show either DataGolf or PGA Tour sync button */
+          dataSource === 'data_golf' ? (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={onSyncSkills} 
+              disabled={isAnySyncing} 
+              className="h-7 px-2"
+            >
+              {isSyncingSkills ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              <span className="ml-1">Sync DG Skills</span>
+            </Button>
+          ) : onSyncPgaTour ? (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={onSyncPgaTour} 
+              disabled={isAnySyncing} 
+              className="h-7 px-2"
+            >
+              {isSyncingPgaTour ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              <span className="ml-1">Sync PGA Stats</span>
+            </Button>
+          ) : null
+        ) : (
+          /* Tournament view - only show PGA Tour sync button */
+          onSyncPgaTour && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={onSyncPgaTour} 
+              disabled={isAnySyncing} 
+              className="h-7 px-2"
+            >
+              {isSyncingPgaTour ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              <span className="ml-1">Sync PGA Stats</span>
+            </Button>
+          )
+        )}
       </div>
       
       {/* Live Sync */}
@@ -113,7 +130,7 @@ export function SyncControls({
             className="text-xs text-gray-400" 
             title={`Data Golf live stats file updated at ${new Date(lastLiveUpdate).toLocaleString()}`}
           >
-            Live Source: {formatRelativeTime(lastLiveUpdate)}
+            Tournament Data: {formatRelativeTime(lastLiveUpdate)}
           </span>
         )}
         {isSyncingLive && <span className="text-xs text-gray-500">Syncing...</span>}
@@ -125,7 +142,7 @@ export function SyncControls({
           className="h-7 px-2"
         >
           {isSyncingLive ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-          <span className="ml-1">Sync Live</span>
+          <span className="ml-1">Sync Tournament</span>
         </Button>
       </div>
     </div>
