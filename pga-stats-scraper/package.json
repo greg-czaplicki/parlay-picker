@@ -1,0 +1,30 @@
+{
+  "name": "pga-stats-scraper",
+  "version": "1.0.0",
+  "description": "Scraper for PGA Tour season-long stats",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "test": "jest",
+    "test:single": "ts-node src/index.ts --test",
+    "debug:single": "ts-node src/index.ts --test --debug",
+    "debug:full": "ts-node src/index.ts --debug"
+  },
+  "dependencies": {
+    "playwright": "^1.41.0",
+    "dotenv": "^16.3.1",
+    "node-cron": "^3.0.3",
+    "@supabase/supabase-js": "^2.38.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/node-cron": "^3.0.11",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.3.2",
+    "jest": "^29.7.0",
+    "@types/jest": "^29.5.10",
+    "ts-jest": "^29.1.1"
+  }
+}
