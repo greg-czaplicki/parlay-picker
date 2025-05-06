@@ -63,8 +63,26 @@ export default function MatchupsTable({ eventId }: { eventId: number | null }) {
       const response = await fetch("/api/matchups/3ball");
       if (!response.ok) throw new Error("Failed to fetch matchups");
       const data = await response.json();
-      if (data.success && Array.isArray(data.matchups)) {
-        const filtered = data.matchups.filter((m: any) => m.event_id === eventId);
+      if (data.success) {
+        // Check different possible structures in the API response
+        let matchupsData = [];
+        
+        // Case 1: Old response format with 'matchups' array
+        if (Array.isArray(data.matchups)) {
+          matchupsData = data.matchups;
+        } 
+        // Case 2: New response format with 'events' array (grouped by event)
+        else if (Array.isArray(data.events)) {
+          // Find the event that matches our eventId
+          const selectedEvent = data.events.find((e: any) => e.event_id === eventId);
+          if (selectedEvent && Array.isArray(selectedEvent.matchups)) {
+            matchupsData = selectedEvent.matchups;
+          }
+        }
+        
+        // Filter by eventId if we still need to (in case we got all matchups)
+        const filtered = eventId ? matchupsData.filter((m: any) => m.event_id === eventId) : matchupsData;
+        
         setMatchups(filtered);
         if (filtered.length > 0) setLastUpdateTime(filtered[0].data_golf_update_time);
         else setLastUpdateTime(null);
