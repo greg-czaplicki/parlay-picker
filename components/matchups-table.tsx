@@ -88,6 +88,15 @@ export default function MatchupsTable({
   const [activeMatchupType, setActiveMatchupType] = useState<"2ball" | "3ball">(matchupType);
 
   useEffect(() => {
+    // Reset state before fetching new data
+    setMatchups([]);
+    setLoading(true);
+    setError(null);
+    
+    // For debugging - print event ID
+    console.log("Current eventId in MatchupsTable:", eventId, 
+                "activeMatchupType:", activeMatchupType);
+    
     fetchMatchupsFromApi();
   }, [eventId, activeMatchupType]);
 
@@ -105,42 +114,176 @@ export default function MatchupsTable({
     }
   }, [activeMatchupType]);
 
+  // NOTE: We removed the direct fetch function since we're fixing the database directly
+  // This is much cleaner than adding complex workarounds in the frontend
+
   const fetchMatchupsFromApi = async () => {
     setLoading(true);
     setError(null);
     try {
-      const endpoint = `/api/matchups/${activeMatchupType}`;
-      const response = await fetch(endpoint);
-      if (!response.ok) throw new Error(`Failed to fetch ${activeMatchupType} matchups`);
-      const data = await response.json();
-      if (data.success) {
-        // Check different possible structures in the API response
-        let matchupsData = [];
+      // First try our more reliable debug endpoint
+      const debugEndpoint = `/api/debug/db-check${eventId ? `?eventId=${eventId}` : ''}`;
+      console.log(`First checking database content via: ${debugEndpoint}`);
+      
+      let dbCheck = null;
+      try {
+        const debugResponse = await fetch(debugEndpoint);
+        dbCheck = await debugResponse.json();
         
-        // Case 1: Old response format with 'matchups' array
-        if (Array.isArray(data.matchups)) {
-          matchupsData = data.matchups;
-        } 
-        // Case 2: New response format with 'events' array (grouped by event)
-        else if (Array.isArray(data.events)) {
-          // Find the event that matches our eventId
-          const selectedEvent = data.events.find((e: any) => e.event_id === eventId);
-          if (selectedEvent && Array.isArray(selectedEvent.matchups)) {
-            matchupsData = selectedEvent.matchups;
-          }
+        console.log("Database check:", {
+          success: dbCheck.success,
+          matchupCount: dbCheck.matchupCount,
+          eventCounts: dbCheck.eventCounts,
+          sampleMatchups: dbCheck.sampleMatchups
+        });
+      } catch (dbErr) {
+        console.warn("Error checking database directly:", dbErr);
+      }
+      
+      // Standard endpoint for all cases
+      const endpoint = eventId 
+        ? `/api/matchups/${activeMatchupType}?eventId=${eventId}` 
+        : `/api/matchups/${activeMatchupType}`;
+      
+      console.log(`Fetching matchups from endpoint: ${endpoint}`);
+      
+      // Try the API endpoint
+      let data;
+      try {
+        const response = await fetch(endpoint);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`API error: ${errorText}`);
+          throw new Error(`Failed to fetch ${activeMatchupType} matchups: ${errorText}`);
         }
         
-        // Filter by eventId if we still need to (in case we got all matchups)
-        const filtered = eventId ? matchupsData.filter((m: any) => m.event_id === eventId) : matchupsData;
+        data = await response.json();
         
-        setMatchups(filtered);
-        if (filtered.length > 0) setLastUpdateTime(filtered[0].data_golf_update_time);
-        else setLastUpdateTime(null);
-      } else {
-        setMatchups([]);
-        setLastUpdateTime(null);
+        if (!data.success) {
+          throw new Error(data.error || "API returned success: false");
+        }
+      } catch (apiErr) {
+        console.error("API fetch error:", apiErr);
+        
+        // If we have DB check results, use those as a fallback
+        if (dbCheck && dbCheck.success && dbCheck.sampleMatchups && dbCheck.sampleMatchups.length > 0) {
+          console.log("Using DB sample as fallback since API failed");
+          setMatchups(dbCheck.sampleMatchups);
+          setLastUpdateTime(null);
+          setLoading(false);
+          return;
+        }
+        
+        // Otherwise propagate the error
+        throw apiErr;
       }
+      
+      // Process the successful API response
+      console.log(`API Response for ${activeMatchupType} matchups:`, {
+        success: data.success,
+        eventId: eventId,
+        hasMatchups: Array.isArray(data.matchups) ? data.matchups.length : 0
+      });
+      
+      // Check different possible structures in the API response
+      let matchupsData = [];
+      
+      // Case 1: Standard format with 'matchups' array
+      if (Array.isArray(data.matchups)) {
+        console.log("Using data.matchups array format");
+        matchupsData = data.matchups;
+        
+        // Debug logging of all matchups event_ids and names
+        const eventIdToName = {};
+        matchupsData.forEach(m => {
+          if (m.event_id && m.event_name) {
+            eventIdToName[m.event_id] = m.event_name;
+          }
+        });
+        console.log("Events in API response:", eventIdToName);
+      } 
+      // Case 2: Format with 'events' array (grouped by event)
+      else if (Array.isArray(data.events)) {
+        console.log("Using data.events array format");
+        
+        // Log all available events
+        console.log("Events in API response:", data.events.map(e => ({
+          event_id: e.event_id,
+          event_name: e.event_name,
+          matchup_count: e.matchups?.length || 0
+        })));
+        
+        // Find the event that matches our eventId
+        if (eventId) {
+          // Convert to numbers first for consistent comparison
+          const eventIdNum = Number(eventId);
+          const selectedEvent = data.events.find((e: any) => 
+            Number(e.event_id) === eventIdNum
+          );
+          
+          if (selectedEvent && Array.isArray(selectedEvent.matchups)) {
+            console.log(`Found event ${selectedEvent.event_name} (ID: ${selectedEvent.event_id}) with ${selectedEvent.matchups.length} matchups`);
+            matchupsData = selectedEvent.matchups;
+          } else {
+            console.log(`No event found with ID ${eventIdNum} - checking all events for this ID`);
+          }
+        } else {
+          // No eventId, combine all matchups from all events
+          matchupsData = data.events.flatMap((e: any) => e.matchups || []);
+        }
+      }
+      
+      // Filter by eventId if we still need to (in case we got all matchups)
+      let filtered = matchupsData;
+      
+      if (eventId && matchupsData.length > 0) {
+        const eventIdNum = Number(eventId);
+        
+        // First double-check what we're filtering by
+        const eventCounts = {};
+        matchupsData.forEach(m => {
+          const mEventId = Number(m.event_id);
+          if (!eventCounts[mEventId]) {
+            eventCounts[mEventId] = {
+              name: m.event_name,
+              count: 0
+            };
+          }
+          eventCounts[mEventId].count++;
+        });
+        console.log("Matchups by event_id before filtering:", eventCounts);
+        
+        // Try filtering by event_id
+        filtered = matchupsData.filter((m: any) => {
+          const matchupEventId = Number(m.event_id);
+          return matchupEventId === eventIdNum;
+        });
+        
+        console.log(`After filtering: ${filtered.length} matchups match eventId=${eventId}`);
+        
+        // If nothing found, try to get the event name and filter by that
+        if (filtered.length === 0 && window.currentEvents) {
+          // @ts-ignore
+          const currentEvents = window.currentEvents || [];
+          const event = currentEvents.find((e: any) => Number(e.event_id) === eventIdNum);
+          
+          if (event) {
+            console.log(`Trying to filter by event name "${event.event_name}" for eventId=${eventId}`);
+            filtered = matchupsData.filter((m: any) => 
+              m.event_name && m.event_name.includes(event.event_name)
+            );
+            console.log(`Found ${filtered.length} matchups by event name`);
+          }
+        }
+      }
+      
+      setMatchups(filtered);
+      if (filtered.length > 0) setLastUpdateTime(filtered[0].data_golf_update_time);
+      else setLastUpdateTime(null);
+      
     } catch (err: any) {
+      console.error("Error in fetchMatchupsFromApi:", err);
       setError(err.message);
       setMatchups([]);
       setLastUpdateTime(null);
@@ -232,7 +375,10 @@ export default function MatchupsTable({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {matchups.map((matchup) => {
+                  {matchups.map((matchup, index) => {
+                    // Generate a stable key - use id if available, otherwise use index and a type identifier
+                    const key = matchup.id ? `matchup-${matchup.id}` : `matchup-${index}-${matchup.p1_dg_id}-${matchup.p2_dg_id}`;
+                    
                     // Handle 3-ball matchups
                     if (is3BallMatchup(matchup)) {
                       const dg_p1_odds = matchup.datagolf_p1_odds ?? matchup.odds?.datagolf?.p1 ?? null;
@@ -253,7 +399,7 @@ export default function MatchupsTable({
                         },
                       });
                       return (
-                        <TableRow key={matchup.id}>
+                        <TableRow key={`3ball-${key}`}>
                           <TableCell>
                             <div>{formatPlayerName(matchup.p1_player_name)}</div>
                             <div>{formatPlayerName(matchup.p2_player_name)}</div>
@@ -355,7 +501,7 @@ export default function MatchupsTable({
                     } else {
                       // Handle 2-ball matchups
                       return (
-                        <TableRow key={matchup.id}>
+                        <TableRow key={`2ball-${key}`}>
                           <TableCell>
                             <div>{formatPlayerName(matchup.p1_player_name)}</div>
                             <div>{formatPlayerName(matchup.p2_player_name)}</div>

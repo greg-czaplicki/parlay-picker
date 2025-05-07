@@ -74,283 +74,172 @@ if (!dataGolfApiKey) {
 const DATA_GOLF_PGA_URL = `https://feeds.datagolf.com/betting-tools/matchups?tour=pga&market=3_balls&odds_format=decimal&file_format=json&key=${dataGolfApiKey}`;
 const DATA_GOLF_OPP_URL = `https://feeds.datagolf.com/betting-tools/matchups?tour=opp&market=3_balls&odds_format=decimal&file_format=json&key=${dataGolfApiKey}`;
 
-export async function GET() {
-  // 1. Fetch Data Golf's last_updated timestamp (PGA only, as a reference)
-  const dataGolfRes = await fetch(DATA_GOLF_PGA_URL, { next: { revalidate: 3600 } });
-  if (!dataGolfRes.ok) {
-    const errorText = await dataGolfRes.text();
-    return NextResponse.json({ success: false, error: `Failed to fetch Data Golf: ${errorText}` }, { status: 500 });
-  }
-  const dataGolfJson: DataGolfResponse = await dataGolfRes.json();
-  const dataGolfLastUpdated = new Date(dataGolfJson.last_updated.replace(" UTC", "Z"));
-
+export async function GET(request: Request) {
+  // Parse query parameters
+  const url = new URL(request.url);
+  const eventId = url.searchParams.get('eventId');
+  
+  console.log(`API: Received request for 3-ball matchups with eventId=${eventId}`);
+  
   // Skip caching for now - we'll always fetch fresh data
-  console.log("Bypassing cache and fetching fresh data from DataGolf API");
-
-  // 2b. Check latest data_golf_update_time in historical table
-  const { data: latestHist, error: histError } = await supabase
-    .from("three_ball_matchups")
-    .select("data_golf_update_time")
-    .order("data_golf_update_time", { ascending: false })
-    .limit(1);
-  let histLastUpdated = null;
-  if (latestHist && latestHist.length > 0) {
-    histLastUpdated = new Date(latestHist[0].data_golf_update_time);
-  }
-
-  console.log("Fetching 3-ball matchups from Data Golf (PGA and Opposite Field)...");
+  console.log("Fetching fresh data from DataGolf API");
 
   try {
+    // Fetch from DataGolf APIs directly
+    console.log("Fetching 3-ball matchups from Data Golf APIs...");
+    
     // Fetch both PGA and Opposite Field events in parallel
     const [pgaRes, oppRes] = await Promise.all([
-      fetch(DATA_GOLF_PGA_URL, { next: { revalidate: 3600 } }),
-      fetch(DATA_GOLF_OPP_URL, { next: { revalidate: 3600 } })
+      fetch(DATA_GOLF_PGA_URL, { cache: 'no-store' }),
+      fetch(DATA_GOLF_OPP_URL, { cache: 'no-store' })
     ]);
-
-    // Fetch tournaments from Supabase with dates to help match events
-    const { data: tournaments, error: tournamentsError } = await supabase
+    
+    if (!pgaRes.ok || !oppRes.ok) {
+      throw new Error("Failed to fetch from DataGolf API");
+    }
+    
+    // Parse the responses
+    const pgaData = await pgaRes.json();
+    const oppData = await oppRes.json();
+    
+    console.log(`PGA event: ${pgaData.event_name}, matchups: ${pgaData.match_list?.length || 0}`);
+    console.log(`Opposite field event: ${oppData.event_name}, matchups: ${oppData.match_list?.length || 0}`);
+    
+    // Get tournaments to map event names to IDs
+    const { data: tournaments } = await supabase
       .from("tournaments")
-      .select("event_id, event_name, start_date, end_date");
-    if (tournamentsError) {
-      throw new Error(`Failed to fetch tournaments: ${tournamentsError.message}`);
+      .select("event_id, event_name");
+    
+    // Create a map to look up event IDs
+    const eventMapping = {};
+    if (tournaments) {
+      tournaments.forEach(t => {
+        const nameLower = t.event_name.toLowerCase();
+        eventMapping[nameLower] = t.event_id;
+        
+        // Add partial matches too
+        if (nameLower.includes('truist')) eventMapping['truist'] = t.event_id;
+        if (nameLower.includes('myrtle')) eventMapping['myrtle'] = t.event_id;
+      });
     }
     
-    // Create a map from event name to ID
-    const eventNameToId = new Map<string, number>();
-    (tournaments || []).forEach(t => eventNameToId.set(t.event_name, t.event_id));
+    // Process PGA matchups
+    const pgaEventId = eventMapping['truist'] || 480; // Fallback to 480 if not found
+    const pgaMatchups = (pgaData.match_list || []).map(m => ({
+      event_id: pgaEventId,
+      event_name: pgaData.event_name,
+      round_num: pgaData.round_num,
+      data_golf_update_time: new Date(pgaData.last_updated.replace(" UTC", "Z")).toISOString(),
+      p1_dg_id: m.p1_dg_id,
+      p1_player_name: m.p1_player_name,
+      p2_dg_id: m.p2_dg_id,
+      p2_player_name: m.p2_player_name,
+      p3_dg_id: m.p3_dg_id,
+      p3_player_name: m.p3_player_name,
+      ties_rule: m.ties,
+      fanduel_p1_odds: m.odds?.fanduel?.p1 || null,
+      fanduel_p2_odds: m.odds?.fanduel?.p2 || null,
+      fanduel_p3_odds: m.odds?.fanduel?.p3 || null,
+      draftkings_p1_odds: m.odds?.draftkings?.p1 || null,
+      draftkings_p2_odds: m.odds?.draftkings?.p2 || null,
+      draftkings_p3_odds: m.odds?.draftkings?.p3 || null,
+      datagolf_p1_odds: m.odds?.datagolf?.p1 || null,
+      datagolf_p2_odds: m.odds?.datagolf?.p2 || null,
+      datagolf_p3_odds: m.odds?.datagolf?.p3 || null
+    }));
     
-    // Get current date and calculate current week's Monday and Sunday
-    const today = new Date();
-    const currentDay = today.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    // Process Opposite Field matchups
+    const oppEventId = eventMapping['myrtle'] || 553; // Fallback to 553 if not found
+    const oppMatchups = (oppData.match_list || []).map(m => ({
+      event_id: oppEventId,
+      event_name: oppData.event_name,
+      round_num: oppData.round_num,
+      data_golf_update_time: new Date(oppData.last_updated.replace(" UTC", "Z")).toISOString(),
+      p1_dg_id: m.p1_dg_id,
+      p1_player_name: m.p1_player_name,
+      p2_dg_id: m.p2_dg_id,
+      p2_player_name: m.p2_player_name,
+      p3_dg_id: m.p3_dg_id,
+      p3_player_name: m.p3_player_name,
+      ties_rule: m.ties,
+      fanduel_p1_odds: m.odds?.fanduel?.p1 || null,
+      fanduel_p2_odds: m.odds?.fanduel?.p2 || null,
+      fanduel_p3_odds: m.odds?.fanduel?.p3 || null,
+      draftkings_p1_odds: m.odds?.draftkings?.p1 || null,
+      draftkings_p2_odds: m.odds?.draftkings?.p2 || null,
+      draftkings_p3_odds: m.odds?.draftkings?.p3 || null,
+      datagolf_p1_odds: m.odds?.datagolf?.p1 || null,
+      datagolf_p2_odds: m.odds?.datagolf?.p2 || null,
+      datagolf_p3_odds: m.odds?.datagolf?.p3 || null
+    }));
     
-    // Calculate Monday of current week (go back to the most recent Monday)
-    const monday = new Date(today);
-    monday.setDate(today.getDate() - ((currentDay + 6) % 7)); // +6 % 7 handles Sunday (0) properly
-    monday.setHours(0, 0, 0, 0);
+    // Combine all matchups
+    const allMatchups = [...pgaMatchups, ...oppMatchups];
     
-    // Calculate Sunday of current week
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    sunday.setHours(23, 59, 59, 999);
+    console.log(`Processed ${allMatchups.length} total 3-ball matchups`);
     
-    // Format dates as YYYY-MM-DD for comparison
-    const mondayStr = monday.toISOString().split('T')[0];
-    const sundayStr = sunday.toISOString().split('T')[0];
-    
-    console.log(`Current week: ${mondayStr} to ${sundayStr}`);
-    
-    // Get tournaments happening this week
-    // A tournament is "this week" if any part of it overlaps with the current week
-    const activeWeekTournaments = tournaments?.filter(t => {
-      // If tournament end date is >= monday of this week AND tournament start date is <= sunday of this week
-      return t.end_date >= mondayStr && t.start_date <= sundayStr;
-    }) || [];
-    
-    console.log(`Found ${activeWeekTournaments.length} tournaments happening this week:`, 
-      activeWeekTournaments.map(t => `${t.event_name} (${t.start_date} to ${t.end_date})`));
-
-    const results = [];
-    const sources: [Response, string][] = [
-      [pgaRes, 'PGA'],
-      [oppRes, 'OPP'],
-    ];
-    for (const [res, label] of sources) {
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error(`Failed to fetch data from Data Golf (${label}):`, res.status, errorText);
-        throw new Error(`Failed to fetch data from Data Golf (${label}): ${res.status} ${errorText}`);
-      }
-      const data: DataGolfResponse = await res.json();
-      console.log(`Full Data Golf API response (${label}):`, data);
-
-      // Fix: Only process if match_list is an array
-      if (!Array.isArray(data.match_list)) {
-        console.warn(`Data Golf API (${label}): match_list is not an array`, data.match_list);
-        results.push({
-          event: data.event_name,
-          round: data.round_num,
-          processedCount: 0,
-          warning: typeof data.match_list === "string" ? data.match_list : "No matchups available"
-        });
-        continue; // Skip to next source
-      }
-
-      // HARD-CODED EVENT NAME MATCHING
-      // This ensures specific named events are correctly matched regardless of name differences
-      let event_id = null;
-      
-      // Explicit event matching for current known events
-      const eventNameLower = data.event_name.toLowerCase();
-      
-      // Direct matches for PGA events with consistent names
-      if (label === 'PGA') {
-        if (eventNameLower.includes('truist')) {
-          // Find Truist Championship
-          const truist = tournaments?.find(t => 
-            t.event_name.toLowerCase().includes('truist')
-          );
-          
-          if (truist) {
-            event_id = truist.event_id;
-            console.log(`Explicitly matched PGA Truist event to "${truist.event_name}" (ID: ${event_id})`);
-          }
-        } else if (eventNameLower.includes('pga championship')) {
-          // Find PGA Championship
-          const pga = tournaments?.find(t => 
-            t.event_name.toLowerCase().includes('pga championship')
-          );
-          
-          if (pga) {
-            event_id = pga.event_id;
-            console.log(`Explicitly matched PGA Championship to "${pga.event_name}" (ID: ${event_id})`);
-          }
-        }
-        // Add more specific main event matches as needed
-      }
-      
-      // Direct matches for opposite field events
-      else if (label === 'OPP') {
-        if (eventNameLower.includes('myrtle beach')) {
-          // Find Myrtle Beach tournament
-          const myrtle = tournaments?.find(t => 
-            t.event_name.toLowerCase().includes('myrtle')
-          );
-          
-          if (myrtle) {
-            event_id = myrtle.event_id;
-            console.log(`Explicitly matched OPP Myrtle Beach event to "${myrtle.event_name}" (ID: ${event_id})`);
-          }
-        }
-        // Add more specific opposite field event matches as needed
-      }
-      
-      // If no explicit match was found, try the original exact name match
-      if (!event_id) {
-        event_id = eventNameToId.get(data.event_name);
-      }
-      
-      // If still no match, try the weekly tournament logic
-      if (!event_id && activeWeekTournaments.length > 0) {
-        console.log(`No direct match for "${data.event_name}" (${label}), attempting weekly tournament matching...`);
+    // Save matchups to both latest and historical tables
+    try {
+      // First check if we already have newer data in the historical table
+      const { data: latestHistory, error: historyError } = await supabase
+        .from("three_ball_matchups")
+        .select("data_golf_update_time")
+        .order("data_golf_update_time", { ascending: false })
+        .limit(1);
         
-        // If we have exactly 2 tournaments this week (most common case)
-        if (activeWeekTournaments.length === 2) {
-          // Sort by event_id - typically the main event has a lower ID
-          const sortedByEventId = [...activeWeekTournaments].sort((a, b) => a.event_id - b.event_id);
-          
-          if (label === 'PGA') {
-            // For PGA events, use the lower event_id (usually the main event)
-            event_id = sortedByEventId[0].event_id;
-            console.log(`Matched PGA event to main tournament: "${sortedByEventId[0].event_name}" (ID: ${event_id})`);
-          } else if (label === 'OPP') {
-            // For opposite field events, use the higher event_id
-            event_id = sortedByEventId[1].event_id;
-            console.log(`Matched OPP event to opposite field tournament: "${sortedByEventId[1].event_name}" (ID: ${event_id})`);
-          }
-        }
-        // If we have just one tournament this week
-        else if (activeWeekTournaments.length === 1) {
-          event_id = activeWeekTournaments[0].event_id;
-          console.log(`Only one tournament this week, using "${activeWeekTournaments[0].event_name}" (ID: ${event_id}) for ${label}`);
-        }
+      let shouldSaveHistory = true;
+      
+      if (!historyError && latestHistory && latestHistory.length > 0) {
+        const historyTime = new Date(latestHistory[0].data_golf_update_time);
+        const pgaTime = new Date(pgaData.last_updated.replace(" UTC", "Z"));
+        const oppTime = new Date(oppData.last_updated.replace(" UTC", "Z"));
+        
+        // Only save to history if we have newer data
+        shouldSaveHistory = (pgaTime > historyTime) || (oppTime > historyTime);
       }
       
-      // Last warning if no match found
-      if (!event_id) {
-        console.warn(`⚠️ No matching tournament found for "${data.event_name}" (${label})`);
-        console.warn(`This week's tournaments: ${JSON.stringify(activeWeekTournaments.map(t => t.event_name))}`);
+      // Save to historical table if we have newer data
+      if (shouldSaveHistory && allMatchups.length > 0) {
+        console.log("Saving 3-ball matchups to historical table...");
+        await supabase
+          .from("three_ball_matchups")
+          .insert(allMatchups);
       }
-      const matchupsToInsert: (SupabaseMatchup & { event_id: number | null })[] = data.match_list.map((matchup) => {
-        const fanduelOdds = matchup.odds.fanduel;
-        const draftkingsOdds = matchup.odds.draftkings;
-        const datagolfOdds = matchup.odds.datagolf;
-        return {
-          event_id,
-          event_name: data.event_name,
-          round_num: data.round_num,
-          data_golf_update_time: new Date(data.last_updated.replace(" UTC", "Z")).toISOString(),
-          p1_dg_id: matchup.p1_dg_id,
-          p1_player_name: matchup.p1_player_name,
-          p2_dg_id: matchup.p2_dg_id,
-          p2_player_name: matchup.p2_player_name,
-          p3_dg_id: matchup.p3_dg_id,
-          p3_player_name: matchup.p3_player_name,
-          ties_rule: matchup.ties,
-          fanduel_p1_odds: fanduelOdds?.p1 ?? null,
-          fanduel_p2_odds: fanduelOdds?.p2 ?? null,
-          fanduel_p3_odds: fanduelOdds?.p3 ?? null,
-          draftkings_p1_odds: draftkingsOdds?.p1 ?? null,
-          draftkings_p2_odds: draftkingsOdds?.p2 ?? null,
-          draftkings_p3_odds: draftkingsOdds?.p3 ?? null,
-          datagolf_p1_odds: datagolfOdds?.p1 ?? null,
-          datagolf_p2_odds: datagolfOdds?.p2 ?? null,
-          datagolf_p3_odds: datagolfOdds?.p3 ?? null,
-        };
-      });
-      if (matchupsToInsert.length > 0) {
-        // Log what we're about to insert
-        console.log(`Processing ${matchupsToInsert.length} matchups for ${label} event "${data.event_name}"`);
-        if (event_id) {
-          console.log(`Using event_id: ${event_id} for insertion`);
-        } else {
-          console.warn(`⚠️ No event_id found for "${data.event_name}" - matchups will have null event_id`);
-        }
+      
+      // Update latest matchups table (always)
+      if (allMatchups.length > 0) {
+        // First clear existing data
+        await supabase.from("latest_three_ball_matchups").delete().gte("id", 0);
         
-        // Only insert into historical table if Data Golf last_updated is newer
-        if (!histLastUpdated || new Date(data.last_updated.replace(" UTC", "Z")) > histLastUpdated) {
-          console.log(`Inserting ${matchupsToInsert.length} historical matchups for ${label}...`);
-          const { error: insertError } = await supabase
-            .from("three_ball_matchups")
-            .insert(matchupsToInsert);
-          if (insertError) {
-            console.error(`Error inserting historical matchups into Supabase (${label}):`, insertError);
-            throw new Error(`Supabase historical insert failed (${label}): ${insertError.message}`);
-          }
-          console.log(`✓ Historical insert successful for ${label}`);
-        } else {
-          console.log(`Historical odds not updated for ${label} (no new Data Golf update).`);
-        }
-        
-        // Upsert into latest odds table
-        console.log(`Upserting ${matchupsToInsert.length} latest matchups for ${label}...`);
-        const { error: upsertError } = await supabase
+        // Then insert new data
+        const { error: insertError } = await supabase
           .from("latest_three_ball_matchups")
-          .upsert(matchupsToInsert, {
-            onConflict: 'event_id, round_num, p1_dg_id, p2_dg_id, p3_dg_id',
-          });
+          .insert(allMatchups);
           
-        if (upsertError) {
-          console.error(`Error upserting latest matchups into Supabase (${label}):`, upsertError);
-          throw new Error(`Supabase latest upsert failed (${label}): ${upsertError.message}`);
+        if (insertError) {
+          console.error("Error inserting 3-ball matchups:", insertError);
+        } else {
+          console.log(`Successfully updated latest_three_ball_matchups with ${allMatchups.length} matchups`);
         }
-
-        console.log(`✓ Successfully upserted ${matchupsToInsert.length} latest matchups for ${label}.`);
-      } else {
-        console.log(`No matchups found in the fetched data to insert for ${label}.`);
       }
-      results.push({
-        event: data.event_name,
-        round: data.round_num,
-        processedCount: matchupsToInsert.length
-      });
+    } catch (dbError) {
+      console.error("Database error:", dbError);
+      // Continue anyway - we'll return the API data directly
     }
-    // Get all the latest matchups to return to the client
-    const { data: allLatestMatchups, error: allMatchupsError } = await supabase
-      .from("latest_three_ball_matchups")
-      .select("*");
-
-    if (allMatchupsError) {
-      console.error("Error fetching all latest matchups:", allMatchupsError);
-      return NextResponse.json({
-        success: true,
-        message: `Fetched and stored 3-ball matchups for ${results.length} event(s), but could not fetch them back.`,
-        results
-      });
+    
+    // Filter matchups if eventId is provided
+    let filteredMatchups = allMatchups;
+    if (eventId) {
+      const eventIdInt = parseInt(eventId, 10);
+      if (!isNaN(eventIdInt)) {
+        filteredMatchups = allMatchups.filter(m => Number(m.event_id) === eventIdInt);
+        console.log(`Filtered to ${filteredMatchups.length} 3-ball matchups for event ${eventIdInt}`);
+      }
     }
-
-    // Group matchups by event to make the structure clearer
+    
+    // Group matchups by event
     const matchupsByEvent = {};
-    (allLatestMatchups || []).forEach(m => {
+    filteredMatchups.forEach(m => {
       const eventId = m.event_id || 'unknown';
       if (!matchupsByEvent[eventId]) {
         matchupsByEvent[eventId] = {
@@ -361,14 +250,13 @@ export async function GET() {
       }
       matchupsByEvent[eventId].matchups.push(m);
     });
-
+    
     return NextResponse.json({
       success: true,
-      message: `Fetched and stored 3-ball matchups for ${results.length} event(s).`,
-      results,
-      events: Object.values(matchupsByEvent),
-      matchups: allLatestMatchups
+      matchups: filteredMatchups,
+      events: Object.values(matchupsByEvent)
     });
+    
   } catch (error) {
     console.error("Error in GET /api/matchups/3ball:", error);
     return NextResponse.json(

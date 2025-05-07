@@ -79,8 +79,32 @@ export default function Dashboard({
         .lte("start_date", sundayStr)
         .gte("end_date", mondayStr);
       if (!error && data) {
+        // Store events in state
         setCurrentEvents(data);
-        if (data.length > 0) setSelectedEventId(data[0].event_id);
+        
+        // Also make events available globally for other components
+        if (typeof window !== 'undefined') {
+          // @ts-ignore - Adding custom property to window
+          window.currentEvents = data;
+          console.log("Set currentEvents in window:", data.map(e => `${e.event_name} (${e.event_id})`).join(", "));
+        }
+        
+        // Default to main event (Truist Championship) if available, otherwise first event
+        if (data.length > 0) {
+          // Find Truist Championship by looking for 'truist' in the name (case-insensitive)
+          const mainEvent = data.find(e => 
+            e.event_name.toLowerCase().includes('truist')
+          );
+          
+          if (mainEvent) {
+            console.log(`Setting default event to main tournament: ${mainEvent.event_name} (${mainEvent.event_id})`);
+            setSelectedEventId(mainEvent.event_id);
+          } else {
+            // Fallback to first event if main event not found
+            console.log(`Main tournament not found, defaulting to first event: ${data[0].event_name} (${data[0].event_id})`);
+            setSelectedEventId(data[0].event_id);
+          }
+        }
       }
     };
     fetchCurrentWeekEvents();
@@ -190,11 +214,24 @@ export default function Dashboard({
                           <SelectValue placeholder="Select Event" />
                         </SelectTrigger>
                         <SelectContent>
-                          {currentEvents.map(ev => (
-                            <SelectItem key={ev.event_id} value={String(ev.event_id)}>
-                              {ev.event_name}
-                            </SelectItem>
-                          ))}
+                          {currentEvents
+                            // Sort events to show main events first
+                            .sort((a, b) => {
+                              // Main events (like Truist Championship) should appear first
+                              const aIsMain = a.event_name.toLowerCase().includes('truist');
+                              const bIsMain = b.event_name.toLowerCase().includes('truist');
+                              
+                              if (aIsMain && !bIsMain) return -1;
+                              if (!aIsMain && bIsMain) return 1;
+                              
+                              // If both are main or both are not main, sort by event_id
+                              return a.event_id - b.event_id;
+                            })
+                            .map(ev => (
+                              <SelectItem key={ev.event_id} value={String(ev.event_id)}>
+                                {ev.event_name}
+                              </SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
                     </div>
