@@ -40,15 +40,17 @@ interface DashboardProps {
   initialSeasonSkills: PlayerSkillRating[];
   initialLiveStats: LiveTournamentStat[];
   initialPgaTourStats?: PgaTourPlayerStats[];
+  defaultTab?: "matchups" | "players" | "parlay";
 }
 
 export default function Dashboard({ 
   initialSeasonSkills, 
   initialLiveStats,
-  initialPgaTourStats = []
+  initialPgaTourStats = [],
+  defaultTab = "matchups"
 }: DashboardProps) {
   const [activeFilter, setActiveFilter] = useState("Balanced")
-  const [activeTab, setActiveTab] = useState("matchups")
+  const [activeTab, setActiveTab] = useState(defaultTab)
   const [showCustom, setShowCustom] = useState(false)
   const [matchupType, setMatchupType] = useState("3ball")
   const [currentEvents, setCurrentEvents] = useState<{ event_id: number, event_name: string, start_date: string, end_date: string }[]>([])
@@ -116,6 +118,20 @@ export default function Dashboard({
     checkMatchupType();
     return () => { cancelled = true; };
   }, [selectedEventId]);
+  
+  // Listen for matchup type changes from MatchupsTable component
+  useEffect(() => {
+    const handleMatchupTypeChange = (event: any) => {
+      if (event.detail && (event.detail === "2ball" || event.detail === "3ball")) {
+        setMatchupType(event.detail);
+      }
+    };
+    
+    window.addEventListener('matchupTypeChanged', handleMatchupTypeChange);
+    return () => {
+      window.removeEventListener('matchupTypeChanged', handleMatchupTypeChange);
+    };
+  }, []);
 
   const handleFilterChange = (filterName: string) => {
     setActiveFilter(filterName)
@@ -123,137 +139,118 @@ export default function Dashboard({
   }
 
   return (
-    <div className="min-h-screen bg-[#121212] text-white">
-      <Sidebar />
-      <div className="ml-16 p-4">
-        <TopNavigation />
-
-        <div className="mt-6 mb-8 flex items-center justify-between">
-          <h1 className="text-3xl font-bold">Golf Parlay Picker</h1>
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-              <Input placeholder="Search players..." className="pl-10 w-64 bg-[#1e1e23] border-none rounded-xl" />
-            </div>
-            <Button variant="outline" size="icon" className="rounded-full bg-[#1e1e23] border-none">
-              <Bell size={18} />
-            </Button>
-            <Avatar>
-              <AvatarImage src="/placeholder.svg" />
-              <AvatarFallback>JD</AvatarFallback>
-            </Avatar>
+    <div className="w-full">
+      <div className="mt-6 mb-8 flex items-center justify-between">
+        <h1 className="text-3xl font-bold">Golf Parlay Picker</h1>
+        <div className="flex items-center gap-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+            <Input placeholder="Search players..." className="pl-10 w-64 bg-[#1e1e23] border-none rounded-xl" />
           </div>
+          <Button variant="outline" size="icon" className="rounded-full bg-[#1e1e23] border-none">
+            <Bell size={18} />
+          </Button>
+          <Avatar>
+            <AvatarImage src="/placeholder.svg" />
+            <AvatarFallback>JD</AvatarFallback>
+          </Avatar>
         </div>
+      </div>
 
-        <div className="mb-6">
-          <div className="flex space-x-2">
-            <button
-              className={`tab-button ${activeTab === "matchups" ? "tab-button-active" : ""}`}
-              onClick={() => setActiveTab("matchups")}
-            >
-              Matchups
-            </button>
-            <button
-              className={`tab-button ${activeTab === "players" ? "tab-button-active" : ""}`}
-              onClick={() => setActiveTab("players")}
-            >
-              Players
-            </button>
-            <button
-              className={`tab-button ${activeTab === "parlay" ? "tab-button-active" : ""}`}
-              onClick={() => setActiveTab("parlay")}
-            >
-              Parlay Builder
-            </button>
-          </div>
+      <div className="mb-6">
+        <div className="flex space-x-2">
+          <button
+            className={`tab-button ${activeTab === "matchups" ? "tab-button-active" : ""}`}
+            onClick={() => setActiveTab("matchups")}
+          >
+            Matchups
+          </button>
+          <button
+            className={`tab-button ${activeTab === "parlay" ? "tab-button-active" : ""}`}
+            onClick={() => setActiveTab("parlay")}
+          >
+            Parlay Builder
+          </button>
         </div>
+      </div>
 
-        {activeTab === "matchups" && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            {/* Row 1: Filters (Spanning full width) */}
-            <div className="md:col-span-4">
-              <Card className="glass-card">
-                <CardContent className="p-6">
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
-                    <h2 className="text-xl font-bold">Filters</h2>
-                    {currentEvents.length > 0 && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-400">Event:</span>
-                        <Select value={selectedEventId ? String(selectedEventId) : undefined} onValueChange={v => setSelectedEventId(Number(v))}>
-                          <SelectTrigger className="w-[220px] bg-[#1e1e23] border-none">
-                            <SelectValue placeholder="Select Event" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {currentEvents.map(ev => (
-                              <SelectItem key={ev.event_id} value={String(ev.event_id)}>
-                                {ev.event_name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {filters.map((filter) => (
-                      <Button
-                        key={filter.name}
-                        variant={activeFilter === filter.name ? "default" : "outline"}
-                        onClick={() => handleFilterChange(filter.name)}
-                        className={activeFilter === filter.name ? "filter-button-active" : "filter-button"}
-                      >
-                        {filter.icon}
-                        {filter.name}
-                      </Button>
-                    ))}
-                  </div>
-                  {showCustom && (
-                    <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-sm text-gray-400">SG: Tee-to-Green</label>
-                        <Input type="number" placeholder="Weight" className="bg-[#1e1e23] border-none" />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm text-gray-400">SG: Approach</label>
-                        <Input type="number" placeholder="Weight" className="bg-[#1e1e23] border-none" />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm text-gray-400">SG: Around-the-Green</label>
-                        <Input type="number" placeholder="Weight" className="bg-[#1e1e23] border-none" />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm text-gray-400">SG: Putting</label>
-                        <Input type="number" placeholder="Weight" className="bg-[#1e1e23] border-none" />
-                      </div>
+      {activeTab === "matchups" && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          {/* Row 1: Filters (Spanning full width) */}
+          <div className="md:col-span-4">
+            <Card className="glass-card">
+              <CardContent className="p-6">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+                  <h2 className="text-xl font-bold">Filters</h2>
+                  {currentEvents.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-400">Event:</span>
+                      <Select value={selectedEventId ? String(selectedEventId) : undefined} onValueChange={v => setSelectedEventId(Number(v))}>
+                        <SelectTrigger className="w-[220px] bg-[#1e1e23] border-none">
+                          <SelectValue placeholder="Select Event" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {currentEvents.map(ev => (
+                            <SelectItem key={ev.event_id} value={String(ev.event_id)}>
+                              {ev.event_name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   )}
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Row 2: Main Matchups Table (Left) */}
-            <div className="md:col-span-3">
-              <MatchupsTable eventId={selectedEventId} matchupType={matchupType as "3ball" | "2ball"} />
-            </div>
-
-            {/* Row 2: Recommended Picks (Right) */}
-            <div className="md:col-span-1">
-              <RecommendedPicks matchupType={matchupType as "3ball" | "2ball"} limit={10} />
-            </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {filters.map((filter) => (
+                    <Button
+                      key={filter.name}
+                      variant={activeFilter === filter.name ? "default" : "outline"}
+                      onClick={() => handleFilterChange(filter.name)}
+                      className={activeFilter === filter.name ? "filter-button-active" : "filter-button"}
+                    >
+                      {filter.icon}
+                      {filter.name}
+                    </Button>
+                  ))}
+                </div>
+                {showCustom && (
+                  <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm text-gray-400">SG: Tee-to-Green</label>
+                      <Input type="number" placeholder="Weight" className="bg-[#1e1e23] border-none" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm text-gray-400">SG: Approach</label>
+                      <Input type="number" placeholder="Weight" className="bg-[#1e1e23] border-none" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm text-gray-400">SG: Around-the-Green</label>
+                      <Input type="number" placeholder="Weight" className="bg-[#1e1e23] border-none" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm text-gray-400">SG: Putting</label>
+                      <Input type="number" placeholder="Weight" className="bg-[#1e1e23] border-none" />
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
-        )}
 
-        {activeTab === "players" && (
-          <>
-            <PlayerTable
-              initialSeasonSkills={initialSeasonSkills}
-              initialLiveStats={initialLiveStats}
-              initialPgaTourStats={initialPgaTourStats}
-            />
-          </>
-        )}
-        {activeTab === "parlay" && <ParlayBuilder matchupType={matchupType} />}
-      </div>
+          {/* Row 2: Main Matchups Table (Left) */}
+          <div className="md:col-span-3">
+            <MatchupsTable eventId={selectedEventId} matchupType={matchupType as "3ball" | "2ball"} />
+          </div>
+
+          {/* Row 2: Recommended Picks (Right) */}
+          <div className="md:col-span-1">
+            <RecommendedPicks matchupType={matchupType as "3ball" | "2ball"} limit={10} />
+          </div>
+        </div>
+      )}
+
+      {/* Players tab removed and moved to its own page */}
+      {activeTab === "parlay" && <ParlayBuilder matchupType={matchupType} />}
     </div>
   )
 }

@@ -51,6 +51,24 @@ interface LatestThreeBallMatchupRow {
     [key: string]: any;
 }
 
+// Define interface for the raw row structure from latest_two_ball_matchups
+interface LatestTwoBallMatchupRow {
+    id: number;
+    event_name: string | null;
+    round_num: number | null;
+    p1_dg_id: number | null;
+    p1_player_name: string | null;
+    p2_dg_id: number | null;
+    p2_player_name: string | null;
+    // Add potential nulls for odds
+    fanduel_p1_odds: number | string | null;
+    fanduel_p2_odds: number | string | null;
+    draftkings_p1_odds: number | string | null;
+    draftkings_p2_odds: number | string | null;
+    // Allow other properties potentially selected
+    [key: string]: any;
+}
+
 // --- Interfaces ---
 
 export interface Player {
@@ -161,59 +179,94 @@ function calculateScore(player: PlayerWithProbability, groupPlayers: PlayerWithP
 // --- Server Action: getMatchups ---
 
 /**
- * Fetches matchups from latest_three_ball_matchups, calculates player scores dynamically,
- * and identifies recommendations based on SG Total and odds gap.
- * @param matchupType - Should always be "3ball" for this implementation.
+ * Fetches matchups from the appropriate matchups table based on matchupType,
+ * calculates player scores dynamically, and identifies recommendations based on SG Total and odds gap.
+ * @param matchupType - Either "2ball" or "3ball" to specify the type of matchups to fetch
  * @param bookmaker - "fanduel" or "draftkings". Filters odds columns used.
  * @returns An object containing the list of processed matchups or an error message.
  */
 export async function getMatchups(matchupType: string, bookmaker?: string): Promise<{ matchups: Matchup[]; error?: string }> {
-  // This implementation specifically uses the latest_three_ball_matchups structure.
-  // If matchupType is not "3ball", it might not work as expected.
-  if (matchupType !== '3ball') {
-      console.warn(`getMatchups called with type ${matchupType}, but is designed for '3ball' using latest_three_ball_matchups.`);
-      // Optionally return error or proceed if schema is somehow compatible
-      // return { matchups: [], error: `Unsupported matchupType: ${matchupType}` };
+  // Support both 2ball and 3ball matchup types
+  if (matchupType !== '3ball' && matchupType !== '2ball') {
+      console.warn(`getMatchups called with unsupported type ${matchupType}. Only '3ball' and '2ball' are supported.`);
+      return { matchups: [], error: `Unsupported matchupType: ${matchupType}` };
   }
 
   // Default to draftkings if no bookmaker specified
   const selectedBookmaker = bookmaker === 'fanduel' ? 'fanduel' : 'draftkings';
-  console.log(`Fetching 3-ball matchups using ${selectedBookmaker} odds.`);
+  console.log(`Fetching ${matchupType} matchups using ${selectedBookmaker} odds.`);
 
   const supabase = createServerClient();
 
   try {
-    // 1. Select relevant columns from latest_three_ball_matchups
-    const { data: matchupRows, error: matchupsError } = await supabase
-      .from('latest_three_ball_matchups')
-      .select(`
-        id,
-        event_name,
-        round_num,
-        p1_dg_id, p1_player_name,
-        p2_dg_id, p2_player_name,
-        p3_dg_id, p3_player_name,
-        fanduel_p1_odds, fanduel_p2_odds, fanduel_p3_odds, 
-        draftkings_p1_odds, draftkings_p2_odds, draftkings_p3_odds
-      `)
-      .returns<LatestThreeBallMatchupRow[]>(); // Use .returns<T>() for type safety
+    let matchupRows: LatestThreeBallMatchupRow[] | LatestTwoBallMatchupRow[] = [];
+    let matchupsError: any = null;
+    
+    // Different handling based on matchup type
+    if (matchupType === '3ball') {
+      // Handle 3-ball matchups
+      const response = await supabase
+        .from('latest_three_ball_matchups')
+        .select(`
+          id,
+          event_name,
+          round_num,
+          p1_dg_id, p1_player_name,
+          p2_dg_id, p2_player_name,
+          p3_dg_id, p3_player_name,
+          fanduel_p1_odds, fanduel_p2_odds, fanduel_p3_odds, 
+          draftkings_p1_odds, draftkings_p2_odds, draftkings_p3_odds
+        `)
+        .returns<LatestThreeBallMatchupRow[]>(); // Use .returns<T>() for type safety
+        
+      matchupRows = response.data || [];
+      matchupsError = response.error;
+    } else {
+      // Handle 2-ball matchups
+      const response = await supabase
+        .from('latest_two_ball_matchups')
+        .select(`
+          id,
+          event_name,
+          round_num,
+          p1_dg_id, p1_player_name,
+          p2_dg_id, p2_player_name,
+          fanduel_p1_odds, fanduel_p2_odds,
+          draftkings_p1_odds, draftkings_p2_odds
+        `)
+        .returns<LatestTwoBallMatchupRow[]>();
+        
+      matchupRows = response.data || [];
+      matchupsError = response.error;
+    }
 
     if (matchupsError) {
-      console.error("Supabase error fetching latest_three_ball_matchups:", matchupsError);
+      console.error(`Supabase error fetching latest_${matchupType}_matchups:`, matchupsError);
       throw new Error(`Error fetching matchups: ${matchupsError.message}`);
     }
+    
     if (!matchupRows || matchupRows.length === 0) {
-        console.log("No matchup data returned from latest_three_ball_matchups.");
-        return { matchups: [] };
+      console.log(`No matchup data returned from latest_${matchupType}_matchups.`);
+      return { matchups: [] };
     }
 
     // 2. Get Unique Player IDs from all players in the fetched matchups
-    const playerIds = [
-      ...new Set(
-        matchupRows.flatMap(row => [row.p1_dg_id, row.p2_dg_id, row.p3_dg_id])
-                   .filter((id): id is number => id != null) // Ensure IDs are numbers and not null
-      ),
-    ];
+    let playerIds: number[];
+    if (matchupType === '3ball') {
+      playerIds = [
+        ...new Set(
+          (matchupRows as LatestThreeBallMatchupRow[]).flatMap(row => [row.p1_dg_id, row.p2_dg_id, row.p3_dg_id])
+                     .filter((id): id is number => id != null) // Ensure IDs are numbers and not null
+        ),
+      ];
+    } else {
+      playerIds = [
+        ...new Set(
+          (matchupRows as LatestTwoBallMatchupRow[]).flatMap(row => [row.p1_dg_id, row.p2_dg_id])
+                     .filter((id): id is number => id != null) // Ensure IDs are numbers and not null
+        ),
+      ];
+    }
 
     if (playerIds.length === 0) {
         console.log("No valid player IDs found in fetched matchups.");
@@ -241,36 +294,63 @@ export async function getMatchups(matchupType: string, bookmaker?: string): Prom
 
     // 4. Process Each Matchup Row: Create Player objects, Calculate Scores, Determine Recommendation
     const processedMatchups: Matchup[] = matchupRows.map((row) => {
-
-        // Safely access odds using the known keys based on selectedBookmaker
-        const oddsP1Key = `${selectedBookmaker}_p1_odds` as keyof LatestThreeBallMatchupRow;
-        const oddsP2Key = `${selectedBookmaker}_p2_odds` as keyof LatestThreeBallMatchupRow;
-        const oddsP3Key = `${selectedBookmaker}_p3_odds` as keyof LatestThreeBallMatchupRow;
-
-        const p1 = {
-            id: row.p1_dg_id,
-            name: row.p1_player_name,
-            odds: Number(row[oddsP1Key]) || 0,
-            sgTotal: playerStatsMap.get(row.p1_dg_id!)?.sgTotal ?? 0
-        };
-        const p2 = {
-            id: row.p2_dg_id,
-            name: row.p2_player_name,
-            odds: Number(row[oddsP2Key]) || 0,
-            sgTotal: playerStatsMap.get(row.p2_dg_id!)?.sgTotal ?? 0
-        };
-        const p3 = {
-            id: row.p3_dg_id,
-            name: row.p3_player_name,
-            odds: Number(row[oddsP3Key]) || 0,
-            sgTotal: playerStatsMap.get(row.p3_dg_id!)?.sgTotal ?? 0
-        };
-
-        // Create initial array
-        const playersInitial = [p1, p2, p3];
-
         // Define the type for a player object *after* null checks
         type ValidPlayerData = { id: number; name: string; odds: number; sgTotal: number };
+        
+        // Initialize players array based on matchup type
+        let playersInitial: any[] = [];
+        let expectedPlayerCount = 0;
+        
+        if (matchupType === '3ball') {
+            const typedRow = row as LatestThreeBallMatchupRow;
+            // Safely access odds using the known keys based on selectedBookmaker
+            const oddsP1Key = `${selectedBookmaker}_p1_odds` as keyof LatestThreeBallMatchupRow;
+            const oddsP2Key = `${selectedBookmaker}_p2_odds` as keyof LatestThreeBallMatchupRow;
+            const oddsP3Key = `${selectedBookmaker}_p3_odds` as keyof LatestThreeBallMatchupRow;
+
+            const p1 = {
+                id: typedRow.p1_dg_id,
+                name: typedRow.p1_player_name,
+                odds: Number(typedRow[oddsP1Key]) || 0,
+                sgTotal: playerStatsMap.get(typedRow.p1_dg_id!)?.sgTotal ?? 0
+            };
+            const p2 = {
+                id: typedRow.p2_dg_id,
+                name: typedRow.p2_player_name,
+                odds: Number(typedRow[oddsP2Key]) || 0,
+                sgTotal: playerStatsMap.get(typedRow.p2_dg_id!)?.sgTotal ?? 0
+            };
+            const p3 = {
+                id: typedRow.p3_dg_id,
+                name: typedRow.p3_player_name,
+                odds: Number(typedRow[oddsP3Key]) || 0,
+                sgTotal: playerStatsMap.get(typedRow.p3_dg_id!)?.sgTotal ?? 0
+            };
+            
+            playersInitial = [p1, p2, p3];
+            expectedPlayerCount = 3;
+        } else {
+            const typedRow = row as LatestTwoBallMatchupRow;
+            // Safely access odds for 2ball
+            const oddsP1Key = `${selectedBookmaker}_p1_odds` as keyof LatestTwoBallMatchupRow;
+            const oddsP2Key = `${selectedBookmaker}_p2_odds` as keyof LatestTwoBallMatchupRow;
+
+            const p1 = {
+                id: typedRow.p1_dg_id,
+                name: typedRow.p1_player_name,
+                odds: Number(typedRow[oddsP1Key]) || 0,
+                sgTotal: playerStatsMap.get(typedRow.p1_dg_id!)?.sgTotal ?? 0
+            };
+            const p2 = {
+                id: typedRow.p2_dg_id,
+                name: typedRow.p2_player_name,
+                odds: Number(typedRow[oddsP2Key]) || 0,
+                sgTotal: playerStatsMap.get(typedRow.p2_dg_id!)?.sgTotal ?? 0
+            };
+            
+            playersInitial = [p1, p2];
+            expectedPlayerCount = 2;
+        }
 
         // Filter out invalid players using a type predicate to narrow the type
         const validPlayers = playersInitial.filter(
@@ -287,9 +367,9 @@ export async function getMatchups(matchupType: string, bookmaker?: string): Prom
                 isRecommended: false
             }));
 
-        // Need 3 valid players for a 3-ball matchup calculation
-        if (groupPlayers.length !== 3) {
-            console.warn(`Matchup ID ${row.id} does not have 3 valid players. Skipping scoring.`);
+        // Need expected number of valid players for a matchup calculation
+        if (groupPlayers.length !== expectedPlayerCount) {
+            console.warn(`Matchup ID ${row.id} does not have ${expectedPlayerCount} valid players. Skipping scoring.`);
             return {
                 id: String(row.id),
                 group: `Event: ${row.event_name || 'N/A'}, Round: ${row.round_num || 'N/A'}`,

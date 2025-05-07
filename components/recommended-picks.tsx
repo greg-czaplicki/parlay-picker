@@ -34,20 +34,26 @@ const formatOdds = (decimalOdds: number | null | undefined): string => {
 };
 
 export default function RecommendedPicks({
-  matchupType,
+  matchupType = "3ball",
   bookmaker,
   limit = 10, // Default limit
 }: RecommendedPicksProps) {
   const [recommendations, setRecommendations] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [activeMatchupType, setActiveMatchupType] = useState<"2ball" | "3ball">(matchupType as "2ball" | "3ball")
+
+  // Update local state when prop changes
+  useEffect(() => {
+    setActiveMatchupType(matchupType as "2ball" | "3ball");
+  }, [matchupType]);
 
   useEffect(() => {
     const fetchRecommendations = async () => {
       setLoading(true)
       setError(null)
       try {
-        const { matchups, error: fetchError } = await getMatchups(matchupType, bookmaker)
+        const { matchups, error: fetchError } = await getMatchups(activeMatchupType, bookmaker)
 
         if (fetchError) {
           throw new Error(fetchError)
@@ -75,12 +81,12 @@ export default function RecommendedPicks({
     }
 
     fetchRecommendations()
-  }, [matchupType, bookmaker, limit]) // Re-fetch if props change
+  }, [activeMatchupType, bookmaker, limit]) // Re-fetch if props change
 
   return (
     <Card className="glass-card highlight-card">
       <CardContent className="p-6">
-        <h2 className="text-xl font-bold mb-4">Top {limit} Recommended Picks</h2>
+        <h2 className="text-xl font-bold mb-4">Top {limit} {activeMatchupType === "3ball" ? "3-Ball" : "2-Ball"} Picks</h2>
 
         {loading && (
           <div className="space-y-4">

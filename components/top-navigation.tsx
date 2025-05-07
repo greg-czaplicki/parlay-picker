@@ -11,7 +11,24 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error("Supabase URL or Anon Key missing for TopNavigation");
 }
-const supabase = createClient(supabaseUrl!, supabaseAnonKey!); // Or handle nulls
+const supabase = createClient(supabaseUrl!, supabaseAnonKey!);
+
+// Type definitions for better type safety
+type EventType = 'main' | 'opposite' | null;
+
+interface Tournament {
+  event_id: number;
+  event_name: string;
+  start_date: string | null;
+  end_date: string | null;
+}
+
+interface DisplayEvent {
+  event_id: number;
+  event_name: string;
+  dates: string;
+  eventType: EventType;
+}
 
 // Helper to format dates
 function formatTournamentDates(startDateStr: string | null, endDateStr: string | null): string {
@@ -33,86 +50,121 @@ function formatTournamentDates(startDateStr: string | null, endDateStr: string |
       return `${startMonth} ${startDay} - ${endMonth} ${endDay}, ${year}`;
     }
   } catch (e) {
-      console.error("Error formatting dates:", e);
-      return "Invalid Dates";
+    console.error("Error formatting dates:", e);
+    return "Invalid Dates";
   }
 }
 
 export default function TopNavigation() {
-  const [tournamentName, setTournamentName] = useState<string | null>(null);
-  const [tournamentDates, setTournamentDates] = useState<string | null>(null);
+  const [activeEvents, setActiveEvents] = useState<DisplayEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchLatestTournament = async () => {
+    const fetchActiveEvents = async () => {
       setLoading(true);
       try {
-        // Get today's date in YYYY-MM-DD format
-        const today = new Date().toISOString().split('T')[0];
+        // Get this week's dates (Monday to Sunday)
+        const currentDate = new Date();
+        const dayOfWeek = currentDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
+        const monday = new Date(currentDate);
+        monday.setDate(currentDate.getDate() - ((dayOfWeek + 6) % 7)); // Go back to the most recent Monday
+        const sunday = new Date(monday);
+        sunday.setDate(monday.getDate() + 6);
+        
+        const mondayStr = monday.toISOString().split('T')[0];
+        const sundayStr = sunday.toISOString().split('T')[0];
 
+        // Log the date range for debugging
+        console.log(`Fetching tournaments from ${mondayStr} to ${sundayStr}`);
+
+        // Fetch all tournaments happening this week with their event_id for sorting
         const { data, error } = await supabase
           .from('tournaments')
-          .select('event_name, start_date, end_date')
-          // Filter for tournaments ending on or after today
-          .gte('end_date', today)
-          // Order by start date ascending to get the next one
-          .order('start_date', { ascending: true })
-          .limit(1);
+          .select('event_id, event_name, start_date, end_date')
+          // Tournament starts before or on Sunday AND ends after or on Monday
+          .lte('start_date', sundayStr)
+          .gte('end_date', mondayStr)
+          // Order by event_id (main tour events typically have lower IDs)
+          .order('event_id', { ascending: true });
 
         if (error) throw error;
 
         if (data && data.length > 0) {
-          const nextTournament = data[0];
-          setTournamentName(nextTournament.event_name);
-          setTournamentDates(formatTournamentDates(nextTournament.start_date, nextTournament.end_date));
+          console.log(`Found ${data.length} active tournaments`, data);
+          
+          // Process the tournaments - main events have lower event_ids, opposite field higher
+          let eventsWithTypes = data.map((tournament: Tournament, index: number, array: Tournament[]) => {
+            const eventType: EventType = 
+              // For weeks with 2 events, we mark them as main/opposite
+              array.length === 2 ? 
+                index === 0 ? 'main' : 'opposite' :
+              // For weeks with more events, main event is first, rest have no label
+              array.length > 2 ?
+                index === 0 ? 'main' : null :
+              // Single event weeks have no special label
+              null;
+              
+            return {
+              event_id: tournament.event_id,
+              event_name: tournament.event_name,
+              dates: formatTournamentDates(tournament.start_date, tournament.end_date),
+              eventType
+            };
+          });
+          
+          // Sort so main event is first, then opposite field, then others
+          eventsWithTypes.sort((a, b) => {
+            // Main event goes first
+            if (a.eventType === 'main') return -1;
+            if (b.eventType === 'main') return 1;
+            // Opposite field goes next
+            if (a.eventType === 'opposite') return -1;
+            if (b.eventType === 'opposite') return 1;
+            // Otherwise, sort by event_id
+            return a.event_id - b.event_id;
+          });
+          
+          setActiveEvents(eventsWithTypes);
         } else {
-          // Handle case where no upcoming tournaments are found (e.g., end of season)
-          // Maybe fetch the absolute last completed one as a fallback?
-          console.log("No upcoming tournaments found. Fetching last completed...");
-           const { data: lastData, error: lastError } = await supabase
-            .from('tournaments')
-            .select('event_name, start_date, end_date')
-            .order('start_date', { ascending: false })
-            .limit(1);
-
-           if(lastData && lastData.length > 0) {
-              const lastTournament = lastData[0];
-              setTournamentName(lastTournament.event_name + " (Last Completed)");
-              setTournamentDates(formatTournamentDates(lastTournament.start_date, lastTournament.end_date));
-           } else {
-              setTournamentName("No Tournament Data");
-              setTournamentDates("");
-           }
+          console.log("No active tournaments found for the current week.");
+          setActiveEvents([]);
         }
       } catch (error: any) {
-        console.error("Error fetching latest/next tournament:", error?.message || JSON.stringify(error));
-        setTournamentName("Error Loading Tournament");
-        setTournamentDates("");
+        console.error("Error fetching active tournaments:", error?.message || JSON.stringify(error));
+        setActiveEvents([]);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchLatestTournament();
+    fetchActiveEvents();
   }, []);
 
   return (
     <div className="top-navigation">
       <div className="flex items-center">
         {loading ? (
-            <Loader2 className="h-5 w-5 animate-spin mr-2" />
+          <Loader2 className="h-5 w-5 animate-spin mr-2" />
         ) : (
-            <>
-                <span className="font-bold text-lg">{tournamentName || "Event Name"}</span>
-                {tournamentDates && <span className="text-gray-400 text-sm ml-4">{tournamentDates}</span>}
-            </>
+          <div className="flex flex-col">
+            {activeEvents.length > 0 ? (
+              activeEvents.map((event, index) => (
+                <div key={index} className="flex items-center mb-1 last:mb-0">
+                  <span className="font-bold text-lg">{event.event_name}</span>
+                  <span className="text-gray-400 text-sm ml-4">{event.dates}</span>
+                  {event.eventType === 'main' && 
+                    <span className="ml-2 text-xs px-2 py-0.5 bg-green-800 text-white rounded-full">Main Event</span>
+                  }
+                  {event.eventType === 'opposite' && 
+                    <span className="ml-2 text-xs px-2 py-0.5 bg-blue-800 text-white rounded-full">Opposite Field</span>
+                  }
+                </div>
+              ))
+            ) : (
+              <span className="font-bold text-lg">No Active Tournaments</span>
+            )}
+          </div>
         )}
-      </div>
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
-          <Calendar className="text-gray-400" size={18} />
-          <span className="text-gray-400 text-sm">Tournament Week</span>
-        </div>
       </div>
     </div>
   )

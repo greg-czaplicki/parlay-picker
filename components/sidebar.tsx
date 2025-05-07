@@ -30,8 +30,12 @@ export default function Sidebar() {
       <Link href="/">
         <SidebarIcon icon={<Home size={24} />} text="Dashboard" />
       </Link>
-      <SidebarIcon icon={<Flag size={24} />} text="Tournaments" />
-      <SidebarIcon icon={<Users size={24} />} text="Players" />
+      <Link href="/matchups">
+        <SidebarIcon icon={<Flag size={24} />} text="Matchups" />
+      </Link>
+      <Link href="/players">
+        <SidebarIcon icon={<Users size={24} />} text="Players" />
+      </Link>
       <SidebarIcon icon={<BarChart2 size={24} />} text="Stats" />
       <Link href="/parlays">
         <SidebarIcon icon={<TrendingUp size={24} />} text="Parlays" />
