@@ -14,13 +14,14 @@ if (!supabaseUrl || !supabaseAnonKey) {
 const supabase = createClient(supabaseUrl!, supabaseAnonKey!);
 
 // Type definitions for better type safety
-type EventType = 'main' | 'opposite' | null;
+type EventType = 'main' | 'opposite' | 'euro' | null;
 
 interface Tournament {
   event_id: number;
   event_name: string;
   start_date: string | null;
   end_date: string | null;
+  tour?: string;
 }
 
 interface DisplayEvent {
@@ -28,6 +29,7 @@ interface DisplayEvent {
   event_name: string;
   dates: string;
   eventType: EventType;
+  tour?: string;
 }
 
 // Helper to format dates
@@ -77,14 +79,15 @@ export default function TopNavigation() {
         // Log the date range for debugging
         console.log(`Fetching tournaments from ${mondayStr} to ${sundayStr}`);
 
-        // Fetch all tournaments happening this week with their event_id for sorting
+        // Fetch all tournaments happening this week with their event_id and tour for sorting
         const { data, error } = await supabase
           .from('tournaments')
-          .select('event_id, event_name, start_date, end_date')
+          .select('event_id, event_name, start_date, end_date, tour')
           // Tournament starts before or on Sunday AND ends after or on Monday
           .lte('start_date', sundayStr)
           .gte('end_date', mondayStr)
-          // Order by event_id (main tour events typically have lower IDs)
+          // Order first by tour (pga first), then by event_id
+          .order('tour', { ascending: true })
           .order('event_id', { ascending: true });
 
         if (error) throw error;
@@ -92,27 +95,47 @@ export default function TopNavigation() {
         if (data && data.length > 0) {
           console.log(`Found ${data.length} active tournaments`, data);
           
-          // Process the tournaments - main events have lower event_ids, opposite field higher
-          let eventsWithTypes = data.map((tournament: Tournament, index: number, array: Tournament[]) => {
-            const eventType: EventType = 
-              // For weeks with 2 events, we mark them as main/opposite
-              array.length === 2 ? 
-                index === 0 ? 'main' : 'opposite' :
-              // For weeks with more events, main event is first, rest have no label
-              array.length > 2 ?
-                index === 0 ? 'main' : null :
-              // Single event weeks have no special label
-              null;
+          // First, identify PGA Tour events (both main and opposite field)
+          const pgaEvents = data.filter(t => t.tour === 'pga' || !t.tour);
+          
+          // Get lowest event ID for PGA events - this will be our main event
+          let mainEventId = -1;
+          if (pgaEvents.length > 0) {
+            const lowestIdPgaEvent = pgaEvents.reduce((lowest, current) => 
+              current.event_id < lowest.event_id ? current : lowest, pgaEvents[0]);
+            mainEventId = lowestIdPgaEvent.event_id;
+          }
+          
+          // Process the tournaments - determine event type based on tour and event ID
+          let eventsWithTypes = data.map((tournament: Tournament) => {
+            // Determine event type based on tour field and event ID
+            let eventType: EventType = null;
+            
+            if (tournament.tour === 'euro') {
+              // European Tour event
+              eventType = 'euro';
+            } else if (tournament.tour === 'opp') {
+              // Explicitly labeled opposite field event
+              eventType = 'opposite';
+            } else if (tournament.tour === 'pga' || !tournament.tour) {
+              // For PGA events, the lowest event ID is the main event
+              if (tournament.event_id === mainEventId) {
+                eventType = 'main';
+              } else {
+                eventType = 'opposite';
+              }
+            }
               
             return {
               event_id: tournament.event_id,
               event_name: tournament.event_name,
               dates: formatTournamentDates(tournament.start_date, tournament.end_date),
-              eventType
+              eventType,
+              tour: tournament.tour
             };
           });
           
-          // Sort so main event is first, then opposite field, then others
+          // Sort so main event is first, then opposite field, then European, then others
           eventsWithTypes.sort((a, b) => {
             // Main event goes first
             if (a.eventType === 'main') return -1;
@@ -120,6 +143,9 @@ export default function TopNavigation() {
             // Opposite field goes next
             if (a.eventType === 'opposite') return -1;
             if (b.eventType === 'opposite') return 1;
+            // European tour goes after that
+            if (a.eventType === 'euro') return -1;
+            if (b.eventType === 'euro') return 1;
             // Otherwise, sort by event_id
             return a.event_id - b.event_id;
           });
@@ -153,10 +179,13 @@ export default function TopNavigation() {
                   <span className="font-bold text-lg">{event.event_name}</span>
                   <span className="text-gray-400 text-sm ml-4">{event.dates}</span>
                   {event.eventType === 'main' && 
-                    <span className="ml-2 text-xs px-2 py-0.5 bg-green-800 text-white rounded-full">Main Event</span>
+                    <span className="ml-2 text-xs px-2 py-0.5 bg-green-800 text-white rounded-full">Main</span>
                   }
                   {event.eventType === 'opposite' && 
-                    <span className="ml-2 text-xs px-2 py-0.5 bg-blue-800 text-white rounded-full">Opposite Field</span>
+                    <span className="ml-2 text-xs px-2 py-0.5 bg-blue-800 text-white rounded-full">Opposite</span>
+                  }
+                  {event.eventType === 'euro' && 
+                    <span className="ml-2 text-xs px-2 py-0.5 bg-purple-800 text-white rounded-full">Euro</span>
                   }
                 </div>
               ))

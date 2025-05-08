@@ -33,6 +33,7 @@ interface DataGolfResponse {
 
 // Define the structure for Supabase insertion
 interface SupabaseMatchup {
+  event_id: number;
   event_name: string;
   round_num: number;
   data_golf_update_time: string;
@@ -52,6 +53,7 @@ interface SupabaseMatchup {
   datagolf_p1_odds: number | null;
   datagolf_p2_odds: number | null;
   datagolf_p3_odds: number | null;
+  tour?: string; // Added tour field
 }
 
 // Initialize Supabase client - Ensure these environment variables are set!
@@ -71,15 +73,61 @@ if (!dataGolfApiKey) {
     throw new Error("Data Golf API Key is missing in environment variables.");
 }
 
+// URLs for different tours
 const DATA_GOLF_PGA_URL = `https://feeds.datagolf.com/betting-tools/matchups?tour=pga&market=3_balls&odds_format=decimal&file_format=json&key=${dataGolfApiKey}`;
 const DATA_GOLF_OPP_URL = `https://feeds.datagolf.com/betting-tools/matchups?tour=opp&market=3_balls&odds_format=decimal&file_format=json&key=${dataGolfApiKey}`;
+const DATA_GOLF_EURO_URL = `https://feeds.datagolf.com/betting-tools/matchups?tour=euro&market=3_balls&odds_format=decimal&file_format=json&key=${dataGolfApiKey}`;
+
+// Helper function to process matchups for a specific tour
+async function processMatchups(data: DataGolfResponse, eventMapping: Record<string, number>, tourCode: string, fallbackEventId: number): SupabaseMatchup[] {
+  if (!data || !data.match_list) {
+    console.log(`No 3-ball matchups found for ${tourCode} tour`);
+    return [];
+  }
+  
+  // Find appropriate event ID based on event name
+  let eventId = fallbackEventId;
+  if (data.event_name) {
+    const nameLower = data.event_name.toLowerCase();
+    if (eventMapping[nameLower]) {
+      eventId = eventMapping[nameLower];
+    }
+  }
+  
+  console.log(`Processing ${data.match_list.length} 3-ball matchups for ${tourCode} tour - ${data.event_name} (Event ID: ${eventId})`);
+  
+  return data.match_list.map(m => ({
+    event_id: eventId,
+    event_name: data.event_name,
+    round_num: data.round_num,
+    data_golf_update_time: new Date(data.last_updated.replace(" UTC", "Z")).toISOString(),
+    p1_dg_id: m.p1_dg_id,
+    p1_player_name: m.p1_player_name,
+    p2_dg_id: m.p2_dg_id,
+    p2_player_name: m.p2_player_name,
+    p3_dg_id: m.p3_dg_id,
+    p3_player_name: m.p3_player_name,
+    ties_rule: m.ties,
+    fanduel_p1_odds: m.odds?.fanduel?.p1 || null,
+    fanduel_p2_odds: m.odds?.fanduel?.p2 || null,
+    fanduel_p3_odds: m.odds?.fanduel?.p3 || null,
+    draftkings_p1_odds: m.odds?.draftkings?.p1 || null,
+    draftkings_p2_odds: m.odds?.draftkings?.p2 || null,
+    draftkings_p3_odds: m.odds?.draftkings?.p3 || null,
+    datagolf_p1_odds: m.odds?.datagolf?.p1 || null,
+    datagolf_p2_odds: m.odds?.datagolf?.p2 || null,
+    datagolf_p3_odds: m.odds?.datagolf?.p3 || null,
+    tour: tourCode.toLowerCase()
+  }));
+}
 
 export async function GET(request: Request) {
   // Parse query parameters
   const url = new URL(request.url);
   const eventId = url.searchParams.get('eventId');
+  const tour = url.searchParams.get('tour'); // Optional parameter to filter by tour
   
-  console.log(`API: Received request for 3-ball matchups with eventId=${eventId}`);
+  console.log(`API: Received request for 3-ball matchups with eventId=${eventId}, tour=${tour}`);
   
   // Skip caching for now - we'll always fetch fresh data
   console.log("Fetching fresh data from DataGolf API");
@@ -88,27 +136,54 @@ export async function GET(request: Request) {
     // Fetch from DataGolf APIs directly
     console.log("Fetching 3-ball matchups from Data Golf APIs...");
     
-    // Fetch both PGA and Opposite Field events in parallel
-    const [pgaRes, oppRes] = await Promise.all([
+    // Fetch all tours in parallel
+    const [pgaRes, oppRes, euroRes] = await Promise.all([
       fetch(DATA_GOLF_PGA_URL, { cache: 'no-store' }),
-      fetch(DATA_GOLF_OPP_URL, { cache: 'no-store' })
+      fetch(DATA_GOLF_OPP_URL, { cache: 'no-store' }),
+      fetch(DATA_GOLF_EURO_URL, { cache: 'no-store' })
     ]);
     
-    if (!pgaRes.ok || !oppRes.ok) {
-      throw new Error("Failed to fetch from DataGolf API");
+    // Check if at least one API call succeeded
+    if (!pgaRes.ok && !oppRes.ok && !euroRes.ok) {
+      throw new Error("Failed to fetch from DataGolf API for all tours");
     }
     
-    // Parse the responses
-    const pgaData = await pgaRes.json();
-    const oppData = await oppRes.json();
+    // Parse the responses with error handling
+    let pgaData: DataGolfResponse | null = null;
+    let oppData: DataGolfResponse | null = null;
+    let euroData: DataGolfResponse | null = null;
     
-    console.log(`PGA event: ${pgaData.event_name}, matchups: ${pgaData.match_list?.length || 0}`);
-    console.log(`Opposite field event: ${oppData.event_name}, matchups: ${oppData.match_list?.length || 0}`);
+    try {
+      if (pgaRes.ok) {
+        pgaData = await pgaRes.json();
+        console.log(`PGA event: ${pgaData.event_name}, 3-ball matchups: ${pgaData.match_list?.length || 0}`);
+      }
+    } catch (error) {
+      console.error("Error parsing PGA 3-ball data:", error);
+    }
+    
+    try {
+      if (oppRes.ok) {
+        oppData = await oppRes.json();
+        console.log(`Opposite field event: ${oppData.event_name}, 3-ball matchups: ${oppData.match_list?.length || 0}`);
+      }
+    } catch (error) {
+      console.error("Error parsing Opposite field 3-ball data:", error);
+    }
+    
+    try {
+      if (euroRes.ok) {
+        euroData = await euroRes.json();
+        console.log(`European Tour event: ${euroData.event_name}, 3-ball matchups: ${euroData.match_list?.length || 0}`);
+      }
+    } catch (error) {
+      console.error("Error parsing European Tour 3-ball data:", error);
+    }
     
     // Get tournaments to map event names to IDs
     const { data: tournaments } = await supabase
       .from("tournaments")
-      .select("event_id, event_name");
+      .select("event_id, event_name, tour");
     
     // Create a map to look up event IDs
     const eventMapping = {};
@@ -117,66 +192,21 @@ export async function GET(request: Request) {
         const nameLower = t.event_name.toLowerCase();
         eventMapping[nameLower] = t.event_id;
         
-        // Add partial matches too
+        // Add partial matches too for backward compatibility
         if (nameLower.includes('truist')) eventMapping['truist'] = t.event_id;
         if (nameLower.includes('myrtle')) eventMapping['myrtle'] = t.event_id;
       });
     }
     
-    // Process PGA matchups
-    const pgaEventId = eventMapping['truist'] || 480; // Fallback to 480 if not found
-    const pgaMatchups = (pgaData.match_list || []).map(m => ({
-      event_id: pgaEventId,
-      event_name: pgaData.event_name,
-      round_num: pgaData.round_num,
-      data_golf_update_time: new Date(pgaData.last_updated.replace(" UTC", "Z")).toISOString(),
-      p1_dg_id: m.p1_dg_id,
-      p1_player_name: m.p1_player_name,
-      p2_dg_id: m.p2_dg_id,
-      p2_player_name: m.p2_player_name,
-      p3_dg_id: m.p3_dg_id,
-      p3_player_name: m.p3_player_name,
-      ties_rule: m.ties,
-      fanduel_p1_odds: m.odds?.fanduel?.p1 || null,
-      fanduel_p2_odds: m.odds?.fanduel?.p2 || null,
-      fanduel_p3_odds: m.odds?.fanduel?.p3 || null,
-      draftkings_p1_odds: m.odds?.draftkings?.p1 || null,
-      draftkings_p2_odds: m.odds?.draftkings?.p2 || null,
-      draftkings_p3_odds: m.odds?.draftkings?.p3 || null,
-      datagolf_p1_odds: m.odds?.datagolf?.p1 || null,
-      datagolf_p2_odds: m.odds?.datagolf?.p2 || null,
-      datagolf_p3_odds: m.odds?.datagolf?.p3 || null
-    }));
-    
-    // Process Opposite Field matchups
-    const oppEventId = eventMapping['myrtle'] || 553; // Fallback to 553 if not found
-    const oppMatchups = (oppData.match_list || []).map(m => ({
-      event_id: oppEventId,
-      event_name: oppData.event_name,
-      round_num: oppData.round_num,
-      data_golf_update_time: new Date(oppData.last_updated.replace(" UTC", "Z")).toISOString(),
-      p1_dg_id: m.p1_dg_id,
-      p1_player_name: m.p1_player_name,
-      p2_dg_id: m.p2_dg_id,
-      p2_player_name: m.p2_player_name,
-      p3_dg_id: m.p3_dg_id,
-      p3_player_name: m.p3_player_name,
-      ties_rule: m.ties,
-      fanduel_p1_odds: m.odds?.fanduel?.p1 || null,
-      fanduel_p2_odds: m.odds?.fanduel?.p2 || null,
-      fanduel_p3_odds: m.odds?.fanduel?.p3 || null,
-      draftkings_p1_odds: m.odds?.draftkings?.p1 || null,
-      draftkings_p2_odds: m.odds?.draftkings?.p2 || null,
-      draftkings_p3_odds: m.odds?.draftkings?.p3 || null,
-      datagolf_p1_odds: m.odds?.datagolf?.p1 || null,
-      datagolf_p2_odds: m.odds?.datagolf?.p2 || null,
-      datagolf_p3_odds: m.odds?.datagolf?.p3 || null
-    }));
+    // Process matchups for each tour
+    const pgaMatchups = pgaData ? await processMatchups(pgaData, eventMapping, "pga", 480) : [];
+    const oppMatchups = oppData ? await processMatchups(oppData, eventMapping, "opp", 553) : [];
+    const euroMatchups = euroData ? await processMatchups(euroData, eventMapping, "euro", 600) : []; // Using 600 as fallback ID for Euro events
     
     // Combine all matchups
-    const allMatchups = [...pgaMatchups, ...oppMatchups];
+    const allMatchups = [...pgaMatchups, ...oppMatchups, ...euroMatchups];
     
-    console.log(`Processed ${allMatchups.length} total 3-ball matchups`);
+    console.log(`Processed ${allMatchups.length} total 3-ball matchups across all tours`);
     
     // Save matchups to both latest and historical tables
     try {
@@ -191,11 +221,15 @@ export async function GET(request: Request) {
       
       if (!historyError && latestHistory && latestHistory.length > 0) {
         const historyTime = new Date(latestHistory[0].data_golf_update_time);
-        const pgaTime = new Date(pgaData.last_updated.replace(" UTC", "Z"));
-        const oppTime = new Date(oppData.last_updated.replace(" UTC", "Z"));
+        // Check update times from all tours that have data
+        const updateTimes = [
+          pgaData ? new Date(pgaData.last_updated.replace(" UTC", "Z")) : null,
+          oppData ? new Date(oppData.last_updated.replace(" UTC", "Z")) : null,
+          euroData ? new Date(euroData.last_updated.replace(" UTC", "Z")) : null
+        ].filter(Boolean);
         
-        // Only save to history if we have newer data
-        shouldSaveHistory = (pgaTime > historyTime) || (oppTime > historyTime);
+        // Only save to history if any tour has newer data
+        shouldSaveHistory = updateTimes.some(time => time > historyTime);
       }
       
       // Save to historical table if we have newer data
@@ -227,14 +261,23 @@ export async function GET(request: Request) {
       // Continue anyway - we'll return the API data directly
     }
     
-    // Filter matchups if eventId is provided
+    // Apply filters if specified
     let filteredMatchups = allMatchups;
+    
+    // Filter by event ID if provided
     if (eventId) {
       const eventIdInt = parseInt(eventId, 10);
       if (!isNaN(eventIdInt)) {
-        filteredMatchups = allMatchups.filter(m => Number(m.event_id) === eventIdInt);
+        filteredMatchups = filteredMatchups.filter(m => Number(m.event_id) === eventIdInt);
         console.log(`Filtered to ${filteredMatchups.length} 3-ball matchups for event ${eventIdInt}`);
       }
+    }
+    
+    // Filter by tour if provided
+    if (tour) {
+      const tourLower = tour.toLowerCase();
+      filteredMatchups = filteredMatchups.filter(m => m.tour === tourLower);
+      console.log(`Filtered to ${filteredMatchups.length} 3-ball matchups for tour ${tourLower}`);
     }
     
     // Group matchups by event
@@ -245,6 +288,7 @@ export async function GET(request: Request) {
         matchupsByEvent[eventId] = {
           event_id: m.event_id,
           event_name: m.event_name,
+          tour: m.tour,
           matchups: []
         };
       }
@@ -254,7 +298,12 @@ export async function GET(request: Request) {
     return NextResponse.json({
       success: true,
       matchups: filteredMatchups,
-      events: Object.values(matchupsByEvent)
+      events: Object.values(matchupsByEvent),
+      tourCounts: {
+        pga: pgaMatchups.length,
+        opp: oppMatchups.length,
+        euro: euroMatchups.length
+      }
     });
     
   } catch (error) {
