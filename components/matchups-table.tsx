@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Loader2, AlertTriangle, DollarSign } from "lucide-react"
+import { Loader2, AlertTriangle, DollarSign, Sliders } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Tooltip,
@@ -25,6 +25,16 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Slider } from "@/components/ui/slider"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { detect3BallDivergence } from "@/lib/utils"
 
 // Only 3-ball matchups
@@ -86,6 +96,10 @@ export default function MatchupsTable({
   const [selectedBookmaker, setSelectedBookmaker] = useState<"fanduel">("fanduel");
   const [lastUpdateTime, setLastUpdateTime] = useState<string | null>(null);
   const [activeMatchupType, setActiveMatchupType] = useState<"2ball" | "3ball">(matchupType);
+  
+  // Odds gap filter state
+  const [oddsGapThreshold, setOddsGapThreshold] = useState(40); // Default 40 points in American odds
+  const [showFiltersDialog, setShowFiltersDialog] = useState(false);
 
   useEffect(() => {
     // Reset state before fetching new data
@@ -307,6 +321,31 @@ export default function MatchupsTable({
     return name.includes(",") ? name.split(",").reverse().join(" ").trim() : name;
   };
 
+  // Calculate if the odds gap exceeds the threshold
+  const hasSignificantOddsGap = (playerOdds: number | null, referenceOdds: number | null): boolean => {
+    if (!playerOdds || !referenceOdds || playerOdds <= 1 || referenceOdds <= 1) return false;
+    
+    // For 3ball matchups, we want to highlight value - odds that are higher than expected
+    // compared to the second favorite
+    
+    // Convert decimal odds to American for comparison
+    const americanStrPlayer = decimalToAmerican(playerOdds);
+    const americanStrReference = decimalToAmerican(referenceOdds);
+    
+    // Parse American odds to numbers, respecting negative values for favorites
+    const americanPlayer = parseInt(americanStrPlayer);
+    const americanReference = parseInt(americanStrReference);
+    
+    if (isNaN(americanPlayer) || isNaN(americanReference)) return false;
+    
+    // Calculate the absolute difference between the odds
+    const diff = Math.abs(americanPlayer - americanReference);
+    
+    // For the comparison to be meaningful, we're looking for significant discrepancies
+    // where the player's odds are notably different from the second-best player
+    return diff >= oddsGapThreshold;
+  };
+
   if (loading) {
     return (
       <Card className="glass-card">
@@ -347,6 +386,51 @@ export default function MatchupsTable({
                 {matchups.length > 0 && <p className="text-sm text-gray-400">Event: {matchups[0].event_name}</p>}
               </div>
               <div className="flex items-center gap-2">
+                <Dialog open={showFiltersDialog} onOpenChange={setShowFiltersDialog}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="sm" className="flex items-center gap-1">
+                      <Sliders className="h-4 w-4" />
+                      <span>Filter</span>
+                      {oddsGapThreshold > 0 && 
+                        <span className="ml-1 bg-green-700 text-green-100 text-xs px-1.5 py-0.5 rounded-full">
+                          {oddsGapThreshold}+
+                        </span>
+                      }
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Odds Gap Filter</DialogTitle>
+                    </DialogHeader>
+                    <div className="py-4">
+                      <div className="mb-4">
+                        <Label htmlFor="odds-gap">
+                          Highlight odds gaps of at least {oddsGapThreshold} points
+                        </Label>
+                        <div className="flex items-center space-x-2 mt-2">
+                          <Slider 
+                            id="odds-gap"
+                            defaultValue={[oddsGapThreshold]} 
+                            max={200} 
+                            step={5}
+                            onValueChange={(values) => setOddsGapThreshold(values[0])}
+                            className="flex-1"
+                          />
+                          <Input 
+                            type="number" 
+                            value={oddsGapThreshold} 
+                            onChange={(e) => setOddsGapThreshold(parseInt(e.target.value) || 0)}
+                            className="w-16 ml-2" 
+                          />
+                        </div>
+                      </div>
+                      <div className="text-xs text-gray-400 mt-2">
+                        This will highlight golfers with significant odds gaps between bookmakers.
+                        <br />Setting the value to 0 will disable highlighting.
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
                 <Select 
                   value={activeMatchupType} 
                   onValueChange={(value: string) => setActiveMatchupType(value as "2ball" | "3ball")}
@@ -384,6 +468,8 @@ export default function MatchupsTable({
                       const dg_p1_odds = matchup.datagolf_p1_odds ?? matchup.odds?.datagolf?.p1 ?? null;
                       const dg_p2_odds = matchup.datagolf_p2_odds ?? matchup.odds?.datagolf?.p2 ?? null;
                       const dg_p3_odds = matchup.datagolf_p3_odds ?? matchup.odds?.datagolf?.p3 ?? null;
+                      
+                      // Check both for divergence and significant odds gaps
                       const divergence = detect3BallDivergence({
                         odds: {
                           fanduel: {
@@ -398,6 +484,62 @@ export default function MatchupsTable({
                           },
                         },
                       });
+                      
+                      // Get all players' FanDuel odds for comparison
+                      const players = [
+                        { id: 'p1', odds: matchup.fanduel_p1_odds, name: matchup.p1_player_name },
+                        { id: 'p2', odds: matchup.fanduel_p2_odds, name: matchup.p2_player_name },
+                        { id: 'p3', odds: matchup.fanduel_p3_odds, name: matchup.p3_player_name }
+                      ].filter(p => p.odds && p.odds > 1);
+                      
+                      // Sort by odds (lowest decimal odds = favorite)
+                      players.sort((a, b) => (a.odds || 999) - (b.odds || 999));
+                      
+                      // Initialize gap flags to false
+                      let p1HasGap = false;
+                      let p2HasGap = false;
+                      let p3HasGap = false;
+                      
+                      // Track the favorite player (will be needed for tooltips)
+                      let favoritePlayer = null;
+                      let gapDetails = "";
+                      
+                      // Only highlight if we have at least 3 valid odds to compare
+                      if (players.length >= 3) {
+                        // Get the favorite player
+                        const favorite = players[0];
+                        // Get the other two players
+                        const otherPlayers = players.slice(1);
+                        
+                        // Calculate the actual gaps
+                        const gaps = otherPlayers.map(other => {
+                          const gap = Math.abs(
+                            parseInt(decimalToAmerican(favorite.odds || 0)) - 
+                            parseInt(decimalToAmerican(other.odds || 0))
+                          );
+                          return { player: other, gap };
+                        });
+                        
+                        // Check if the favorite has significant gaps against BOTH other players
+                        const hasGapAgainstAll = gaps.every(({gap}) => gap >= oddsGapThreshold);
+                        
+                        // Only highlight the favorite if they have significant gaps against both others
+                        if (hasGapAgainstAll) {
+                          // Set the flag for the favorite
+                          if (favorite.id === 'p1') p1HasGap = true;
+                          else if (favorite.id === 'p2') p2HasGap = true;
+                          else if (favorite.id === 'p3') p3HasGap = true;
+                          
+                          // Store favorite for tooltip
+                          favoritePlayer = favorite;
+                          
+                          // Create gap details for tooltip
+                          gapDetails = gaps.map(({player, gap}) => 
+                            `${formatPlayerName(player.name)}: ${gap} points`
+                          ).join(", ");
+                        }
+                      }
+                      
                       return (
                         <TableRow key={`3ball-${key}`}>
                           <TableCell>
@@ -406,41 +548,37 @@ export default function MatchupsTable({
                             <div>{formatPlayerName(matchup.p3_player_name)}</div>
                           </TableCell>
                           <TableCell className="text-center">
-                            <div className="flex items-center justify-center">
-                              {formatOdds(matchup.fanduel_p1_odds)}
+                            <div className={`${p1HasGap ? "font-bold text-green-400" : ""} relative w-24 mx-auto`}>
+                              <span>{formatOdds(matchup.fanduel_p1_odds)}</span>
                               {divergence?.isDivergence && divergence.datagolfFavorite === 'p1' ? (
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <span className="ml-1 bg-green-600 text-green-100 rounded-full p-1 flex items-center justify-center cursor-pointer">
-                                      <DollarSign size={14} className="text-green-100" aria-label="Data Golf value" />
+                                    <span className="absolute right-0 top-1/2 transform -translate-y-1/2 bg-green-600 text-green-100 rounded-full p-1 flex items-center justify-center cursor-pointer">
+                                      <DollarSign size={12} className="text-green-100" aria-label="Data Golf value" />
                                     </span>
                                   </TooltipTrigger>
                                   <TooltipContent className="z-50">
                                     <span>
-                                      Divergence: FanDuel favorite is <b>{
+                                      Divergence: FanDuel favorite: <b>{
                                         divergence.fanduelFavorite === 'p1' ? formatPlayerName(matchup.p1_player_name) :
                                         divergence.fanduelFavorite === 'p2' ? formatPlayerName(matchup.p2_player_name) :
                                         divergence.fanduelFavorite === 'p3' ? formatPlayerName(matchup.p3_player_name) :
                                         'N/A'
-                                      }</b>, Data Golf favorite is <b>{
+                                      }</b>, DG favorite: <b>{
                                         formatPlayerName(matchup.p1_player_name)
                                       }</b>.
                                     </span>
                                   </TooltipContent>
                                 </Tooltip>
-                              ) : (
-                                <span className="ml-1 p-1 flex items-center justify-center invisible">
-                                  <DollarSign size={14} className="text-green-100" aria-label="Data Golf value" />
-                                </span>
-                              )}
+                              ) : null}
                             </div>
-                            <div className="flex items-center justify-center">
-                              {formatOdds(matchup.fanduel_p2_odds)}
+                            <div className={`${p2HasGap ? "font-bold text-green-400" : ""} relative w-20 mx-auto`}>
+                              <span>{formatOdds(matchup.fanduel_p2_odds)}</span>
                               {divergence?.isDivergence && divergence.datagolfFavorite === 'p2' ? (
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <span className="ml-1 bg-green-600 text-green-100 rounded-full p-1 flex items-center justify-center cursor-pointer">
-                                      <DollarSign size={14} className="text-green-100" aria-label="Data Golf value" />
+                                    <span className="absolute right-0 top-1/2 transform -translate-y-1/2 bg-green-600 text-green-100 rounded-full p-[0.15rem] flex items-center justify-center cursor-help">
+                                      <DollarSign size={11} className="text-green-100" aria-label="Data Golf value" />
                                     </span>
                                   </TooltipTrigger>
                                   <TooltipContent className="z-50">
@@ -456,19 +594,15 @@ export default function MatchupsTable({
                                     </span>
                                   </TooltipContent>
                                 </Tooltip>
-                              ) : (
-                                <span className="ml-1 p-1 flex items-center justify-center invisible">
-                                  <DollarSign size={14} className="text-green-100" aria-label="Data Golf value" />
-                                </span>
-                              )}
+                              ) : null}
                             </div>
-                            <div className="flex items-center justify-center">
-                              {formatOdds(matchup.fanduel_p3_odds)}
+                            <div className={`${p3HasGap ? "font-bold text-green-400" : ""} relative w-24 mx-auto`}>
+                              <span>{formatOdds(matchup.fanduel_p3_odds)}</span>
                               {divergence?.isDivergence && divergence.datagolfFavorite === 'p3' ? (
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <span className="ml-1 bg-green-600 text-green-100 rounded-full p-1 flex items-center justify-center cursor-pointer">
-                                      <DollarSign size={14} className="text-green-100" aria-label="Data Golf value" />
+                                    <span className="absolute right-0 top-1/2 transform -translate-y-1/2 bg-green-600 text-green-100 rounded-full p-1 flex items-center justify-center cursor-pointer">
+                                      <DollarSign size={12} className="text-green-100" aria-label="Data Golf value" />
                                     </span>
                                   </TooltipTrigger>
                                   <TooltipContent className="z-50">
@@ -484,22 +618,54 @@ export default function MatchupsTable({
                                     </span>
                                   </TooltipContent>
                                 </Tooltip>
-                              ) : (
-                                <span className="ml-1 p-1 flex items-center justify-center invisible">
-                                  <DollarSign size={14} className="text-green-100" aria-label="Data Golf value" />
-                                </span>
-                              )}
+                              ) : null}
                             </div>
                           </TableCell>
                           <TableCell className="text-center">
-                            <div>{formatOdds(dg_p1_odds)}</div>
-                            <div>{formatOdds(dg_p2_odds)}</div>
-                            <div>{formatOdds(dg_p3_odds)}</div>
+                            <div className={p1HasGap ? "font-bold text-green-400" : ""}>{formatOdds(dg_p1_odds)}</div>
+                            <div className={p2HasGap ? "font-bold text-green-400" : ""}>{formatOdds(dg_p2_odds)}</div>
+                            <div className={p3HasGap ? "font-bold text-green-400" : ""}>{formatOdds(dg_p3_odds)}</div>
                           </TableCell>
                         </TableRow>
                       );
                     } else {
                       // Handle 2-ball matchups
+                      // For 2ball, we want to identify when the favorite has a significant gap against the other player
+                      
+                      // Get both players' FanDuel odds
+                      const p1Odds = matchup.fanduel_p1_odds || 0;
+                      const p2Odds = matchup.fanduel_p2_odds || 0;
+                      
+                      // Determine who is the favorite (lower decimal odds)
+                      let p1HasGap = false;
+                      let p2HasGap = false;
+                      
+                      // Check if player 1 is the favorite with a significant gap
+                      if (p1Odds > 1 && p2Odds > 1 && p1Odds < p2Odds) {
+                        // Convert odds to American and calculate the gap
+                        const americanP1 = parseInt(decimalToAmerican(p1Odds));
+                        const americanP2 = parseInt(decimalToAmerican(p2Odds));
+                        const gap = Math.abs(americanP1 - americanP2);
+                        
+                        // If gap exceeds threshold, highlight player 1
+                        if (gap >= oddsGapThreshold) {
+                          p1HasGap = true;
+                        }
+                      }
+                      
+                      // Check if player 2 is the favorite with a significant gap
+                      if (p1Odds > 1 && p2Odds > 1 && p2Odds < p1Odds) {
+                        // Convert odds to American and calculate the gap
+                        const americanP1 = parseInt(decimalToAmerican(p1Odds));
+                        const americanP2 = parseInt(decimalToAmerican(p2Odds));
+                        const gap = Math.abs(americanP1 - americanP2);
+                        
+                        // If gap exceeds threshold, highlight player 2
+                        if (gap >= oddsGapThreshold) {
+                          p2HasGap = true;
+                        }
+                      }
+                      
                       return (
                         <TableRow key={`2ball-${key}`}>
                           <TableCell>
@@ -507,12 +673,16 @@ export default function MatchupsTable({
                             <div>{formatPlayerName(matchup.p2_player_name)}</div>
                           </TableCell>
                           <TableCell className="text-center">
-                            <div className="py-1">{formatOdds(matchup.fanduel_p1_odds)}</div>
-                            <div className="py-1">{formatOdds(matchup.fanduel_p2_odds)}</div>
+                            <div className={`py-1 ${p1HasGap ? "font-bold text-green-400" : ""}`}>
+                              {formatOdds(matchup.fanduel_p1_odds)}
+                            </div>
+                            <div className={`py-1 ${p2HasGap ? "font-bold text-green-400" : ""}`}>
+                              {formatOdds(matchup.fanduel_p2_odds)}
+                            </div>
                           </TableCell>
                           <TableCell className="text-center">
-                            <div className="py-1">{formatOdds(matchup.draftkings_p1_odds)}</div>
-                            <div className="py-1">{formatOdds(matchup.draftkings_p2_odds)}</div>
+                            <div className={`py-1 ${p1HasGap ? "font-bold text-green-400" : ""}`}>{formatOdds(matchup.draftkings_p1_odds)}</div>
+                            <div className={`py-1 ${p2HasGap ? "font-bold text-green-400" : ""}`}>{formatOdds(matchup.draftkings_p2_odds)}</div>
                           </TableCell>
                         </TableRow>
                       );
