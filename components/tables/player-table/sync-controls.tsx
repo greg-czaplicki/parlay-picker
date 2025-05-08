@@ -15,7 +15,7 @@ interface SyncControlsProps {
   dataSource?: 'data_golf' | 'pga_tour'
   onSyncSkills: () => void
   onSyncPgaTour?: () => void
-  onSyncLive: () => void
+  onSyncLive: (tour?: 'pga' | 'opp' | 'euro') => void
   onChangeDataSource?: (source: 'data_golf' | 'pga_tour') => void
 }
 
@@ -134,16 +134,30 @@ export function SyncControls({
           </span>
         )}
         {isSyncingLive && <span className="text-xs text-gray-500">Syncing...</span>}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onSyncLive}
-          disabled={isAnySyncing}
-          className="h-7 px-2"
-        >
-          {isSyncingLive ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-          <span className="ml-1">Sync Tournament</span>
-        </Button>
+        <div className="flex gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onSyncLive('pga')}
+            disabled={isAnySyncing}
+            className="h-7 px-2"
+            title="Sync PGA Tour tournament data"
+          >
+            {isSyncingLive ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            <span className="ml-1">PGA Tour</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onSyncLive('opp')}
+            disabled={isAnySyncing}
+            className="h-7 px-2"
+            title="Sync Opposite Field tournament data"
+          >
+            {isSyncingLive ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            <span className="ml-1">Opp Field</span>
+          </Button>
+        </div>
       </div>
     </div>
   )

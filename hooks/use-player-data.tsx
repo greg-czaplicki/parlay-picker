@@ -18,17 +18,19 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 const supabase = createClient(supabaseUrl!, supabaseAnonKey!)
 
-const LIVE_STATS_CACHE_KEY = 'gpp_live_stats_cache_v1';
-const LIVE_STATS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes in ms
+const LIVE_STATS_CACHE_KEY = 'gpp_live_stats_cache_v2'; // Updated to v2 to avoid conflicts
+const LIVE_STATS_CACHE_TTL = 15 * 60 * 1000; // 15 minutes in ms
+const AUTO_REFRESH_INTERVAL = 15 * 60 * 1000; // Auto-refresh every 15 minutes
 
-function getCachedLiveStats(roundFilter: string) {
+// Updated cache format to support both PGA and OPP tours
+function getCachedLiveStats(roundFilter: string, tour: 'pga' | 'opp' = 'pga') {
   if (typeof window === 'undefined') return null;
   try {
     const raw = localStorage.getItem(LIVE_STATS_CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (!parsed[roundFilter]) return null;
-    const { data, timestamp } = parsed[roundFilter];
+    if (!parsed[tour] || !parsed[tour][roundFilter]) return null;
+    const { data, timestamp } = parsed[tour][roundFilter];
     if (Date.now() - timestamp > LIVE_STATS_CACHE_TTL) return null;
     return data;
   } catch {
@@ -36,12 +38,13 @@ function getCachedLiveStats(roundFilter: string) {
   }
 }
 
-function setCachedLiveStats(roundFilter: string, data: any) {
+function setCachedLiveStats(roundFilter: string, data: any, tour: 'pga' | 'opp' = 'pga') {
   if (typeof window === 'undefined') return;
   try {
     const raw = localStorage.getItem(LIVE_STATS_CACHE_KEY);
     const parsed = raw ? JSON.parse(raw) : {};
-    parsed[roundFilter] = { data, timestamp: Date.now() };
+    if (!parsed[tour]) parsed[tour] = {};
+    parsed[tour][roundFilter] = { data, timestamp: Date.now() };
     localStorage.setItem(LIVE_STATS_CACHE_KEY, JSON.stringify(parsed));
   } catch {}
 }
@@ -53,6 +56,8 @@ interface UsePlayerDataProps {
   dataView: "season" | "tournament"
   dataSource?: "data_golf" | "pga_tour" // Default to data_golf for backward compatibility
   roundFilter: string
+  selectedEventId?: number | null
+  eventOptions?: Array<{ event_id: number, event_name: string }>
 }
 
 // Helper function for Trend Indicator
@@ -86,8 +91,9 @@ export function usePlayerData({
   dataView,
   dataSource = "data_golf", // Default to data_golf for backward compatibility
   roundFilter,
-  selectedEventId
-}: UsePlayerDataProps & { selectedEventId?: number | null }) {
+  selectedEventId,
+  eventOptions = []
+}: UsePlayerDataProps) {
   const [sorting, setSorting] = useState<any>([])
   const [seasonSkills, setSeasonSkills] = useState<PlayerSkillRating[]>(initialSeasonSkills)
   const [pgaTourStats, setPgaTourStats] = useState<PgaTourPlayerStats[]>(initialPgaTourStats)
@@ -232,15 +238,13 @@ export function usePlayerData({
     }
   }, [dataView, dataSource, pgaTourStats.length, loadingPgaTour, isSyncingPgaTour]);
 
-  // Fetch field for selected event if in season view and using DataGolf data
+  // Fetch field for selected event if in season view (for both data sources)
   useEffect(() => {
     async function fetchFieldForEvent() {
-      // Only fetch field data if we're in season view, using DataGolf data, and have a selected event
-      if (dataView !== "season" || dataSource !== "data_golf" || !selectedEventId) {
-        // If we're using PGA Tour data, we don't need field filtering
-        if (dataSource === "pga_tour") {
-          setFieldLoading(false);
-        }
+      // Only fetch field data if we're in season view and have a selected event
+      // We now need field filtering for both data sources
+      if (dataView !== "season" || !selectedEventId) {
+        setFieldLoading(false);
         return;
       }
       
@@ -284,96 +288,142 @@ export function usePlayerData({
     fetchFieldForEvent()
   }, [dataView, dataSource, selectedEventId])
 
-  // Re-fetch live stats when round filter changes or on mount
+  // Auto-fetch live stats for both PGA and Opposite Field events
   useEffect(() => {
     let didCancel = false;
-    async function maybeFetchLiveStats() {
-      // Only cache for tournament view
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+    async function fetchAndDetectTour() {
+      if (didCancel) return;
       if (dataView !== 'tournament') return;
-      // Try cache first
-      const cached = getCachedLiveStats(roundFilter);
-      if (cached) {
-        setLiveStats(cached);
-        setLoadingLive(false);
-        if (cached.length > 0) {
-          setLastLiveUpdate(cached[0].data_golf_updated_at);
-          setCurrentLiveEvent(cached[0].event_name);
-        }
-        return;
-      }
-      // Otherwise, fetch and cache
-      setLoadingLive(true);
+      
+      console.log('[PlayerData] Auto-detecting which tour to fetch based on selected event');
+      
+      // For initial auto-fetch, we need to detect which tour to use
+      // We'll first try PGA tour since it's more common
       try {
-        let query = supabase
-          .from("latest_live_tournament_stats_view")
-          .select("*");
-        if (roundFilter !== "latest") {
-          query = query.eq('round_num', roundFilter);
-        }
-        query = query.order("event_name", { ascending: false })
-                     .order("total", { ascending: true });
-        const { data, error } = await query;
-        if (didCancel) return;
-        if (error) throw error;
-        setLiveStats(data || []);
-        setCachedLiveStats(roundFilter, data || []);
-        if (data && data.length > 0) {
-          const latestRecord = data.reduce((latest, current) =>
-            new Date(current.data_golf_updated_at ?? 0) > new Date(latest.data_golf_updated_at ?? 0) ? current : latest
-          );
-          setLastLiveUpdate(latestRecord.data_golf_updated_at);
-          setCurrentLiveEvent(latestRecord.event_name);
-        } else {
-          setLastLiveUpdate(null);
-          setCurrentLiveEvent(null);
+        await fetchLiveStats('pga');
+        
+        // If we got no data for PGA, try Opposite Field
+        if (liveStats.length === 0) {
+          console.log('[PlayerData] No PGA Tour data found, trying Opposite Field...');
+          await fetchLiveStats('opp');
         }
       } catch (error) {
-        if (!didCancel) {
-          console.error("Error fetching live stats:", error);
-          toast({ title: "Error Fetching Live Stats", variant: "destructive" });
-          setLiveStats([]);
-          setLastLiveUpdate(null);
-          setCurrentLiveEvent(null);
-        }
-      } finally {
-        if (!didCancel) setLoadingLive(false);
+        console.error('[PlayerData] Error during auto-tour detection:', error);
+      }
+      
+      // Set up auto-refresh timer
+      if (!didCancel) {
+        refreshTimer = setTimeout(() => {
+          if (!didCancel) {
+            console.log('[PlayerData] Auto-refreshing live stats...');
+            fetchAndDetectTour();
+          }
+        }, AUTO_REFRESH_INTERVAL);
       }
     }
-    maybeFetchLiveStats();
-    return () => { didCancel = true; };
-  }, [roundFilter, dataView]);
+    
+    fetchAndDetectTour();
+    
+    return () => { 
+      didCancel = true; 
+      if (refreshTimer) clearTimeout(refreshTimer);
+    };
+  }, [roundFilter, dataView, selectedEventId, eventOptions]);
 
   // fetchSeasonSkills and fetchPgaTourStats are now defined at the top of the hook
 
-  // Patch: manual sync always fetches fresh and updates cache
-  const fetchLiveStats = async () => {
+  // Enhanced fetchLiveStats function that supports both PGA and OPP tours
+  const fetchLiveStats = async (tour: 'pga' | 'opp' = 'pga') => {
     setLoadingLive(true);
+    
+    // First check if we have cached data
+    const cached = getCachedLiveStats(roundFilter, tour);
+    if (cached) {
+      console.log(`[PlayerData] Using cached ${tour} tour data for round ${roundFilter}`);
+      setLiveStats(cached);
+      if (cached.length > 0) {
+        const latestRecord = cached.reduce((latest, current) =>
+          new Date(current.data_golf_updated_at ?? 0) > new Date(latest.data_golf_updated_at ?? 0) ? current : latest
+        );
+        setLastLiveUpdate(latestRecord.data_golf_updated_at);
+        setCurrentLiveEvent(latestRecord.event_name);
+      }
+      setLoadingLive(false);
+      return;
+    }
+    
+    // If no cache, fetch from API
     try {
+      console.log(`[PlayerData] Fetching fresh ${tour} tour data for round ${roundFilter}`);
+      
+      // Try to get data from database first
       let query = supabase
         .from("latest_live_tournament_stats_view")
         .select("*");
+        
+      // Filter by round
       if (roundFilter !== "latest") {
         query = query.eq('round_num', roundFilter);
       }
-      query = query.order("event_name", { ascending: false })
-                   .order("total", { ascending: true });
+
+      // Filter by selected event if available
+      if (selectedEventId) {
+        // Get event name from current options
+        const selectedEvent = eventOptions.find(e => e.event_id === selectedEventId);
+        if (selectedEvent) {
+          query = query.eq('event_name', selectedEvent.event_name);
+          console.log(`Filtering live stats by event: ${selectedEvent.event_name}`);
+        }
+      }
+        
+      query = query.order("total", { ascending: true });
       const { data, error } = await query;
+      
       if (error) throw error;
-      setLiveStats(data || []);
-      setCachedLiveStats(roundFilter, data || []);
+      
+      // If we have data, use it
       if (data && data.length > 0) {
+        setLiveStats(data);
+        setCachedLiveStats(roundFilter, data, tour);
+        
         const latestRecord = data.reduce((latest, current) =>
           new Date(current.data_golf_updated_at ?? 0) > new Date(latest.data_golf_updated_at ?? 0) ? current : latest
         );
         setLastLiveUpdate(latestRecord.data_golf_updated_at);
         setCurrentLiveEvent(latestRecord.event_name);
       } else {
+        // If no data in database, try to fetch it from DataGolf API
+        console.log(`[PlayerData] No data in database for ${tour}, fetching from API...`);
+        
+        // Don't await this - it will update the database and we'll get it next time
+        fetch(`/api/live-stats/sync-tour?tour=${tour}`)
+          .then(res => {
+            if (!res.ok) {
+              throw new Error(`API responded with status: ${res.status}`);
+            }
+            return res.json();
+          })
+          .then(apiData => {
+            if (apiData.success) {
+              console.log(`[PlayerData] Successfully fetched ${tour} data, will be available on next load`);
+            }
+          })
+          .catch(apiError => {
+            console.error(`[PlayerData] Failed to fetch ${tour} data:`, apiError);
+          });
+          
+        setLiveStats([]);
         setLastLiveUpdate(null);
         setCurrentLiveEvent(null);
       }
     } catch (error) {
-      console.error("Error fetching live stats:", error);
-      toast({ title: "Error Fetching Live Stats", variant: "destructive" });
+      console.error(`Error fetching ${tour} live stats:`, error);
+      toast({ 
+        title: `Error Fetching ${tour.toUpperCase()} Live Stats`, 
+        variant: "destructive" 
+      });
       setLiveStats([]);
       setLastLiveUpdate(null);
       setCurrentLiveEvent(null);
@@ -488,11 +538,12 @@ export function usePlayerData({
     }
   }
 
-  const triggerLiveSyncAndRefetch = async () => {
+  const triggerLiveSyncAndRefetch = async (tour: 'pga' | 'opp' | 'euro' = 'pga') => {
     setIsSyncingLive(true)
     setLastLiveUpdate(null)
     try {
-      const response = await fetch("/api/live-stats/sync")
+      // Use the new API endpoint that supports tour parameter
+      const response = await fetch(`/api/live-stats/sync-tour?tour=${tour}`)
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: "Failed to parse error response" }))
         throw new Error(errorData.error || `Server responded with status: ${response.status}`)
@@ -501,17 +552,23 @@ export function usePlayerData({
       const data = await response.json()
       if (data.success) {
         toast({
-          title: "Tournament Data Updated",
+          title: `${tour.toUpperCase()} Tournament Data Updated`,
           description: `Latest stats refreshed for ${data.eventName}`,
         })
+        // Clear the local storage cache
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.removeItem(LIVE_STATS_CACHE_KEY);
+          } catch {}
+        }
         await fetchLiveStats()
       } else {
         throw new Error(data.error || "Unknown error occurred during sync")
       }
     } catch (error) {
-      console.error("Error syncing live stats via API:", error)
+      console.error(`Error syncing ${tour} live stats via API:`, error)
       toast({
-        title: "Error Syncing Live Stats",
+        title: `Error Syncing ${tour.toUpperCase()} Live Stats`,
         description: error instanceof Error ? error.message : "Failed to connect to the server",
         variant: "destructive",
       })
@@ -526,14 +583,26 @@ export function usePlayerData({
       // For season view, we use either PGA Tour stats or DataGolf stats based on dataSource
       if (dataSource === "pga_tour") {
         // Use PGA Tour stats as the source
-        // No field filtering for PGA Tour data since it's already filtered to current players
-        return pgaTourStats.map(player => ({
-          ...player,
-          // Map property names correctly (some differ between DataGolf and PGA Tour)
-          driving_acc: player.driving_accuracy,
-          driving_dist: player.driving_distance,
-          data_source: 'pga_tour'
-        }));
+        // Apply tournament filtering if we have a selected event and fieldDgIds
+        if (selectedEventId && fieldDgIds && fieldDgIds.length > 0) {
+          return pgaTourStats
+            .filter(p => p.dg_id && fieldDgIds.includes(p.dg_id))
+            .map(player => ({
+              ...player,
+              // Map property names correctly (some differ between DataGolf and PGA Tour)
+              driving_acc: player.driving_accuracy,
+              driving_dist: player.driving_distance,
+              data_source: 'pga_tour'
+            }));
+        } else {
+          // If no event selected or no field data, return all players (old behavior)
+          return pgaTourStats.map(player => ({
+            ...player,
+            driving_acc: player.driving_accuracy,
+            driving_dist: player.driving_distance,
+            data_source: 'pga_tour'
+          }));
+        }
       } else {
         // Use DataGolf stats as the source with field filtering
         if (fieldDgIds && fieldDgIds.length > 0) {

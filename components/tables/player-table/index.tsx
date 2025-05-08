@@ -63,7 +63,8 @@ export default function PlayerTable({
     dataView,
     dataSource,
     roundFilter,
-    selectedEventId // pass to hook
+    selectedEventId, // pass to hook
+    eventOptions     // pass eventOptions
   })
 
   const columns = useColumns({ dataView, getHeatmapColor })
@@ -106,7 +107,15 @@ export default function PlayerTable({
                   <label className="text-sm mr-2">Event:</label>
                   <select
                     value={selectedEventId ?? ''}
-                    onChange={e => setSelectedEventId(Number(e.target.value))}
+                    onChange={e => {
+                      // When changing event, clear cache of live stats
+                      if (typeof window !== 'undefined') {
+                        try {
+                          localStorage.removeItem('gpp_live_stats_cache_v1');
+                        } catch {}
+                      }
+                      setSelectedEventId(Number(e.target.value))
+                    }}
                     className="bg-gray-800 text-white border border-gray-700 rounded px-2 py-1 text-sm"
                   >
                     {eventOptions.map(ev => (
@@ -255,7 +264,7 @@ export default function PlayerTable({
                   {table.getRowModel().rows?.length ? (
                     table.getRowModel().rows.map((row) => (
                       <TableRow
-                        key={row.original.dg_id || row.original.pga_player_id || row.id}
+                        key={`${row.original.dg_id || row.original.pga_player_id || row.id}-${row.index}`}
                         data-state={row.getIsSelected() && "selected"}
                         style={{ border: 'none', margin: 0, padding: 0 }}
                         className="hover:bg-[#2a2a35] border-0"

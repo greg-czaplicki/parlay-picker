@@ -511,6 +511,30 @@ export default function MatchupsTable({
                     // Generate a stable key - use id if available, otherwise use index and a type identifier
                     const key = matchup.id ? `matchup-${matchup.id}` : `matchup-${index}-${matchup.p1_dg_id}-${matchup.p2_dg_id}`;
                     
+                    // Skip this matchup if it's missing odds
+                    if (is3BallMatchup(matchup)) {
+                      // Check if at least one player has odds from both FanDuel and DataGolf
+                      const hasAnyValidOdds = (
+                        (matchup.fanduel_p1_odds && matchup.fanduel_p1_odds > 1) ||
+                        (matchup.fanduel_p2_odds && matchup.fanduel_p2_odds > 1) ||
+                        (matchup.fanduel_p3_odds && matchup.fanduel_p3_odds > 1)
+                      );
+                      
+                      if (!hasAnyValidOdds) {
+                        return null; // Skip this matchup
+                      }
+                    } else {
+                      // For 2-ball, check if at least one player has odds from FanDuel
+                      const hasAnyValidOdds = (
+                        (matchup.fanduel_p1_odds && matchup.fanduel_p1_odds > 1) ||
+                        (matchup.fanduel_p2_odds && matchup.fanduel_p2_odds > 1)
+                      );
+                      
+                      if (!hasAnyValidOdds) {
+                        return null; // Skip this matchup
+                      }
+                    }
+                    
                     // Handle 3-ball matchups
                     if (is3BallMatchup(matchup)) {
                       const dg_p1_odds = matchup.datagolf_p1_odds ?? matchup.odds?.datagolf?.p1 ?? null;
