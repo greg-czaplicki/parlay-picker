@@ -533,31 +533,36 @@ export default function MatchupsTable({
                         },
                       });
                       
-                      // Get all players' FanDuel odds for comparison
-                      const players = [
+                      // Initialize gap flags for both FanDuel and DataGolf
+                      let p1HasFDGap = false;
+                      let p2HasFDGap = false;
+                      let p3HasFDGap = false;
+                      let p1HasDGGap = false;
+                      let p2HasDGGap = false;
+                      let p3HasDGGap = false;
+                      
+                      // Track the favorite players for tooltips
+                      let favoriteFDPlayer = null;
+                      let favoriteDGPlayer = null;
+                      let gapFDDetails = "";
+                      let gapDGDetails = "";
+                      
+                      // Calculate FanDuel gaps
+                      const fdPlayers = [
                         { id: 'p1', odds: matchup.fanduel_p1_odds, name: matchup.p1_player_name },
                         { id: 'p2', odds: matchup.fanduel_p2_odds, name: matchup.p2_player_name },
                         { id: 'p3', odds: matchup.fanduel_p3_odds, name: matchup.p3_player_name }
                       ].filter(p => p.odds && p.odds > 1);
                       
-                      // Sort by odds (lowest decimal odds = favorite)
-                      players.sort((a, b) => (a.odds || 999) - (b.odds || 999));
-                      
-                      // Initialize gap flags to false
-                      let p1HasGap = false;
-                      let p2HasGap = false;
-                      let p3HasGap = false;
-                      
-                      // Track the favorite player (will be needed for tooltips)
-                      let favoritePlayer = null;
-                      let gapDetails = "";
-                      
                       // Only highlight if we have at least 3 valid odds to compare
-                      if (players.length >= 3) {
+                      if (fdPlayers.length >= 3) {
+                        // Sort by odds (lowest decimal odds = favorite)
+                        fdPlayers.sort((a, b) => (a.odds || 999) - (b.odds || 999));
+                        
                         // Get the favorite player
-                        const favorite = players[0];
+                        const favorite = fdPlayers[0];
                         // Get the other two players
-                        const otherPlayers = players.slice(1);
+                        const otherPlayers = fdPlayers.slice(1);
                         
                         // Calculate the actual gaps
                         const gaps = otherPlayers.map(other => {
@@ -573,16 +578,62 @@ export default function MatchupsTable({
                         
                         // Only highlight the favorite if they have significant gaps against both others
                         if (hasGapAgainstAll) {
-                          // Set the flag for the favorite
-                          if (favorite.id === 'p1') p1HasGap = true;
-                          else if (favorite.id === 'p2') p2HasGap = true;
-                          else if (favorite.id === 'p3') p3HasGap = true;
+                          // Set the flag for the favorite in FanDuel column
+                          if (favorite.id === 'p1') p1HasFDGap = true;
+                          else if (favorite.id === 'p2') p2HasFDGap = true;
+                          else if (favorite.id === 'p3') p3HasFDGap = true;
                           
                           // Store favorite for tooltip
-                          favoritePlayer = favorite;
+                          favoriteFDPlayer = favorite;
                           
                           // Create gap details for tooltip
-                          gapDetails = gaps.map(({player, gap}) => 
+                          gapFDDetails = gaps.map(({player, gap}) => 
+                            `${formatPlayerName(player.name)}: ${gap} points`
+                          ).join(", ");
+                        }
+                      }
+                      
+                      // Calculate DataGolf gaps
+                      const dgPlayers = [
+                        { id: 'p1', odds: dg_p1_odds, name: matchup.p1_player_name },
+                        { id: 'p2', odds: dg_p2_odds, name: matchup.p2_player_name },
+                        { id: 'p3', odds: dg_p3_odds, name: matchup.p3_player_name }
+                      ].filter(p => p.odds && p.odds > 1);
+                      
+                      // Only highlight if we have at least 3 valid odds to compare
+                      if (dgPlayers.length >= 3) {
+                        // Sort by odds (lowest decimal odds = favorite)
+                        dgPlayers.sort((a, b) => (a.odds || 999) - (b.odds || 999));
+                        
+                        // Get the favorite player
+                        const favorite = dgPlayers[0];
+                        // Get the other two players
+                        const otherPlayers = dgPlayers.slice(1);
+                        
+                        // Calculate the actual gaps
+                        const gaps = otherPlayers.map(other => {
+                          const gap = Math.abs(
+                            parseInt(decimalToAmerican(favorite.odds || 0)) - 
+                            parseInt(decimalToAmerican(other.odds || 0))
+                          );
+                          return { player: other, gap };
+                        });
+                        
+                        // Check if the favorite has significant gaps against BOTH other players
+                        const hasGapAgainstAll = gaps.every(({gap}) => gap >= oddsGapThreshold);
+                        
+                        // Only highlight the favorite if they have significant gaps against both others
+                        if (hasGapAgainstAll) {
+                          // Set the flag for the favorite in DataGolf column
+                          if (favorite.id === 'p1') p1HasDGGap = true;
+                          else if (favorite.id === 'p2') p2HasDGGap = true;
+                          else if (favorite.id === 'p3') p3HasDGGap = true;
+                          
+                          // Store favorite for tooltip
+                          favoriteDGPlayer = favorite;
+                          
+                          // Create gap details for tooltip
+                          gapDGDetails = gaps.map(({player, gap}) => 
                             `${formatPlayerName(player.name)}: ${gap} points`
                           ).join(", ");
                         }
@@ -590,9 +641,9 @@ export default function MatchupsTable({
                       
                       // Sort players by their FanDuel odds (lowest first = favorite)
                       const sortedPlayers = [
-                        { id: 'p1', odds: matchup.fanduel_p1_odds, name: matchup.p1_player_name, dgOdds: dg_p1_odds, hasGap: p1HasGap, dgFavorite: divergence?.datagolfFavorite === 'p1' },
-                        { id: 'p2', odds: matchup.fanduel_p2_odds, name: matchup.p2_player_name, dgOdds: dg_p2_odds, hasGap: p2HasGap, dgFavorite: divergence?.datagolfFavorite === 'p2' },
-                        { id: 'p3', odds: matchup.fanduel_p3_odds, name: matchup.p3_player_name, dgOdds: dg_p3_odds, hasGap: p3HasGap, dgFavorite: divergence?.datagolfFavorite === 'p3' }
+                        { id: 'p1', odds: matchup.fanduel_p1_odds, name: matchup.p1_player_name, dgOdds: dg_p1_odds, hasGap: p1HasFDGap, hasDGGap: p1HasDGGap, dgFavorite: divergence?.datagolfFavorite === 'p1' },
+                        { id: 'p2', odds: matchup.fanduel_p2_odds, name: matchup.p2_player_name, dgOdds: dg_p2_odds, hasGap: p2HasFDGap, hasDGGap: p2HasDGGap, dgFavorite: divergence?.datagolfFavorite === 'p2' },
+                        { id: 'p3', odds: matchup.fanduel_p3_odds, name: matchup.p3_player_name, dgOdds: dg_p3_odds, hasGap: p3HasFDGap, hasDGGap: p3HasDGGap, dgFavorite: divergence?.datagolfFavorite === 'p3' }
                       ].sort((a, b) => {
                         // Handle null/undefined odds by placing them at the end
                         if (!a.odds || a.odds <= 1) return 1;
@@ -636,7 +687,7 @@ export default function MatchupsTable({
                           </TableCell>
                           <TableCell className="text-center">
                             {sortedPlayers.map((player, idx) => (
-                              <div key={`dg-odds-${idx}`} className={player.hasGap ? "font-bold text-green-400" : ""}>
+                              <div key={`dg-odds-${idx}`} className={player.hasDGGap ? "font-bold text-green-400" : ""}>
                                 {formatOdds(player.dgOdds)}
                               </div>
                             ))}
@@ -647,44 +698,76 @@ export default function MatchupsTable({
                       // Handle 2-ball matchups
                       // For 2ball, we want to identify when the favorite has a significant gap against the other player
                       
-                      // Get both players' FanDuel odds
-                      const p1Odds = matchup.fanduel_p1_odds || 0;
-                      const p2Odds = matchup.fanduel_p2_odds || 0;
+                      // Initialize gap flags for both FanDuel and DraftKings
+                      let p1HasFDGap = false;
+                      let p2HasFDGap = false;
+                      let p1HasDKGap = false;
+                      let p2HasDKGap = false;
                       
-                      // Determine who is the favorite (lower decimal odds)
-                      let p1HasGap = false;
-                      let p2HasGap = false;
+                      // Check for FanDuel gaps
+                      const fdP1Odds = matchup.fanduel_p1_odds || 0;
+                      const fdP2Odds = matchup.fanduel_p2_odds || 0;
                       
-                      // Check if player 1 is the favorite with a significant gap
-                      if (p1Odds > 1 && p2Odds > 1 && p1Odds < p2Odds) {
+                      // Check if player 1 is the favorite with a significant gap in FanDuel
+                      if (fdP1Odds > 1 && fdP2Odds > 1 && fdP1Odds < fdP2Odds) {
                         // Convert odds to American and calculate the gap
-                        const americanP1 = parseInt(decimalToAmerican(p1Odds));
-                        const americanP2 = parseInt(decimalToAmerican(p2Odds));
+                        const americanP1 = parseInt(decimalToAmerican(fdP1Odds));
+                        const americanP2 = parseInt(decimalToAmerican(fdP2Odds));
                         const gap = Math.abs(americanP1 - americanP2);
                         
                         // If gap exceeds threshold, highlight player 1
                         if (gap >= oddsGapThreshold) {
-                          p1HasGap = true;
+                          p1HasFDGap = true;
                         }
                       }
                       
-                      // Check if player 2 is the favorite with a significant gap
-                      if (p1Odds > 1 && p2Odds > 1 && p2Odds < p1Odds) {
+                      // Check if player 2 is the favorite with a significant gap in FanDuel
+                      if (fdP1Odds > 1 && fdP2Odds > 1 && fdP2Odds < fdP1Odds) {
                         // Convert odds to American and calculate the gap
-                        const americanP1 = parseInt(decimalToAmerican(p1Odds));
-                        const americanP2 = parseInt(decimalToAmerican(p2Odds));
+                        const americanP1 = parseInt(decimalToAmerican(fdP1Odds));
+                        const americanP2 = parseInt(decimalToAmerican(fdP2Odds));
                         const gap = Math.abs(americanP1 - americanP2);
                         
                         // If gap exceeds threshold, highlight player 2
                         if (gap >= oddsGapThreshold) {
-                          p2HasGap = true;
+                          p2HasFDGap = true;
+                        }
+                      }
+                      
+                      // Check for DraftKings gaps
+                      const dkP1Odds = matchup.draftkings_p1_odds || 0;
+                      const dkP2Odds = matchup.draftkings_p2_odds || 0;
+                      
+                      // Check if player 1 is the favorite with a significant gap in DraftKings
+                      if (dkP1Odds > 1 && dkP2Odds > 1 && dkP1Odds < dkP2Odds) {
+                        // Convert odds to American and calculate the gap
+                        const americanP1 = parseInt(decimalToAmerican(dkP1Odds));
+                        const americanP2 = parseInt(decimalToAmerican(dkP2Odds));
+                        const gap = Math.abs(americanP1 - americanP2);
+                        
+                        // If gap exceeds threshold, highlight player 1
+                        if (gap >= oddsGapThreshold) {
+                          p1HasDKGap = true;
+                        }
+                      }
+                      
+                      // Check if player 2 is the favorite with a significant gap in DraftKings
+                      if (dkP1Odds > 1 && dkP2Odds > 1 && dkP2Odds < dkP1Odds) {
+                        // Convert odds to American and calculate the gap
+                        const americanP1 = parseInt(decimalToAmerican(dkP1Odds));
+                        const americanP2 = parseInt(decimalToAmerican(dkP2Odds));
+                        const gap = Math.abs(americanP1 - americanP2);
+                        
+                        // If gap exceeds threshold, highlight player 2
+                        if (gap >= oddsGapThreshold) {
+                          p2HasDKGap = true;
                         }
                       }
                       
                       // Sort players by their FanDuel odds (lowest first = favorite)
                       const sortedPlayers = [
-                        { id: 'p1', odds: matchup.fanduel_p1_odds, name: matchup.p1_player_name, dkOdds: matchup.draftkings_p1_odds, hasGap: p1HasGap },
-                        { id: 'p2', odds: matchup.fanduel_p2_odds, name: matchup.p2_player_name, dkOdds: matchup.draftkings_p2_odds, hasGap: p2HasGap }
+                        { id: 'p1', odds: matchup.fanduel_p1_odds, name: matchup.p1_player_name, dkOdds: matchup.draftkings_p1_odds, hasGap: p1HasFDGap, hasDKGap: p1HasDKGap },
+                        { id: 'p2', odds: matchup.fanduel_p2_odds, name: matchup.p2_player_name, dkOdds: matchup.draftkings_p2_odds, hasGap: p2HasFDGap, hasDKGap: p2HasDKGap }
                       ].sort((a, b) => {
                         // Handle null/undefined odds by placing them at the end
                         if (!a.odds || a.odds <= 1) return 1;
@@ -709,7 +792,7 @@ export default function MatchupsTable({
                           </TableCell>
                           <TableCell className="text-center">
                             {sortedPlayers.map((player, idx) => (
-                              <div key={`dk-odds-${idx}`} className={`py-1 ${player.hasGap ? "font-bold text-green-400" : ""}`}>
+                              <div key={`dk-odds-${idx}`} className={`py-1 ${player.hasDKGap ? "font-bold text-green-400" : ""}`}>
                                 {formatOdds(player.dkOdds)}
                               </div>
                             ))}
