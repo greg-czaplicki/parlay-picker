@@ -281,7 +281,13 @@ export default function Dashboard({
 
           {/* Row 2: Recommended Picks (Right) */}
           <div className="md:col-span-1">
-            <RecommendedPicks matchupType={matchupType as "3ball" | "2ball"} limit={10} />
+            <RecommendedPicks 
+              matchupType={matchupType as "3ball" | "2ball"} 
+              limit={10} 
+              oddsGapPercentage={40} // 40 point American odds gap
+              bookmaker="fanduel" // Use same bookmaker as matchups table default
+              eventId={selectedEventId} // Pass the selected event ID to filter
+            />
           </div>
         </div>
       )}

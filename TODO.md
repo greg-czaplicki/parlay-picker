@@ -9,4 +9,5 @@ Figure out Under/Overvalue naming and purpose when FD is highlighted but not DG 
 
 #features
 add starting times and sort by those to improve odds layout
+connect recommended picks odds gap filter with the dynamic slider in matchups table
 
