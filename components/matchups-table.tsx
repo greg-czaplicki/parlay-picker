@@ -396,6 +396,54 @@ export default function MatchupsTable({
                           {oddsGapThreshold}+
                         </span>
                       }
+                      {(() => {
+                        // Calculate how many matchups have highlighted odds
+                        if (oddsGapThreshold > 0 && matchups.length > 0) {
+                          const highlightedCount = matchups.reduce((count, matchup) => {
+                            if (is3BallMatchup(matchup)) {
+                              // For 3-ball, calculate gaps using the same logic as in the render
+                              const players = [
+                                { id: 'p1', odds: matchup.fanduel_p1_odds },
+                                { id: 'p2', odds: matchup.fanduel_p2_odds },
+                                { id: 'p3', odds: matchup.fanduel_p3_odds }
+                              ].filter(p => p.odds && p.odds > 1);
+                              
+                              if (players.length >= 3) {
+                                players.sort((a, b) => (a.odds || 999) - (b.odds || 999));
+                                const favorite = players[0];
+                                const otherPlayers = players.slice(1);
+                                
+                                const hasGapAgainstAll = otherPlayers.every(other => 
+                                  hasSignificantOddsGap(favorite.odds, other.odds)
+                                );
+                                
+                                if (hasGapAgainstAll) count++;
+                              }
+                            } else {
+                              // For 2-ball matchups
+                              const p1Odds = matchup.fanduel_p1_odds || 0;
+                              const p2Odds = matchup.fanduel_p2_odds || 0;
+                              
+                              if (p1Odds > 1 && p2Odds > 1) {
+                                if ((p1Odds < p2Odds && hasSignificantOddsGap(p1Odds, p2Odds)) || 
+                                    (p2Odds < p1Odds && hasSignificantOddsGap(p2Odds, p1Odds))) {
+                                  count++;
+                                }
+                              }
+                            }
+                            return count;
+                          }, 0);
+                          
+                          if (highlightedCount > 0) {
+                            return (
+                              <span className="ml-1 bg-green-900 text-green-100 text-xs px-1.5 py-0.5 rounded-full">
+                                {highlightedCount}
+                              </span>
+                            );
+                          }
+                        }
+                        return null;
+                      })()}
                     </Button>
                   </DialogTrigger>
                   <DialogContent>
@@ -540,91 +588,58 @@ export default function MatchupsTable({
                         }
                       }
                       
+                      // Sort players by their FanDuel odds (lowest first = favorite)
+                      const sortedPlayers = [
+                        { id: 'p1', odds: matchup.fanduel_p1_odds, name: matchup.p1_player_name, dgOdds: dg_p1_odds, hasGap: p1HasGap, dgFavorite: divergence?.datagolfFavorite === 'p1' },
+                        { id: 'p2', odds: matchup.fanduel_p2_odds, name: matchup.p2_player_name, dgOdds: dg_p2_odds, hasGap: p2HasGap, dgFavorite: divergence?.datagolfFavorite === 'p2' },
+                        { id: 'p3', odds: matchup.fanduel_p3_odds, name: matchup.p3_player_name, dgOdds: dg_p3_odds, hasGap: p3HasGap, dgFavorite: divergence?.datagolfFavorite === 'p3' }
+                      ].sort((a, b) => {
+                        // Handle null/undefined odds by placing them at the end
+                        if (!a.odds || a.odds <= 1) return 1;
+                        if (!b.odds || b.odds <= 1) return -1;
+                        // Lower decimal odds = favorite (better odds)
+                        return a.odds - b.odds;
+                      });
+
                       return (
                         <TableRow key={`3ball-${key}`}>
                           <TableCell>
-                            <div>{formatPlayerName(matchup.p1_player_name)}</div>
-                            <div>{formatPlayerName(matchup.p2_player_name)}</div>
-                            <div>{formatPlayerName(matchup.p3_player_name)}</div>
+                            {sortedPlayers.map((player, idx) => (
+                              <div key={`player-${idx}`}>{formatPlayerName(player.name)}</div>
+                            ))}
                           </TableCell>
                           <TableCell className="text-center">
-                            <div className={`${p1HasGap ? "font-bold text-green-400" : ""} relative w-24 mx-auto`}>
-                              <span>{formatOdds(matchup.fanduel_p1_odds)}</span>
-                              {divergence?.isDivergence && divergence.datagolfFavorite === 'p1' ? (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span className="absolute right-0 top-1/2 transform -translate-y-1/2 bg-green-600 text-green-100 rounded-full p-1 flex items-center justify-center cursor-pointer">
-                                      <DollarSign size={12} className="text-green-100" aria-label="Data Golf value" />
-                                    </span>
-                                  </TooltipTrigger>
-                                  <TooltipContent className="z-50">
-                                    <span>
-                                      Divergence: FanDuel favorite: <b>{
-                                        divergence.fanduelFavorite === 'p1' ? formatPlayerName(matchup.p1_player_name) :
-                                        divergence.fanduelFavorite === 'p2' ? formatPlayerName(matchup.p2_player_name) :
-                                        divergence.fanduelFavorite === 'p3' ? formatPlayerName(matchup.p3_player_name) :
-                                        'N/A'
-                                      }</b>, DG favorite: <b>{
-                                        formatPlayerName(matchup.p1_player_name)
-                                      }</b>.
-                                    </span>
-                                  </TooltipContent>
-                                </Tooltip>
-                              ) : null}
-                            </div>
-                            <div className={`${p2HasGap ? "font-bold text-green-400" : ""} relative w-20 mx-auto`}>
-                              <span>{formatOdds(matchup.fanduel_p2_odds)}</span>
-                              {divergence?.isDivergence && divergence.datagolfFavorite === 'p2' ? (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span className="absolute right-0 top-1/2 transform -translate-y-1/2 bg-green-600 text-green-100 rounded-full p-[0.15rem] flex items-center justify-center cursor-help">
-                                      <DollarSign size={11} className="text-green-100" aria-label="Data Golf value" />
-                                    </span>
-                                  </TooltipTrigger>
-                                  <TooltipContent className="z-50">
-                                    <span>
-                                      Divergence: FanDuel favorite is <b>{
-                                        divergence.fanduelFavorite === 'p1' ? formatPlayerName(matchup.p1_player_name) :
-                                        divergence.fanduelFavorite === 'p2' ? formatPlayerName(matchup.p2_player_name) :
-                                        divergence.fanduelFavorite === 'p3' ? formatPlayerName(matchup.p3_player_name) :
-                                        'N/A'
-                                      }</b>, Data Golf favorite is <b>{
-                                        formatPlayerName(matchup.p2_player_name)
-                                      }</b>.
-                                    </span>
-                                  </TooltipContent>
-                                </Tooltip>
-                              ) : null}
-                            </div>
-                            <div className={`${p3HasGap ? "font-bold text-green-400" : ""} relative w-24 mx-auto`}>
-                              <span>{formatOdds(matchup.fanduel_p3_odds)}</span>
-                              {divergence?.isDivergence && divergence.datagolfFavorite === 'p3' ? (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span className="absolute right-0 top-1/2 transform -translate-y-1/2 bg-green-600 text-green-100 rounded-full p-1 flex items-center justify-center cursor-pointer">
-                                      <DollarSign size={12} className="text-green-100" aria-label="Data Golf value" />
-                                    </span>
-                                  </TooltipTrigger>
-                                  <TooltipContent className="z-50">
-                                    <span>
-                                      Divergence: FanDuel favorite is <b>{
-                                        divergence.fanduelFavorite === 'p1' ? formatPlayerName(matchup.p1_player_name) :
-                                        divergence.fanduelFavorite === 'p2' ? formatPlayerName(matchup.p2_player_name) :
-                                        divergence.fanduelFavorite === 'p3' ? formatPlayerName(matchup.p3_player_name) :
-                                        'N/A'
-                                      }</b>, Data Golf favorite is <b>{
-                                        formatPlayerName(matchup.p3_player_name)
-                                      }</b>.
-                                    </span>
-                                  </TooltipContent>
-                                </Tooltip>
-                              ) : null}
-                            </div>
+                            {sortedPlayers.map((player, idx) => (
+                              <div key={`odds-${idx}`} className={`${player.hasGap ? "font-bold text-green-400" : ""} relative w-24 mx-auto`}>
+                                <span>{formatOdds(player.odds)}</span>
+                                {divergence?.isDivergence && player.dgFavorite ? (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="absolute right-0 top-1/2 transform -translate-y-1/2 bg-green-600 text-green-100 rounded-full p-1 flex items-center justify-center cursor-pointer">
+                                        <DollarSign size={12} className="text-green-100" aria-label="Data Golf value" />
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="z-50">
+                                      <span>
+                                        Divergence: FanDuel favorite: <b>{
+                                          divergence.fanduelFavorite === 'p1' ? formatPlayerName(matchup.p1_player_name) :
+                                          divergence.fanduelFavorite === 'p2' ? formatPlayerName(matchup.p2_player_name) :
+                                          divergence.fanduelFavorite === 'p3' ? formatPlayerName(matchup.p3_player_name) :
+                                          'N/A'
+                                        }</b>, DG favorite: <b>{formatPlayerName(player.name)}</b>.
+                                      </span>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                ) : null}
+                              </div>
+                            ))}
                           </TableCell>
                           <TableCell className="text-center">
-                            <div className={p1HasGap ? "font-bold text-green-400" : ""}>{formatOdds(dg_p1_odds)}</div>
-                            <div className={p2HasGap ? "font-bold text-green-400" : ""}>{formatOdds(dg_p2_odds)}</div>
-                            <div className={p3HasGap ? "font-bold text-green-400" : ""}>{formatOdds(dg_p3_odds)}</div>
+                            {sortedPlayers.map((player, idx) => (
+                              <div key={`dg-odds-${idx}`} className={player.hasGap ? "font-bold text-green-400" : ""}>
+                                {formatOdds(player.dgOdds)}
+                              </div>
+                            ))}
                           </TableCell>
                         </TableRow>
                       );
@@ -666,23 +681,38 @@ export default function MatchupsTable({
                         }
                       }
                       
+                      // Sort players by their FanDuel odds (lowest first = favorite)
+                      const sortedPlayers = [
+                        { id: 'p1', odds: matchup.fanduel_p1_odds, name: matchup.p1_player_name, dkOdds: matchup.draftkings_p1_odds, hasGap: p1HasGap },
+                        { id: 'p2', odds: matchup.fanduel_p2_odds, name: matchup.p2_player_name, dkOdds: matchup.draftkings_p2_odds, hasGap: p2HasGap }
+                      ].sort((a, b) => {
+                        // Handle null/undefined odds by placing them at the end
+                        if (!a.odds || a.odds <= 1) return 1;
+                        if (!b.odds || b.odds <= 1) return -1;
+                        // Lower decimal odds = favorite (better odds)
+                        return a.odds - b.odds;
+                      });
+
                       return (
                         <TableRow key={`2ball-${key}`}>
                           <TableCell>
-                            <div>{formatPlayerName(matchup.p1_player_name)}</div>
-                            <div>{formatPlayerName(matchup.p2_player_name)}</div>
+                            {sortedPlayers.map((player, idx) => (
+                              <div key={`player-${idx}`}>{formatPlayerName(player.name)}</div>
+                            ))}
                           </TableCell>
                           <TableCell className="text-center">
-                            <div className={`py-1 ${p1HasGap ? "font-bold text-green-400" : ""}`}>
-                              {formatOdds(matchup.fanduel_p1_odds)}
-                            </div>
-                            <div className={`py-1 ${p2HasGap ? "font-bold text-green-400" : ""}`}>
-                              {formatOdds(matchup.fanduel_p2_odds)}
-                            </div>
+                            {sortedPlayers.map((player, idx) => (
+                              <div key={`odds-${idx}`} className={`py-1 ${player.hasGap ? "font-bold text-green-400" : ""}`}>
+                                {formatOdds(player.odds)}
+                              </div>
+                            ))}
                           </TableCell>
                           <TableCell className="text-center">
-                            <div className={`py-1 ${p1HasGap ? "font-bold text-green-400" : ""}`}>{formatOdds(matchup.draftkings_p1_odds)}</div>
-                            <div className={`py-1 ${p2HasGap ? "font-bold text-green-400" : ""}`}>{formatOdds(matchup.draftkings_p2_odds)}</div>
+                            {sortedPlayers.map((player, idx) => (
+                              <div key={`dk-odds-${idx}`} className={`py-1 ${player.hasGap ? "font-bold text-green-400" : ""}`}>
+                                {formatOdds(player.dkOdds)}
+                              </div>
+                            ))}
                           </TableCell>
                         </TableRow>
                       );
