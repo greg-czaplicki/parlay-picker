@@ -15,7 +15,7 @@ import {
     ParlayWithPicks,
     ParlayPickWithData 
 } from '@/app/actions/matchups';
-import { createServerClient } from '@/lib/supabase';
+import { createBrowserClient } from '@/lib/supabase';
 import { toast } from '@/components/ui/use-toast';
 import { Loader2, Check, X } from 'lucide-react';
 import { LiveTournamentStat } from '@/types/definitions';
@@ -189,7 +189,7 @@ export default function ParlayCard({
       }
       
       // Make the database query to find stats based on name
-      const supabase = createServerClient();
+      const supabase = createBrowserClient();
       
       // Build a like query for each pattern
       const likeQueries = searchPatterns.map(pattern => 

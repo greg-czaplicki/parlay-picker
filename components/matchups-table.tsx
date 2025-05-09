@@ -10,7 +10,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Loader2, AlertTriangle, DollarSign, Sliders } from "lucide-react"
+import { Loader2, AlertTriangle, DollarSign, Sliders, Trophy } from "lucide-react"
+import { createBrowserClient } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import {
   Tooltip,
@@ -80,6 +81,18 @@ interface SupabaseMatchupRow2Ball {
   draftkings_p2_odds: number | null;
 }
 
+// Interface for live tournament stats
+interface LiveTournamentStat {
+  dg_id: number;
+  player_name: string;
+  event_name: string;
+  round_num: string;
+  position: string | null;
+  thru: number | null;
+  today: number | null;
+  total: number | null;
+}
+
 // Combined type for both matchup types
 type MatchupRow = SupabaseMatchupRow | SupabaseMatchupRow2Ball;
 
@@ -100,12 +113,17 @@ export default function MatchupsTable({
   // Odds gap filter state
   const [oddsGapThreshold, setOddsGapThreshold] = useState(40); // Default 40 points in American odds
   const [showFiltersDialog, setShowFiltersDialog] = useState(false);
+  
+  // State for live tournament stats
+  const [playerStats, setPlayerStats] = useState<Record<number, LiveTournamentStat>>({});
+  const [loadingStats, setLoadingStats] = useState(false);
 
   useEffect(() => {
     // Reset state before fetching new data
     setMatchups([]);
     setLoading(true);
     setError(null);
+    setPlayerStats({});
     
     // For debugging - print event ID
     console.log("Current eventId in MatchupsTable:", eventId, 
@@ -113,6 +131,88 @@ export default function MatchupsTable({
     
     fetchMatchupsFromApi();
   }, [eventId, activeMatchupType]);
+  
+  // Function to fetch live stats for players in the matchups
+  const fetchPlayerStats = async (matchups: MatchupRow[]) => {
+    if (!matchups || matchups.length === 0) return;
+    
+    setLoadingStats(true);
+    
+    try {
+      // Extract all player IDs from the matchups
+      const playerIds = new Set<number>();
+      
+      matchups.forEach(matchup => {
+        if (matchup.p1_dg_id) playerIds.add(matchup.p1_dg_id);
+        if (matchup.p2_dg_id) playerIds.add(matchup.p2_dg_id);
+        
+        // If it's a 3-ball matchup, add player 3
+        if ('p3_dg_id' in matchup && matchup.p3_dg_id) {
+          playerIds.add(matchup.p3_dg_id);
+        }
+      });
+      
+      if (playerIds.size === 0) {
+        setLoadingStats(false);
+        return;
+      }
+      
+      console.log(`Fetching live stats for ${playerIds.size} players...`);
+      
+      // Query the database for live stats for these players
+      const supabase = createBrowserClient();
+      
+      // Look for stats for the current event first
+      const currentEventName = matchups[0].event_name;
+      const { data: eventStats, error: eventError } = await supabase
+        .from('live_tournament_stats')
+        .select('*')
+        .in('dg_id', Array.from(playerIds))
+        .eq('event_name', currentEventName)
+        .order('data_golf_updated_at', { ascending: false });
+        
+      if (eventStats && eventStats.length > 0) {
+        console.log(`Found ${eventStats.length} stats for event ${currentEventName}`);
+        
+        // Convert to a map for easier lookup
+        const statsMap: Record<number, LiveTournamentStat> = {};
+        eventStats.forEach(stat => {
+          // Only store the most recent stats for each player (we already ordered by timestamp)
+          if (!statsMap[stat.dg_id]) {
+            statsMap[stat.dg_id] = stat;
+          }
+        });
+        
+        setPlayerStats(statsMap);
+      } else {
+        console.log(`No stats found for event ${currentEventName}, trying any recent stats`);
+        
+        // If no stats for this event, get any recent stats
+        const { data: anyStats, error: anyError } = await supabase
+          .from('live_tournament_stats')
+          .select('*')
+          .in('dg_id', Array.from(playerIds))
+          .order('data_golf_updated_at', { ascending: false });
+          
+        if (anyStats && anyStats.length > 0) {
+          // Convert to a map for easier lookup
+          const statsMap: Record<number, LiveTournamentStat> = {};
+          anyStats.forEach(stat => {
+            // Only store the most recent stats for each player
+            if (!statsMap[stat.dg_id]) {
+              statsMap[stat.dg_id] = stat;
+            }
+          });
+          
+          setPlayerStats(statsMap);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching player stats:", err);
+    } finally {
+      setLoadingStats(false);
+    }
+  };
 
   // Update the local state when the prop changes
   useEffect(() => {
@@ -295,6 +395,11 @@ export default function MatchupsTable({
       setMatchups(filtered);
       if (filtered.length > 0) setLastUpdateTime(filtered[0].data_golf_update_time);
       else setLastUpdateTime(null);
+      
+      // Now that we have matchups, fetch the player stats
+      if (filtered.length > 0) {
+        await fetchPlayerStats(filtered);
+      }
       
     } catch (err: any) {
       console.error("Error in fetchMatchupsFromApi:", err);
@@ -500,6 +605,7 @@ export default function MatchupsTable({
                 <TableHeader className="bg-[#1e1e23]">
                   <TableRow>
                     <TableHead className="text-white text-center">Players</TableHead>
+                    <TableHead className="text-white text-center">Position</TableHead>
                     <TableHead className="text-white text-center">FanDuel Odds</TableHead>
                     <TableHead className="text-white text-center">
                       {activeMatchupType === "3ball" ? "Data Golf Odds" : "DraftKings Odds"}
@@ -676,16 +782,118 @@ export default function MatchupsTable({
                         return a.odds - b.odds;
                       });
 
+                      // Format the player's tournament position and score
+                      const formatPlayerPosition = (playerId: number) => {
+                        const playerStat = playerStats[playerId];
+                        if (!playerStat) return null;
+                        
+                        // Format the position display
+                        const position = playerStat.position || '';
+                        
+                        // Ensure score is always a string
+                        let score: string | null = null;
+                        if (playerStat.total !== null && playerStat.total !== undefined) {
+                          if (playerStat.total === 0) {
+                            score = 'E';
+                          } else if (playerStat.total > 0) {
+                            score = `+${playerStat.total}`;
+                          } else {
+                            score = playerStat.total.toString();
+                          }
+                        }
+                          
+                        return { position, score };
+                      };
+                      
                       return (
                         <TableRow key={`3ball-${key}`}>
                           <TableCell>
                             {sortedPlayers.map((player, idx) => (
-                              <div key={`player-${idx}`}>{formatPlayerName(player.name)}</div>
+                              <div key={`player-${idx}`} className="py-1 h-8 flex items-center">{formatPlayerName(player.name)}</div>
                             ))}
                           </TableCell>
+                          
+                          {/* New Position column */}
+                          <TableCell className="text-center">
+                            {sortedPlayers.map((player, idx) => {
+                              const playerId = player.id === 'p1' ? matchup.p1_dg_id : 
+                                             player.id === 'p2' ? matchup.p2_dg_id : 
+                                             player.id === 'p3' ? matchup.p3_dg_id : 0;
+                              
+                              const positionData = formatPlayerPosition(playerId);
+                              
+                              return (
+                                <div key={`position-${idx}`} className="py-1 h-8 flex items-center justify-center">
+                                  {positionData ? (
+                                    <div className="flex items-center justify-center space-x-2 w-full">
+                                      <span className={`px-2 py-0.5 text-xs rounded min-w-12 text-center font-medium ${
+                                        // Position heatmap - from gold (1st) to blue gradient (top 30) to gray (below top 30)
+                                        positionData.position === '1' 
+                                          ? 'bg-yellow-500/40 text-yellow-100' 
+                                          : positionData.position === 'T1'
+                                            ? 'bg-yellow-500/30 text-yellow-100'
+                                          : positionData.position === '2' || positionData.position === 'T2'
+                                            ? 'bg-amber-500/30 text-amber-100'
+                                          : positionData.position === '3' || positionData.position === 'T3'
+                                            ? 'bg-orange-500/30 text-orange-100'
+                                          : positionData.position?.match(/^T?[4-5]$/)
+                                            ? 'bg-red-500/30 text-red-100'
+                                          : positionData.position?.match(/^T?[6-9]$/) || positionData.position === 'T10' || positionData.position === '10'
+                                            ? 'bg-purple-500/30 text-purple-100'
+                                          : positionData.position?.match(/^T?1[1-9]$/) || positionData.position?.match(/^T?2[0-5]$/)
+                                            ? 'bg-blue-500/30 text-blue-100'
+                                          : positionData.position?.match(/^T?2[6-9]$/) || positionData.position?.match(/^T?3[0-9]$/)
+                                            ? 'bg-blue-700/30 text-blue-200' 
+                                            : positionData.position === 'CUT' || positionData.position === 'WD'
+                                              ? 'bg-rose-950/30 text-rose-300'
+                                              : 'bg-gray-500/30 text-gray-300'
+                                      }`}>
+                                        {positionData.position}
+                                      </span>
+                                      {positionData.score && (
+                                        <span className={`px-2 py-0.5 text-xs rounded min-w-12 text-center font-medium ${
+                                          // Score heatmap - from deep red (best) to green (even) to gray (over par)
+                                          positionData.score === 'E' 
+                                            ? 'bg-green-600/30 text-green-100' 
+                                            : positionData.score.startsWith('-') ? (
+                                                // Under par gradient (better scores have deeper red)
+                                                positionData.score <= '-10' 
+                                                  ? 'bg-red-900/40 text-red-100' 
+                                                  : positionData.score <= '-7'
+                                                    ? 'bg-red-800/40 text-red-100'
+                                                    : positionData.score <= '-5'
+                                                      ? 'bg-red-700/40 text-red-100'
+                                                      : positionData.score <= '-3'
+                                                        ? 'bg-red-600/40 text-red-100'
+                                                        : 'bg-red-500/40 text-red-100'
+                                              ) : (
+                                                // Over par gradient (worse scores have deeper gray)
+                                                positionData.score >= '+10'
+                                                  ? 'bg-gray-900/40 text-gray-100'
+                                                  : positionData.score >= '+7'
+                                                    ? 'bg-gray-800/40 text-gray-100'
+                                                    : positionData.score >= '+5'
+                                                      ? 'bg-gray-700/40 text-gray-100'
+                                                      : positionData.score >= '+3'
+                                                        ? 'bg-gray-600/40 text-gray-100'
+                                                        : 'bg-gray-500/40 text-gray-100'
+                                              )
+                                        }`}>
+                                          {positionData.score}
+                                        </span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="text-gray-400">-</span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </TableCell>
+                          
                           <TableCell className="text-center">
                             {sortedPlayers.map((player, idx) => (
-                              <div key={`odds-${idx}`} className={`${player.hasGap ? "font-bold text-green-400" : ""} relative w-24 mx-auto`}>
+                              <div key={`odds-${idx}`} className={`${player.hasGap ? "font-bold text-green-400" : ""} relative w-24 mx-auto py-1 h-8 flex items-center justify-center`}>
                                 <span>{formatOdds(player.odds)}</span>
                                 {divergence?.isDivergence && player.dgFavorite ? (
                                   <Tooltip>
@@ -711,7 +919,7 @@ export default function MatchupsTable({
                           </TableCell>
                           <TableCell className="text-center">
                             {sortedPlayers.map((player, idx) => (
-                              <div key={`dg-odds-${idx}`} className={player.hasDGGap ? "font-bold text-green-400" : ""}>
+                              <div key={`dg-odds-${idx}`} className={`${player.hasDGGap ? "font-bold text-green-400" : ""} py-1 h-8 flex items-center justify-center`}>
                                 {formatOdds(player.dgOdds)}
                               </div>
                             ))}
@@ -800,23 +1008,124 @@ export default function MatchupsTable({
                         return a.odds - b.odds;
                       });
 
+                      // Format the player's tournament position and score
+                      const formatPlayerPosition = (playerId: number) => {
+                        const playerStat = playerStats[playerId];
+                        if (!playerStat) return null;
+                        
+                        // Format the position display
+                        const position = playerStat.position || '';
+                        
+                        // Ensure score is always a string
+                        let score: string | null = null;
+                        if (playerStat.total !== null && playerStat.total !== undefined) {
+                          if (playerStat.total === 0) {
+                            score = 'E';
+                          } else if (playerStat.total > 0) {
+                            score = `+${playerStat.total}`;
+                          } else {
+                            score = playerStat.total.toString();
+                          }
+                        }
+                          
+                        return { position, score };
+                      };
+                      
                       return (
                         <TableRow key={`2ball-${key}`}>
                           <TableCell>
                             {sortedPlayers.map((player, idx) => (
-                              <div key={`player-${idx}`}>{formatPlayerName(player.name)}</div>
+                              <div key={`player-${idx}`} className="py-1 h-8 flex items-center">{formatPlayerName(player.name)}</div>
                             ))}
                           </TableCell>
+                          
+                          {/* Position column for 2-ball */}
+                          <TableCell className="text-center">
+                            {sortedPlayers.map((player, idx) => {
+                              const playerId = player.id === 'p1' ? matchup.p1_dg_id : 
+                                            player.id === 'p2' ? matchup.p2_dg_id : 0;
+                              
+                              const positionData = formatPlayerPosition(playerId);
+                              
+                              return (
+                                <div key={`position-${idx}`} className="py-1 h-8 flex items-center justify-center">
+                                  {positionData ? (
+                                    <div className="flex items-center justify-center space-x-2 w-full">
+                                      <span className={`px-2 py-0.5 text-xs rounded min-w-12 text-center font-medium ${
+                                        // Position heatmap - from gold (1st) to blue gradient (top 30) to gray (below top 30)
+                                        positionData.position === '1' 
+                                          ? 'bg-yellow-500/40 text-yellow-100' 
+                                          : positionData.position === 'T1'
+                                            ? 'bg-yellow-500/30 text-yellow-100'
+                                          : positionData.position === '2' || positionData.position === 'T2'
+                                            ? 'bg-amber-500/30 text-amber-100'
+                                          : positionData.position === '3' || positionData.position === 'T3'
+                                            ? 'bg-orange-500/30 text-orange-100'
+                                          : positionData.position?.match(/^T?[4-5]$/)
+                                            ? 'bg-red-500/30 text-red-100'
+                                          : positionData.position?.match(/^T?[6-9]$/) || positionData.position === 'T10' || positionData.position === '10'
+                                            ? 'bg-purple-500/30 text-purple-100'
+                                          : positionData.position?.match(/^T?1[1-9]$/) || positionData.position?.match(/^T?2[0-5]$/)
+                                            ? 'bg-blue-500/30 text-blue-100'
+                                          : positionData.position?.match(/^T?2[6-9]$/) || positionData.position?.match(/^T?3[0-9]$/)
+                                            ? 'bg-blue-700/30 text-blue-200' 
+                                            : positionData.position === 'CUT' || positionData.position === 'WD'
+                                              ? 'bg-rose-950/30 text-rose-300'
+                                              : 'bg-gray-500/30 text-gray-300'
+                                      }`}>
+                                        {positionData.position}
+                                      </span>
+                                      {positionData.score && (
+                                        <span className={`px-2 py-0.5 text-xs rounded min-w-12 text-center font-medium ${
+                                          // Score heatmap - from deep red (best) to green (even) to gray (over par)
+                                          positionData.score === 'E' 
+                                            ? 'bg-green-600/30 text-green-100' 
+                                            : positionData.score.startsWith('-') ? (
+                                                // Under par gradient (better scores have deeper red)
+                                                positionData.score <= '-10' 
+                                                  ? 'bg-red-900/40 text-red-100' 
+                                                  : positionData.score <= '-7'
+                                                    ? 'bg-red-800/40 text-red-100'
+                                                    : positionData.score <= '-5'
+                                                      ? 'bg-red-700/40 text-red-100'
+                                                      : positionData.score <= '-3'
+                                                        ? 'bg-red-600/40 text-red-100'
+                                                        : 'bg-red-500/40 text-red-100'
+                                              ) : (
+                                                // Over par gradient (worse scores have deeper gray)
+                                                positionData.score >= '+10'
+                                                  ? 'bg-gray-900/40 text-gray-100'
+                                                  : positionData.score >= '+7'
+                                                    ? 'bg-gray-800/40 text-gray-100'
+                                                    : positionData.score >= '+5'
+                                                      ? 'bg-gray-700/40 text-gray-100'
+                                                      : positionData.score >= '+3'
+                                                        ? 'bg-gray-600/40 text-gray-100'
+                                                        : 'bg-gray-500/40 text-gray-100'
+                                              )
+                                        }`}>
+                                          {positionData.score}
+                                        </span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="text-gray-400">-</span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </TableCell>
+                          
                           <TableCell className="text-center">
                             {sortedPlayers.map((player, idx) => (
-                              <div key={`odds-${idx}`} className={`py-1 ${player.hasGap ? "font-bold text-green-400" : ""}`}>
+                              <div key={`odds-${idx}`} className={`py-1 h-8 flex items-center justify-center ${player.hasGap ? "font-bold text-green-400" : ""}`}>
                                 {formatOdds(player.odds)}
                               </div>
                             ))}
                           </TableCell>
                           <TableCell className="text-center">
                             {sortedPlayers.map((player, idx) => (
-                              <div key={`dk-odds-${idx}`} className={`py-1 ${player.hasDKGap ? "font-bold text-green-400" : ""}`}>
+                              <div key={`dk-odds-${idx}`} className={`py-1 h-8 flex items-center justify-center ${player.hasDKGap ? "font-bold text-green-400" : ""}`}>
                                 {formatOdds(player.dkOdds)}
                               </div>
                             ))}
