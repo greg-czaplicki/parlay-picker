@@ -13,8 +13,9 @@ import {
     deleteParlay,
     ParlayPick,
     ParlayWithPicks,
-    ParlayPickWithData
+    ParlayPickWithData 
 } from '@/app/actions/matchups';
+import { createServerClient } from '@/lib/supabase';
 import { toast } from '@/components/ui/use-toast';
 import { Loader2, Check, X } from 'lucide-react';
 import { LiveTournamentStat } from '@/types/definitions';
@@ -131,9 +132,15 @@ export default function ParlayCard({
         i === index ? { ...p, matchup, matchupError: error, isLoadingMatchup: false } : p
       ));
       
-      // If we got a matchup, immediately load stats for it
-      if (matchup && isMounted.current) {
-        await loadStatsForPlayer({ ...player, matchup }, index);
+      // If we got a matchup or even if we didn't (try to load stats by player name)
+      if (isMounted.current) {
+        if (matchup) {
+          // If we have a matchup, load stats using the player IDs
+          await loadStatsForPlayer({ ...player, matchup }, index);
+        } else {
+          // If no matchup, try to load stats just by player name
+          await loadStatsByPlayerName(player, index);
+        }
       }
     } catch (err) {
       console.error(`Error loading matchup for ${player.name}:`, err);
@@ -143,6 +150,116 @@ export default function ParlayCard({
       
       setPlayers(prev => prev.map((p, i) =>
         i === index ? { ...p, matchupError: "Failed to load matchup", isLoadingMatchup: false } : p
+      ));
+
+      // Even if matchup fails, try to get stats by player name
+      if (isMounted.current) {
+        await loadStatsByPlayerName(player, index);
+      }
+    }
+  };
+  
+  // Function to load stats for a player's matchup
+  // Function to load stats by player name when we don't have a matchup
+  const loadStatsByPlayerName = async (player: ParlayPlayer, index: number) => {
+    if (!isMounted.current) return;
+    
+    try {
+      // Set loading state
+      setPlayers(prev => prev.map((p, i) => 
+        i === index ? { ...p, isLoadingStats: true } : p
+      ));
+      
+      // Extract potential name formats for the search
+      let playerName = player.name;
+      let searchPatterns = [playerName];
+      
+      // Handle "Last, First" format
+      if (playerName.includes(",")) {
+        const [lastName, firstName] = playerName.split(",").map(part => part.trim());
+        searchPatterns.push(`${firstName} ${lastName}`); // Convert to "First Last"
+      } else {
+        // Handle "First Last" format
+        const parts = playerName.split(" ");
+        if (parts.length >= 2) {
+          const firstName = parts.slice(0, -1).join(" ");
+          const lastName = parts[parts.length - 1];
+          searchPatterns.push(`${lastName}, ${firstName}`); // Convert to "Last, First"
+        }
+      }
+      
+      // Make the database query to find stats based on name
+      const supabase = createServerClient();
+      
+      // Build a like query for each pattern
+      const likeQueries = searchPatterns.map(pattern => 
+        `player_name.ilike."%${pattern}%"`
+      ).join(",");
+      
+      const { data: playerStats, error } = await supabase
+        .from('live_tournament_stats')
+        .select('*')
+        .or(likeQueries)
+        .eq('event_name', 'Truist Championship') // Try to match current event
+        .order('data_golf_updated_at', { ascending: false })
+        .limit(10)
+        .returns<LiveTournamentStat[]>();
+      
+      // Skip if component unmounted during async call
+      if (!isMounted.current) return;
+      
+      if (error) {
+        console.error(`Stats query error for ${player.name}:`, error);
+        setPlayers(prev => prev.map((p, i) => 
+          i === index ? {
+            ...p,
+            statsError: "Failed to query stats by name",
+            isLoadingStats: false
+          } : p
+        ));
+        return;
+      }
+      
+      if (!playerStats || playerStats.length === 0) {
+        console.log(`No stats found for player ${player.name}`);
+        setPlayers(prev => prev.map((p, i) => 
+          i === index ? {
+            ...p,
+            isLoadingStats: false
+          } : p
+        ));
+        return;
+      }
+      
+      // Process and update stats
+      const statsMap: Record<number, LiveTournamentStat> = {};
+      playerStats.forEach(stat => {
+        if (stat.dg_id) {
+          statsMap[stat.dg_id] = stat;
+        }
+      });
+      
+      console.log(`Found ${Object.keys(statsMap).length} stats for ${player.name}`);
+      
+      setPlayers(prev => prev.map((p, i) => 
+        i === index ? {
+          ...p, 
+          liveStats: statsMap,
+          isLoadingStats: false
+        } : p
+      ));
+    } catch (err) {
+      console.error(`Error loading stats by name for ${player.name}:`, err);
+      
+      // Skip if component unmounted
+      if (!isMounted.current) return;
+      
+      setPlayers(prev => prev.map((p, i) => 
+        i === index ? {
+          ...p,
+          statsError: "Failed to load stats by name",
+          isLoadingStats: false
+        } : p
       ));
     }
   };
@@ -707,23 +824,7 @@ export default function ParlayCard({
         </div>
       </CardHeader>
       {/* Content takes remaining space and scrolls internally if needed */}
-      <CardContent className="flex-grow overflow-y-auto p-4 space-y-4"> 
-        {/* Input section */}
-        <div className="flex space-x-2"> 
-          <Input
-            type="text"
-            placeholder="Add player name..."
-            value={newPlayerName}
-            onChange={handleInputChange}
-            onKeyPress={handleKeyPress}
-            disabled={isAdding}
-            className="flex-grow h-9 text-sm"
-          />
-          <Button onClick={addPlayer} disabled={isAdding || !newPlayerName.trim()} size="sm">
-            {isAdding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            Add
-          </Button>
-        </div>
+      <CardContent className="flex-grow overflow-y-auto p-4 space-y-4">
 
         {/* Players List */}
         <div>
@@ -768,7 +869,47 @@ export default function ParlayCard({
                             </div>
                         )}
                         {!player.isLoadingMatchup && !player.matchupError && !player.matchup && (
-                            <p className="text-sm text-muted-foreground italic px-1 py-2">No 3-ball matchup data found for {player.name}.</p>
+                            <div className="p-4 bg-[#1e1e23] rounded-lg">
+                              <div className="flex justify-between items-center">
+                                <div className="font-medium">{player.name}</div>
+                                <div className="text-xs px-2 py-1 rounded bg-[#2a2a35]">
+                                  {player.pickId ? "Added from Parlay Builder" : "From Search"}
+                                </div>
+                              </div>
+                              {/* Try to display live stats if available */}
+                              {player.liveStats && Object.keys(player.liveStats).length > 0 ? (
+                                <div className="mt-3 border border-border/20 rounded p-2 space-y-2">
+                                  <div className="text-xs font-medium text-muted-foreground">
+                                    Tournament Stats
+                                  </div>
+                                  {Object.values(player.liveStats).map((stat, idx) => (
+                                    <div key={idx} className="flex justify-between text-sm">
+                                      <div>{stat.event_name} (R{stat.round_num})</div>
+                                      <div className="font-mono">
+                                        {stat.position && 
+                                          <span className="px-1.5 py-0.5 text-xs bg-primary/20 rounded ml-1">
+                                            {stat.position}
+                                          </span>
+                                        }
+                                        {stat.today !== undefined && 
+                                          <span className={`px-1.5 py-0.5 text-xs rounded ml-1 ${
+                                            stat.today < 0 ? "bg-green-500/20 text-green-300" : 
+                                            stat.today > 0 ? "bg-red-500/20 text-red-300" : 
+                                            "bg-gray-500/20"
+                                          }`}>
+                                            {stat.today === 0 ? "E" : stat.today > 0 ? `+${stat.today}` : stat.today}
+                                          </span>
+                                        }
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="mt-2 text-sm text-muted-foreground">
+                                  No live tournament data available for this player.
+                                </div>
+                              )}
+                            </div>
                         )}
                          {/* Show loader only if matchup is loading */}
                          {player.isLoadingMatchup && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground mx-auto my-2" />}
