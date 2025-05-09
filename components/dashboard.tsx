@@ -25,6 +25,7 @@ import { PlayerSkillRating, LiveTournamentStat, PgaTourPlayerStats } from "@/typ
 import RecommendedPicks from "./recommended-picks"
 import { createBrowserClient } from "@/lib/supabase"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
+import { ParlayProvider } from "@/context/ParlayContext"
 
 const filters = [
   { name: "Balanced", icon: <Filter className="w-4 h-4" /> },
@@ -152,6 +153,7 @@ export default function Dashboard({
     };
     
     window.addEventListener('matchupTypeChanged', handleMatchupTypeChange);
+    
     return () => {
       window.removeEventListener('matchupTypeChanged', handleMatchupTypeChange);
     };
@@ -163,23 +165,24 @@ export default function Dashboard({
   }
 
   return (
-    <div className="w-full">
-      <div className="mt-6 mb-8 flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Golf Parlay Picker</h1>
-        <div className="flex items-center gap-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-            <Input placeholder="Search players..." className="pl-10 w-64 bg-[#1e1e23] border-none rounded-xl" />
+    <ParlayProvider>
+      <div className="w-full">
+        <div className="mt-6 mb-8 flex items-center justify-between">
+          <h1 className="text-3xl font-bold">Golf Parlay Picker</h1>
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+              <Input placeholder="Search players..." className="pl-10 w-64 bg-[#1e1e23] border-none rounded-xl" />
+            </div>
+            <Button variant="outline" size="icon" className="rounded-full bg-[#1e1e23] border-none">
+              <Bell size={18} />
+            </Button>
+            <Avatar>
+              <AvatarImage src="/placeholder.svg" />
+              <AvatarFallback>JD</AvatarFallback>
+            </Avatar>
           </div>
-          <Button variant="outline" size="icon" className="rounded-full bg-[#1e1e23] border-none">
-            <Bell size={18} />
-          </Button>
-          <Avatar>
-            <AvatarImage src="/placeholder.svg" />
-            <AvatarFallback>JD</AvatarFallback>
-          </Avatar>
         </div>
-      </div>
 
       <div className="mb-6">
         <div className="flex space-x-2">
@@ -294,6 +297,7 @@ export default function Dashboard({
 
       {/* Players tab removed and moved to its own page */}
       {activeTab === "parlay" && <ParlayBuilder matchupType={matchupType} />}
-    </div>
+      </div>
+    </ParlayProvider>
   )
 }

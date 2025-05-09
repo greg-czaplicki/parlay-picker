@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/use-toast';
 import { Loader2, PlusCircle } from 'lucide-react';
-import { createParlay, ParlayWithPicks, ParlayPickWithData } from '@/app/actions/matchups';
+import { createParlay, ParlayWithPicks, ParlayPickWithData, addParlayPick } from '@/app/actions/matchups';
 import { useRouter } from 'next/navigation';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
@@ -36,6 +36,108 @@ export default function ParlaysClient({ initialParlays, initialPicksWithData, cu
         .filter(round => round !== null)
     )
   ).sort((a, b) => Number(a) - Number(b));
+  
+  // Handle query parameters for adding a player from RecommendedPicks
+  useEffect(() => {
+    const handleAddPlayerFromParams = async () => {
+      const searchParams = new URLSearchParams(window.location.search);
+      const shouldAdd = searchParams.get('add') === 'true';
+      
+      if (shouldAdd) {
+        const playerName = searchParams.get('player');
+        const playerIdStr = searchParams.get('playerId');
+        const matchupIdStr = searchParams.get('matchupId');
+        const eventName = searchParams.get('eventName');
+        const roundNumStr = searchParams.get('roundNum') || '2'; // Default to Round 2
+        
+        if (playerName && playerIdStr) {
+          const playerId = parseInt(playerIdStr, 10);
+          const matchupId = matchupIdStr ? parseInt(matchupIdStr, 10) : null;
+          const roundNum = parseInt(roundNumStr, 10);
+          
+          // Find the most recent parlay or create a new one
+          let targetParlayId: number | null = null;
+          
+          if (parlays.length > 0) {
+            // Find the most recent parlay for this round
+            const roundParlays = parlays.filter(p => {
+              // Check if this is an empty parlay
+              if (p.picks.length === 0) return true;
+              
+              // Check if any pick is from this round
+              return p.picks.some(pick => {
+                const pickData = initialPicksWithData.find(data => data.pick.id === pick.id);
+                return pickData?.pick.round_num === roundNum;
+              });
+            });
+            
+            if (roundParlays.length > 0) {
+              // Use the most recent parlay
+              targetParlayId = roundParlays[0].id;
+            }
+          }
+          
+          // If no suitable parlay found, create a new one
+          if (!targetParlayId) {
+            try {
+              const { parlay, error } = await createParlay(`Round ${roundNum} Parlay`);
+              if (error || !parlay) {
+                throw new Error(error || "Failed to create parlay");
+              }
+              targetParlayId = parlay.id;
+              // Add the new parlay to the state
+              setParlays(prev => [...prev, { ...parlay, picks: [] }]);
+            } catch (err) {
+              console.error("Error creating parlay:", err);
+              toast({
+                title: "Error Creating Parlay",
+                description: "Failed to create a new parlay for this pick.",
+                variant: "destructive"
+              });
+              return;
+            }
+          }
+          
+          // Now add the player to the parlay
+          try {
+            const { pick, error } = await addParlayPick({
+              parlay_id: targetParlayId,
+              picked_player_dg_id: playerId,
+              picked_player_name: playerName,
+              matchup_id: matchupId || undefined,
+              event_name: eventName || undefined,
+              round_num: roundNum,
+            });
+            
+            if (error) {
+              throw new Error(error);
+            }
+            
+            // Success message
+            toast({
+              title: "Player Added",
+              description: `${playerName} added to your parlay.`,
+              variant: "default"
+            });
+            
+            // Clear the URL parameters and refresh to update the UI
+            window.history.replaceState({}, document.title, "/parlays");
+            router.refresh();
+            
+          } catch (err) {
+            console.error("Error adding player to parlay:", err);
+            toast({
+              title: "Error Adding Player",
+              description: "Failed to add player to parlay.",
+              variant: "destructive"
+            });
+          }
+        }
+      }
+    };
+    
+    handleAddPlayerFromParams();
+  }, [router, parlays, initialPicksWithData]);
   
   // Add current round to uniqueRounds if it doesn't exist
   if (currentRound !== null && !uniqueRounds.includes(currentRound)) {

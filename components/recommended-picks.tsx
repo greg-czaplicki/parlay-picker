@@ -6,7 +6,23 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Plus, AlertCircle } from "lucide-react"
-import { getMatchups, Matchup, Player } from "@/app/actions/matchups"
+import { getMatchups, Matchup } from "@/app/actions/matchups"
+import { toast } from "@/components/ui/use-toast"
+import { useParlay, ParlaySelection } from "@/context/ParlayContext"
+
+// Extend the Player interface to include matchup information needed for parlays
+interface Player {
+  id: number;
+  name: string;
+  odds: number;
+  sgTotal: number;
+  valueRating: number;
+  confidenceScore: number;
+  isRecommended: boolean;
+  matchupId?: number;
+  eventName?: string;
+  roundNum?: number;
+}
 
 interface RecommendedPicksProps {
   matchupType: string
@@ -35,6 +51,22 @@ const formatOdds = (decimalOdds: number | null | undefined): string => {
   }
 };
 
+// Helper to convert decimal odds to American odds as a number
+const convertToAmericanOdds = (decimalOdds: number | null | undefined): number => {
+  if (decimalOdds == null || decimalOdds <= 1.01) {
+      // Handle null, undefined, or odds too low to be meaningful/convertible
+      return 0; 
+  }
+  
+  if (decimalOdds >= 2.00) {
+    // Positive American odds: (Decimal - 1) * 100
+    return Math.round((decimalOdds - 1) * 100);
+  } else {
+    // Negative American odds: -100 / (Decimal - 1)
+    return Math.round(-100 / (decimalOdds - 1));
+  }
+};
+
 export default function RecommendedPicks({
   matchupType = "3ball",
   bookmaker,
@@ -46,11 +78,123 @@ export default function RecommendedPicks({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeMatchupType, setActiveMatchupType] = useState<"2ball" | "3ball">(matchupType as "2ball" | "3ball")
+  
+  // Get the parlay context
+  const { addSelection, removeSelection, selections } = useParlay()
+  
+  // Track which players have been added to the parlay
+  const [addedPlayers, setAddedPlayers] = useState<Record<string, boolean>>({})
+  
+  // Function to add a player to the parlay
+  const addToParlay = (selection: ParlaySelection, playerId: number) => {
+    // Format player name to "First Last" format if it's in "Last, First" format
+    let playerName = selection.player
+    if (playerName.includes(",")) {
+      const [lastName, firstName] = playerName.split(",").map(part => part.trim())
+      playerName = `${firstName} ${lastName}`
+      selection.player = playerName
+    }
+    
+    addSelection(selection)
+    
+    // Track this player as added
+    setAddedPlayers(prev => ({ ...prev, [playerId]: true }))
+    
+    toast({
+      title: "Added to Parlay",
+      description: `${playerName} has been added to your parlay.`,
+      duration: 3000
+    })
+  }
+  
+  // Function to remove a player from the parlay
+  const removeFromParlay = (selectionId: string, playerId: number, playerName: string) => {
+    removeSelection(selectionId)
+    
+    // Mark player as removed in local state
+    setAddedPlayers(prev => ({ ...prev, [playerId]: false }))
+    
+    // Format player name if needed for toast
+    let displayName = playerName
+    if (displayName.includes(",")) {
+      const [lastName, firstName] = displayName.split(",").map(part => part.trim())
+      displayName = `${firstName} ${lastName}`
+    }
+    
+    toast({
+      title: "Removed from Parlay",
+      description: `${displayName} has been removed from your parlay.`,
+      duration: 3000
+    })
+  }
+  
+  // Check if a player is already in the parlay
+  const isPlayerInParlay = (playerId: number, playerName: string): { inParlay: boolean, selectionId?: string } => {
+    // First check our local tracking state
+    if (addedPlayers[playerId]) {
+      // Find the selection ID
+      const selection = selections.find(s => {
+        // Try to match by player name, accounting for "Last, First" vs "First Last" format
+        let nameToCheck = s.player
+        let nameToMatch = playerName
+        
+        if (nameToCheck.includes(",")) {
+          const [lastName, firstName] = nameToCheck.split(",").map(part => part.trim())
+          nameToCheck = `${firstName} ${lastName}`
+        }
+        
+        if (nameToMatch.includes(",")) {
+          const [lastName, firstName] = nameToMatch.split(",").map(part => part.trim())
+          nameToMatch = `${firstName} ${lastName}`
+        }
+        
+        return nameToCheck.toLowerCase() === nameToMatch.toLowerCase()
+      })
+      
+      return { inParlay: true, selectionId: selection?.id }
+    }
+    
+    return { inParlay: false }
+  }
 
   // Update local state when prop changes
   useEffect(() => {
     setActiveMatchupType(matchupType as "2ball" | "3ball");
   }, [matchupType]);
+  
+  // Sync addedPlayers state with selections from context
+  useEffect(() => {
+    // Find players that are currently in recommendations and also in selections
+    const newAddedPlayers: Record<string, boolean> = {...addedPlayers}
+    
+    // Loop through recommendations to check if any are in the parlay
+    recommendations.forEach(player => {
+      // Format player name for comparison
+      let formattedPlayerName = player.name
+      if (formattedPlayerName.includes(",")) {
+        const [lastName, firstName] = formattedPlayerName.split(",").map(part => part.trim())
+        formattedPlayerName = `${firstName} ${lastName}`
+      }
+      
+      // Check if this player is in the selections
+      const isInParlay = selections.some(selection => {
+        // Format selection player name for comparison
+        let selectionPlayerName = selection.player
+        if (selectionPlayerName.includes(",")) {
+          const [lastName, firstName] = selectionPlayerName.split(",").map(part => part.trim())
+          selectionPlayerName = `${firstName} ${lastName}`
+        }
+        
+        return selectionPlayerName.toLowerCase() === formattedPlayerName.toLowerCase()
+      })
+      
+      // Update tracking state
+      newAddedPlayers[player.id] = isInParlay
+    })
+    
+    // Update state if needed
+    setAddedPlayers(newAddedPlayers)
+  }, [selections, recommendations]);
 
   useEffect(() => {
     const fetchRecommendations = async () => {
@@ -112,7 +256,10 @@ export default function RecommendedPicks({
                 sgTotal: 0, // We don't have SG data here
                 valueRating: 0, // Will calculate later 
                 confidenceScore: 0, // Will calculate later
-                isRecommended: false // Will set later
+                isRecommended: false, // Will set later
+                matchupId: apiMatchup.id,
+                eventName: apiMatchup.event_name,
+                roundNum: apiMatchup.round_num
               },
               {
                 id: apiMatchup.p2_dg_id || 0,
@@ -121,7 +268,10 @@ export default function RecommendedPicks({
                 sgTotal: 0,
                 valueRating: 0,
                 confidenceScore: 0,
-                isRecommended: false
+                isRecommended: false,
+                matchupId: apiMatchup.id,
+                eventName: apiMatchup.event_name,
+                roundNum: apiMatchup.round_num
               },
               {
                 id: apiMatchup.p3_dg_id || 0,
@@ -130,7 +280,10 @@ export default function RecommendedPicks({
                 sgTotal: 0,
                 valueRating: 0,
                 confidenceScore: 0,
-                isRecommended: false
+                isRecommended: false,
+                matchupId: apiMatchup.id,
+                eventName: apiMatchup.event_name,
+                roundNum: apiMatchup.round_num
               }
             ].filter(p => p.odds && p.odds > 1); // Filter out invalid players
             
@@ -158,7 +311,10 @@ export default function RecommendedPicks({
                 sgTotal: 0,
                 valueRating: 0,
                 confidenceScore: 0,
-                isRecommended: false
+                isRecommended: false,
+                matchupId: apiMatchup.id,
+                eventName: apiMatchup.event_name,
+                roundNum: apiMatchup.round_num
               },
               {
                 id: apiMatchup.p2_dg_id || 0,
@@ -167,7 +323,10 @@ export default function RecommendedPicks({
                 sgTotal: 0,
                 valueRating: 0,
                 confidenceScore: 0,
-                isRecommended: false
+                isRecommended: false,
+                matchupId: apiMatchup.id,
+                eventName: apiMatchup.event_name,
+                roundNum: apiMatchup.round_num
               }
             ].filter(p => p.odds && p.odds > 1); // Filter out invalid players
             
@@ -372,13 +531,53 @@ export default function RecommendedPicks({
                     <span className="text-base font-medium text-green-400">{formatOdds(player.odds)}</span>
                   </div>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="w-full mt-2 bg-[#2a2a35] border-none hover:bg-[#34343f] text-white"
-                >
-                  <Plus size={16} className="mr-1" /> Add to Parlay
-                </Button>
+                {(() => {
+                  // Check if this player is already in the parlay
+                  const { inParlay, selectionId } = isPlayerInParlay(player.id, player.name)
+                  
+                  return inParlay ? (
+                    <Button
+                      size="sm"
+                      variant="default"
+                      className="w-full mt-2 bg-primary border-none hover:bg-primary/90 text-white"
+                      onClick={() => {
+                        if (!player.id || !player.name || !selectionId) return;
+                        removeFromParlay(selectionId, player.id, player.name);
+                      }}
+                    >
+                      ✓ Added to Parlay
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full mt-2 bg-[#2a2a35] border-none hover:bg-[#34343f] text-white"
+                      onClick={() => {
+                        if (!player.id || !player.name) return;
+                        
+                        // Convert decimal odds to American odds if needed
+                        const americanOdds = convertToAmericanOdds(player.odds);
+                        
+                        // Add player to parlay context
+                        addToParlay({
+                          id: Date.now().toString(),
+                          matchupType: activeMatchupType,
+                          group: player.eventName || 'Unknown Event',
+                          player: player.name,
+                          odds: americanOdds,
+                          valueRating: player.valueRating || 7.5,
+                          confidenceScore: player.confidenceScore || 75,
+                          matchupId: player.matchupId,
+                          eventName: player.eventName,
+                          roundNum: player.roundNum || 2
+                        }, player.id);
+                      }}
+                    >
+                      <Plus size={16} className="mr-1" /> Add to Parlay
+                    </Button>
+                  );
+                })()}
+                
               </div>
             ))}
           </div>
