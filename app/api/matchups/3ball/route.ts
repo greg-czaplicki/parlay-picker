@@ -84,7 +84,14 @@ async function processMatchups(data: DataGolfResponse, eventMapping: Record<stri
     console.log(`No 3-ball matchups found for ${tourCode} tour`);
     return [];
   }
-  
+
+  // Add safeguard if match_list isn't an array
+  if (!Array.isArray(data.match_list)) {
+    console.error(`ERROR: match_list is not an array for ${tourCode} tour. Type: ${typeof data.match_list}`);
+    console.error(`Data structure: ${JSON.stringify(data).substring(0, 500)}...`);
+    return [];
+  }
+
   // Find appropriate event ID based on event name
   let eventId = fallbackEventId;
   if (data.event_name) {
@@ -157,6 +164,8 @@ export async function GET(request: Request) {
       if (pgaRes.ok) {
         pgaData = await pgaRes.json();
         console.log(`PGA event: ${pgaData.event_name}, 3-ball matchups: ${pgaData.match_list?.length || 0}`);
+        console.log(`PGA data structure: ${JSON.stringify(pgaData)}`);
+        console.log(`Type of match_list: ${typeof pgaData.match_list}`);
       }
     } catch (error) {
       console.error("Error parsing PGA 3-ball data:", error);
@@ -198,10 +207,68 @@ export async function GET(request: Request) {
       });
     }
     
-    // Process matchups for each tour
-    const pgaMatchups = pgaData ? await processMatchups(pgaData, eventMapping, "pga", 480) : [];
-    const oppMatchups = oppData ? await processMatchups(oppData, eventMapping, "opp", 553) : [];
-    const euroMatchups = euroData ? await processMatchups(euroData, eventMapping, "euro", 600) : []; // Using 600 as fallback ID for Euro events
+    // Process matchups for each tour - with additional safeguards
+    let pgaMatchups = [];
+    let oppMatchups = [];
+    let euroMatchups = [];
+
+    try {
+      // Handle PGA matchups
+      if (pgaData) {
+        if (!pgaData.match_list) {
+          console.error("PGA data exists but match_list is undefined/null");
+        } else if (!Array.isArray(pgaData.match_list)) {
+          console.error(`PGA match_list is not an array: ${typeof pgaData.match_list}`);
+          // Try to convert to array if it's an object with numeric keys
+          if (typeof pgaData.match_list === 'object' && pgaData.match_list !== null) {
+            const values = Object.values(pgaData.match_list);
+            if (values.length > 0) {
+              console.log(`Converting object to array with ${values.length} items`);
+              pgaData.match_list = values;
+            }
+          }
+        }
+        pgaMatchups = await processMatchups(pgaData, eventMapping, "pga", 480);
+      }
+
+      // Handle Opposite Field matchups
+      if (oppData) {
+        if (!oppData.match_list) {
+          console.error("OPP data exists but match_list is undefined/null");
+        } else if (!Array.isArray(oppData.match_list)) {
+          console.error(`OPP match_list is not an array: ${typeof oppData.match_list}`);
+          // Try to convert to array if it's an object with numeric keys
+          if (typeof oppData.match_list === 'object' && oppData.match_list !== null) {
+            const values = Object.values(oppData.match_list);
+            if (values.length > 0) {
+              console.log(`Converting object to array with ${values.length} items`);
+              oppData.match_list = values;
+            }
+          }
+        }
+        oppMatchups = await processMatchups(oppData, eventMapping, "opp", 553);
+      }
+
+      // Handle Euro Tour matchups
+      if (euroData) {
+        if (!euroData.match_list) {
+          console.error("EURO data exists but match_list is undefined/null");
+        } else if (!Array.isArray(euroData.match_list)) {
+          console.error(`EURO match_list is not an array: ${typeof euroData.match_list}`);
+          // Try to convert to array if it's an object with numeric keys
+          if (typeof euroData.match_list === 'object' && euroData.match_list !== null) {
+            const values = Object.values(euroData.match_list);
+            if (values.length > 0) {
+              console.log(`Converting object to array with ${values.length} items`);
+              euroData.match_list = values;
+            }
+          }
+        }
+        euroMatchups = await processMatchups(euroData, eventMapping, "euro", 600);
+      }
+    } catch (processError) {
+      console.error("Error processing matchups:", processError);
+    }
     
     // Combine all matchups
     const allMatchups = [...pgaMatchups, ...oppMatchups, ...euroMatchups];
@@ -308,10 +375,38 @@ export async function GET(request: Request) {
     
   } catch (error) {
     console.error("Error in GET /api/matchups/3ball:", error);
+
+    // Enhanced error reporting
+    let errorMessage = error instanceof Error ? error.message : "Unknown error";
+    let errorDetails = {};
+
+    // Include diagnostic info
+    try {
+      errorDetails = {
+        pgaDataExists: !!pgaData,
+        pgaMatchListType: pgaData ? typeof pgaData.match_list : 'undefined',
+        pgaMatchListIsArray: pgaData ? Array.isArray(pgaData.match_list) : false,
+        oppDataExists: !!oppData,
+        oppMatchListType: oppData ? typeof oppData.match_list : 'undefined',
+        oppMatchListIsArray: oppData ? Array.isArray(oppData.match_list) : false,
+        euroDataExists: !!euroData,
+        euroMatchListType: euroData ? typeof euroData.match_list : 'undefined',
+        euroMatchListIsArray: euroData ? Array.isArray(euroData.match_list) : false,
+        allMatchupsLength: allMatchups?.length || 0,
+        pgaMatchupsLength: pgaMatchups?.length || 0,
+        oppMatchupsLength: oppMatchups?.length || 0,
+        euroMatchupsLength: euroMatchups?.length || 0,
+        errorStack: error instanceof Error ? error.stack : null
+      };
+    } catch (diagnosticError) {
+      errorDetails.diagnosticError = `Error collecting diagnostics: ${diagnosticError.message}`;
+    }
+
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: errorMessage,
+        diagnostic: errorDetails
       },
       { status: 500 },
     );

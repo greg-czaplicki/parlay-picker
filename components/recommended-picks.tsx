@@ -508,7 +508,7 @@ export default function RecommendedPicks({
         {!loading && !error && recommendations.length > 0 && (
           <div className="space-y-3">
             {recommendations.map((player) => (
-              <div key={player.id} className="p-4 bg-[#1e1e23] rounded-lg flex flex-col gap-2">
+              <div key={`${player.id}-${player.matchupId || Math.random().toString(36).substring(7)}`} className="p-4 bg-[#1e1e23] rounded-lg flex flex-col gap-2">
                 <div className="flex justify-between items-start">
                   <div>
                     <div className="font-medium text-lg">{player.name}</div>
