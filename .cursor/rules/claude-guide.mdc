@@ -1,0 +1,49 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Project Structure
+- See [CLAUDE.md](mdc:CLAUDE.md) for full details.
+- `app/`: Next.js App Router (actions, api, matchups, parlays)
+- `components/`: UI (Shadcn UI, tables, feature components)
+- `context/`: React contexts (e.g., ParlayContext)
+- `hooks/`: Custom React hooks
+- `lib/`: Utilities and Supabase client
+- `tests/`: Jest test files
+
+# Data Flow
+- Use Supabase `createServerClient()` for server data fetching.
+- API routes sync tournament and matchup data from external sources.
+- Client components use React Query for data fetching/caching.
+- ParlayContext manages parlay state/calculations.
+
+# Supabase Integration
+- Use MCP tool to view, edit, and update tables.
+- Use browser/server Supabase clients as appropriate.
+- Database tables: tournaments, players, player_season_stats, matchups, parlay_selections.
+
+# Testing
+- Use Jest (Node env) for API/data processing tests.
+- Mock Supabase responses for test predictability.
+
+# Environment Variables
+- `.env.local` must include:
+  - `NEXT_PUBLIC_SUPABASE_URL`
+  - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+  - `SUPABASE_URL`
+  - `SUPABASE_SERVICE_ROLE_KEY`
+
+# Database Schema Expectations
+- Supabase tables required: tournaments, players, player_season_stats, matchups, parlay_selections.
+
+# UI/UX Styles
+- Use Shadcn UI, Radix UI, and Tailwind CSS.
+- Responsive design via Tailwind (mobile-first).
+
+# Performance
+- Minimize `use client`, `useEffect`, `useState`.
+- Prefer React Server Components for data/rendering.
+- Use `<Suspense />` for client components with fallback.
+- Load non-critical components dynamically.
+- Use Next.js `<Image />` with width/height and lazy loading.
