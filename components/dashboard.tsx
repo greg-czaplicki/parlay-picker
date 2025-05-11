@@ -128,7 +128,11 @@ export default function Dashboard({
                         </SelectTrigger>
                         <SelectContent>
                           {currentEvents
-                            .sort((a: TournamentEvent, b: TournamentEvent) => a.start_date.localeCompare(b.start_date))
+                            .sort((a: TournamentEvent, b: TournamentEvent) => {
+                              const aDate = a.start_date ?? '';
+                              const bDate = b.start_date ?? '';
+                              return aDate.localeCompare(bDate);
+                            })
                             .map(ev => (
                               <SelectItem key={ev.event_id} value={String(ev.event_id)}>
                                 {ev.event_name}
