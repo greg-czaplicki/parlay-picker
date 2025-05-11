@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { validate } from '@/lib/validation'
 import { tableEventQuerySchema } from '@/lib/schemas'
+import { jsonSuccess, jsonError } from '@/lib/api-response'
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -22,23 +23,27 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Invalid query parameters' }, { status: 400 });
   }
   const { table, event } = params;
+  if (!table || typeof table !== 'string') {
+    return jsonError('Missing or invalid table parameter', 'VALIDATION_ERROR');
+  }
   
   try {
     // First, get a count by event_id
+    // Supabase JS does not support .group, so fetch all and group in JS if needed
     const { data: countData, error: countError } = await supabase
       .from(table)
-      .select('event_id, event_name, count(*)')
-      .group('event_id, event_name');
+      .select('event_id, event_name');
+    // TODO: Group by event_id, event_name in JS if needed
     
     if (countError) {
-      return NextResponse.json({ error: countError.message }, { status: 500 });
+      return jsonError(countError.message, 'DB_ERROR');
     }
     
     // Now get details if event parameter is provided
     let detailData = null;
     let detailError = null;
     
-    if (event) {
+    if (event && typeof event === 'string') {
       const { data, error } = await supabase
         .from(table)
         .select('*')
@@ -49,18 +54,13 @@ export async function GET(request: Request) {
       detailError = error;
     }
     
-    return NextResponse.json({
+    return jsonSuccess({
       counts: countData,
       details: detailData,
       detailError: detailError ? detailError.message : null
     });
   } catch (error) {
     console.error("Error in debug endpoint:", error);
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 },
-    );
+    return jsonError(error instanceof Error ? error.message : 'Unknown error', 'INTERNAL_ERROR');
   }
 }

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { handleApiError } from '@/lib/utils'
 import { validate } from '@/lib/validation'
 import { threeBallMatchupsQuerySchema } from '@/lib/schemas'
+import { jsonSuccess, jsonError } from '@/lib/api-response'
 
 // Define interfaces for the Data Golf API response
 interface Odds {
@@ -382,8 +383,7 @@ export async function GET(request: Request): Promise<Response> {
       matchupsByEvent[eventIdKey].matchups.push(m);
     });
     
-    return NextResponse.json({
-      success: true,
+    return jsonSuccess({
       matchups: filteredMatchups,
       events: Object.values(matchupsByEvent),
       tourCounts: {

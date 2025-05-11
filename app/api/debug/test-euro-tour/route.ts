@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { handleApiError } from '@/lib/utils'
+import { jsonSuccess, jsonError } from '@/lib/api-response'
 
 // Initialize Supabase client
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -70,31 +71,30 @@ export async function GET() {
       .select("event_id, event_name, tour")
       .eq("tour", "euro");
     
-    return NextResponse.json({
-      success: true,
+    return jsonSuccess({
       schedule: {
         tour: scheduleData.tour,
         season: scheduleData.current_season,
         eventCount: scheduleData.schedule?.length || 0,
-        events: scheduleData.schedule?.slice(0, 5) || [] // Just return the first 5 events for brevity
+        events: scheduleData.schedule?.slice(0, 5) || []
       },
       twoBall: {
         eventName: twoBallData?.event_name || null,
         roundNum: twoBallData?.round_num || null,
         lastUpdated: twoBallData?.last_updated || null,
         matchupCount: twoBallData?.match_list?.length || 0,
-        sampleMatchups: twoBallData?.match_list?.slice(0, 3) || [] // Just return 3 sample matchups
+        sampleMatchups: twoBallData?.match_list?.slice(0, 3) || []
       },
       threeBall: {
         eventName: threeBallData?.event_name || null,
         roundNum: threeBallData?.round_num || null,
         lastUpdated: threeBallData?.last_updated || null,
         matchupCount: threeBallData?.match_list?.length || 0,
-        sampleMatchups: threeBallData?.match_list?.slice(0, 3) || [] // Just return 3 sample matchups
+        sampleMatchups: threeBallData?.match_list?.slice(0, 3) || []
       },
       database: {
         euroTournamentsCount: tournaments?.length || 0,
-        sampleTournaments: tournaments?.slice(0, 5) || [] // Just return 5 sample tournaments
+        sampleTournaments: tournaments?.slice(0, 5) || []
       }
     });
     

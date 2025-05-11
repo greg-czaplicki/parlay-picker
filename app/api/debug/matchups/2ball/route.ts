@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { handleApiError } from '@/lib/utils'
 import { validate } from '@/lib/validation'
 import { eventIdParamSchema } from '@/lib/schemas'
+import { jsonSuccess, jsonError } from '@/lib/api-response'
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -59,7 +60,7 @@ export async function GET(request: Request) {
     
     const { data: directData, error: directError } = await directQuery;
     
-    return NextResponse.json({
+    return jsonSuccess({
       dbCounts: countData,
       countError: countError?.message,
       apiStatus: apiResponse.status,

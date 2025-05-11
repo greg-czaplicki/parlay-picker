@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { handleApiError } from '@/lib/utils'
 import { validate } from '@/lib/validation'
 import { eventIdParamSchema } from '@/lib/schemas'
+import { jsonSuccess, jsonError } from '@/lib/api-response'
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -62,7 +63,7 @@ export async function GET(request: Request) {
     }
     
     if (matchupsError) {
-      return handleApiError(matchupsError)
+      return jsonError(matchupsError.message, 'DB_ERROR');
     }
     
     // Process matchups to ensure event_id is a number (not a string)
@@ -71,10 +72,7 @@ export async function GET(request: Request) {
       event_id: m.event_id != null ? Number(m.event_id) : null
     }));
     
-    return NextResponse.json({
-      success: true,
-      matchups: processedMatchups 
-    });
+    return jsonSuccess({ matchups: processedMatchups });
   } catch (error) {
     return handleApiError(error)
   }

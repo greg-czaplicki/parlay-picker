@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { handleApiError } from '@/lib/utils'
 import { validate } from '@/lib/validation'
 import { eventIdParamSchema } from '@/lib/schemas'
+import { jsonSuccess, jsonError } from '@/lib/api-response'
 
 // This is a bare-minimum API endpoint with no frills - just gets the data
 
@@ -40,13 +41,10 @@ export async function GET(request: Request) {
     const { data, error } = await query;
     
     if (error) {
-      return handleApiError(error)
+      return jsonError(error.message, 'DB_ERROR');
     }
     
-    return NextResponse.json({
-      success: true,
-      matchups: data || []
-    });
+    return jsonSuccess({ matchups: data || [] });
   } catch (error) {
     return handleApiError(error)
   }

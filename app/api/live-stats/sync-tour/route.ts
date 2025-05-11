@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { validate } from '@/lib/validation'
 import { tourParamSchema } from '@/lib/schemas'
+import { jsonSuccess, jsonError } from '@/lib/api-response'
 
 // Define interfaces for the Data Golf API response
 interface LivePlayerData {
@@ -158,18 +159,12 @@ export async function GET(request: Request) {
     });
     if (params.tour) tour = params.tour;
   } catch (error) {
-    return NextResponse.json({
-      success: false,
-      message: 'Invalid tour parameter',
-    }, { status: 400 });
+    return jsonError('Invalid tour parameter', 'VALIDATION_ERROR');
   }
   
   // Validate tour parameter
   if (!['pga', 'opp', 'euro'].includes(tour)) {
-    return NextResponse.json({
-      success: false,
-      message: `Invalid tour parameter: ${tour}. Must be one of: pga, opp, euro.`,
-    }, { status: 400 });
+    return jsonError(`Invalid tour parameter: ${tour}. Must be one of: pga, opp, euro.`, 'VALIDATION_ERROR');
   }
   
   console.log(`Starting multi-round live stats sync for ${tour.toUpperCase()} tour...`);
@@ -180,10 +175,7 @@ export async function GET(request: Request) {
 
   // Only fetch Euro tour data if tour is 'euro' and handle appropriately
   if (tour === 'euro') {
-    return NextResponse.json({
-      success: false,
-      message: "Euro tour data is not supported by DataGolf API. Only PGA and Opposite Field events are supported.",
-    }, { status: 400 });
+    return jsonError('Euro tour data is not supported by DataGolf API. Only PGA and Opposite Field events are supported.', 'NOT_SUPPORTED');
   }
 
   for (const round of ROUNDS_TO_FETCH) {
@@ -210,13 +202,11 @@ export async function GET(request: Request) {
     console.warn(`${tour.toUpperCase()} sync completed with errors:`, errors);
   }
 
-  return NextResponse.json({
-    success: errors.length === 0,
-    message: finalMessage + (errors.length > 0 ? ` Errors: ${errors.join(', ')}` : ''),
+  return jsonSuccess({
     processedCount: totalInsertedCount,
     sourceTimestamp: lastSourceTimestamp,
     eventName: fetchedEventName,
     tour: tour,
     errors,
-  });
+  }, finalMessage + (errors.length > 0 ? ` Errors: ${errors.join(', ')}` : ''));
 }

@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { handleApiError } from '@/lib/utils'
+import { jsonSuccess, jsonError } from '@/lib/api-response'
 
 // Define interfaces for the Data Golf API response
 interface ScheduleEvent {
@@ -174,13 +175,11 @@ export async function GET() {
       sourceTimestamp = new Date(latest.start_date + 'T00:00:00Z').toISOString();
     }
 
-    return NextResponse.json({
-      success: true,
-      message: `Synced schedules for all tours. ${processedCount} tournaments processed.`,
+    return jsonSuccess({
       processedCount,
       tourCounts,
       sourceTimestamp,
-    });
+    }, `Synced schedules for all tours. ${processedCount} tournaments processed.`);
 
   } catch (error) {
     return handleApiError(error)

@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { jsonSuccess, jsonError } from '@/lib/api-response'
 
 // Define interfaces for the Data Golf API response
 interface LivePlayerData {
@@ -170,12 +171,10 @@ export async function GET() {
     console.warn("Sync completed with errors:", errors);
   }
 
-  return NextResponse.json({
-    success: errors.length === 0,
-    message: finalMessage + (errors.length > 0 ? ` Errors: ${errors.join(', ')}` : ''),
+  return jsonSuccess({
     processedCount: totalInsertedCount,
     sourceTimestamp: lastSourceTimestamp,
     eventName: fetchedEventName,
     errors,
-  });
+  }, finalMessage + (errors.length > 0 ? ` Errors: ${errors.join(', ')}` : ''));
 }

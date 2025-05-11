@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { handleApiError } from '@/lib/utils'
 import { validate } from '@/lib/validation'
 import { eventIdParamSchema } from '@/lib/schemas'
+import { jsonSuccess, jsonError } from '@/lib/api-response'
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -19,12 +20,12 @@ export async function GET(request: Request) {
       eventId: url.searchParams.get('eventId'),
     });
   } catch (error) {
-    return NextResponse.json({ error: 'Invalid or missing eventId' }, { status: 400 });
+    return jsonError('Invalid or missing eventId', 'VALIDATION_ERROR');
   }
   const { eventId } = params;
   
   if (!eventId) {
-    return NextResponse.json({ error: "eventId is required" }, { status: 400 });
+    return jsonError('eventId is required', 'VALIDATION_ERROR');
   }
   
   try {
@@ -75,7 +76,7 @@ export async function GET(request: Request) {
     const { data: sqlCastData, error: sqlCastError } = await supabase
       .rpc('filter_matchups_by_event_id', { event_id_param: parseInt(eventId, 10) });
     
-    return NextResponse.json({
+    return jsonSuccess({
       tournament: {
         event_id: eventId,
         event_name: eventName

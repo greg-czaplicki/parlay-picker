@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { handleApiError } from '@/lib/utils'
 import { validate } from '@/lib/validation'
 import { debugCheckQuerySchema } from '@/lib/schemas'
+import { jsonSuccess, jsonError } from '@/lib/api-response'
 
 export async function GET(request: Request) {
   try {
@@ -47,27 +48,27 @@ export async function GET(request: Request) {
       data = JSON.parse(text);
     } catch (e) {
       // If JSON parsing fails, just return the text
-      return NextResponse.json({
+      return jsonError('JSON parse error', 'JSON_PARSE_ERROR', {
         fetchSuccess: true,
         status,
         jsonParseError: true,
-        responseText: text.substring(0, 1000) // Limit to first 1000 chars
+        responseText: text.substring(0, 1000)
       });
     }
     
     // Return detailed diagnostics
-    return NextResponse.json({
+    return jsonSuccess({
       fetchSuccess: true,
       status,
       apiSuccess: data.success,
       matchupCount: data.matchups?.length || 0,
       eventsCount: data.events?.length || 0,
-      eventIds: data.matchups ? [...new Set(data.matchups.map(m => m.event_id))] : [],
+      eventIds: data.matchups ? [...new Set(data.matchups.map((m: any) => m.event_id))] : [],
       eventIdTypes: data.matchups && data.matchups.length > 0 
-        ? [...new Set(data.matchups.map(m => typeof m.event_id))] 
+        ? [...new Set(data.matchups.map((m: any) => typeof m.event_id))] 
         : [],
       sample: data.matchups && data.matchups.length > 0 
-        ? data.matchups.slice(0, 1).map(m => ({
+        ? data.matchups.slice(0, 1).map((m: any) => ({
             id: m.id,
             event_id: m.event_id,
             event_name: m.event_name
