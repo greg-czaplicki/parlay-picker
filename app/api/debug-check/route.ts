@@ -1,14 +1,25 @@
 import { NextResponse } from "next/server";
 import { handleApiError } from '@/lib/utils'
+import { validate } from '@/lib/validation'
+import { debugCheckQuerySchema } from '@/lib/schemas'
 
 export async function GET(request: Request) {
   try {
     // Get query parameters
     const url = new URL(request.url);
-    const eventId = url.searchParams.get('eventId');
-    const matchupType = url.searchParams.get('type') || '2ball';
+    let params;
+    try {
+      params = validate(debugCheckQuerySchema, {
+        eventId: url.searchParams.get('eventId') ?? undefined,
+        type: url.searchParams.get('type') ?? undefined,
+      });
+    } catch (error) {
+      return handleApiError(error);
+    }
+    const { eventId, type } = params;
     
     // Construct API URL
+    const matchupType = type || '2ball';
     const apiUrl = `/api/matchups/${matchupType}${eventId ? `?eventId=${eventId}` : ''}`;
     
     console.log(`Making request to: ${apiUrl}`);

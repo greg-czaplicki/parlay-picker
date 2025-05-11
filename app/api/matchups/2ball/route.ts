@@ -1,6 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { handleApiError } from '@/lib/utils'
+import { validate } from '@/lib/validation'
+import { twoBallMatchupsQuerySchema } from '@/lib/schemas'
 
 // Define interfaces for the Data Golf API response (2-ball)
 interface Odds {
@@ -100,12 +102,19 @@ async function processMatchups(data: DataGolfResponse, eventMapping: Record<stri
   }));
 }
 
-export async function GET(request: Request) {
-  // Parse query parameters
+export async function GET(request: Request): Promise<Response> {
+  // Parse and validate query parameters
   const url = new URL(request.url);
-  const eventId = url.searchParams.get('eventId');
-  const tour = url.searchParams.get('tour'); // Optional parameter to filter by tour
-  
+  let params;
+  try {
+    params = validate(twoBallMatchupsQuerySchema, {
+      eventId: url.searchParams.get('eventId') ?? undefined,
+      tour: url.searchParams.get('tour') ?? undefined,
+    });
+  } catch (error) {
+    return handleApiError(error);
+  }
+  const { eventId, tour } = params;
   console.log(`API: Received request with eventId=${eventId}, tour=${tour}`);
   
   try {
@@ -132,7 +141,9 @@ export async function GET(request: Request) {
     try {
       if (pgaRes.ok) {
         pgaData = await pgaRes.json();
-        console.log(`PGA event: ${pgaData.event_name}, matchups: ${pgaData.match_list?.length || 0}`);
+        if (pgaData) {
+          console.log(`PGA event: ${pgaData.event_name}, matchups: ${pgaData.match_list?.length || 0}`);
+        }
       }
     } catch (error) {
       console.error("Error parsing PGA data:", error);
@@ -141,7 +152,9 @@ export async function GET(request: Request) {
     try {
       if (oppRes.ok) {
         oppData = await oppRes.json();
-        console.log(`Opposite field event: ${oppData.event_name}, matchups: ${oppData.match_list?.length || 0}`);
+        if (oppData) {
+          console.log(`Opposite field event: ${oppData.event_name}, matchups: ${oppData.match_list?.length || 0}`);
+        }
       }
     } catch (error) {
       console.error("Error parsing Opposite field data:", error);
@@ -150,7 +163,9 @@ export async function GET(request: Request) {
     try {
       if (euroRes.ok) {
         euroData = await euroRes.json();
-        console.log(`European Tour event: ${euroData.event_name}, matchups: ${euroData.match_list?.length || 0}`);
+        if (euroData) {
+          console.log(`European Tour event: ${euroData.event_name}, matchups: ${euroData.match_list?.length || 0}`);
+        }
       }
     } catch (error) {
       console.error("Error parsing European Tour data:", error);
@@ -162,12 +177,11 @@ export async function GET(request: Request) {
       .select("event_id, event_name, tour");
     
     // Create a map to look up event IDs
-    const eventMapping = {};
+    const eventMapping: Record<string, number> = {};
     if (tournaments) {
-      tournaments.forEach(t => {
+      tournaments.forEach((t: { event_name: string; event_id: number }) => {
         const nameLower = t.event_name.toLowerCase();
         eventMapping[nameLower] = t.event_id;
-        
         // Add partial matches too for backward compatibility
         if (nameLower.includes('myrtle')) eventMapping['myrtle'] = t.event_id;
       });
@@ -204,7 +218,7 @@ export async function GET(request: Request) {
         ].filter(Boolean);
         
         // Only save to history if any tour has newer data
-        shouldSaveHistory = updateTimes.some(time => time > historyTime);
+        shouldSaveHistory = updateTimes.some(time => time && time > historyTime);
       }
       
       // Save to historical table if we have newer data
@@ -242,10 +256,8 @@ export async function GET(request: Request) {
     // Filter by event ID if provided
     if (eventId) {
       const eventIdInt = parseInt(eventId, 10);
-      if (!isNaN(eventIdInt)) {
-        filteredMatchups = filteredMatchups.filter(m => Number(m.event_id) === eventIdInt);
-        console.log(`Filtered to ${filteredMatchups.length} matchups for event ${eventIdInt}`);
-      }
+      filteredMatchups = filteredMatchups.filter(m => Number(m.event_id) === eventIdInt);
+      console.log(`Filtered to ${filteredMatchups.length} matchups for event ${eventIdInt}`);
     }
     
     // Filter by tour if provided
@@ -256,18 +268,23 @@ export async function GET(request: Request) {
     }
     
     // Group matchups by event
-    const matchupsByEvent = {};
+    const matchupsByEvent: Record<string | number, {
+      event_id: number;
+      event_name: string;
+      tour?: string;
+      matchups: SupabaseMatchup[];
+    }> = {};
     filteredMatchups.forEach(m => {
-      const eventId = m.event_id || 'unknown';
-      if (!matchupsByEvent[eventId]) {
-        matchupsByEvent[eventId] = {
+      const eventIdKey = m.event_id || 'unknown';
+      if (!matchupsByEvent[eventIdKey]) {
+        matchupsByEvent[eventIdKey] = {
           event_id: m.event_id,
           event_name: m.event_name,
           tour: m.tour,
           matchups: []
         };
       }
-      matchupsByEvent[eventId].matchups.push(m);
+      matchupsByEvent[eventIdKey].matchups.push(m);
     });
     
     return NextResponse.json({

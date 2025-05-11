@@ -1,6 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { handleApiError } from '@/lib/utils'
+import { validate } from '@/lib/validation'
+import { eventIdParamSchema } from '@/lib/schemas'
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -11,7 +13,15 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const eventId = url.searchParams.get('eventId');
+  let params;
+  try {
+    params = validate(eventIdParamSchema, {
+      eventId: url.searchParams.get('eventId'),
+    });
+  } catch (error) {
+    return NextResponse.json({ error: 'Invalid or missing eventId' }, { status: 400 });
+  }
+  const { eventId } = params;
   
   if (!eventId) {
     return NextResponse.json({ error: "eventId is required" }, { status: 400 });

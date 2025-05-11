@@ -1,6 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { handleApiError } from '@/lib/utils'
+import { validate } from '@/lib/validation'
+import { eventIdParamSchema } from '@/lib/schemas'
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -11,7 +13,15 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const eventId = url.searchParams.get('eventId');
+  let eventId: string | undefined = undefined;
+  try {
+    const params = validate(eventIdParamSchema.extend({ eventId: eventIdParamSchema.shape.eventId.optional() }), {
+      eventId: url.searchParams.get('eventId') ?? undefined,
+    });
+    eventId = params.eventId;
+  } catch (error) {
+    return handleApiError(error);
+  }
   
   try {
     // Check database content first

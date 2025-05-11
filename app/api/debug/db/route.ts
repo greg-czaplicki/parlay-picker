@@ -1,5 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { validate } from '@/lib/validation'
+import { tableEventQuerySchema } from '@/lib/schemas'
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -10,8 +12,16 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const table = url.searchParams.get('table') || 'latest_two_ball_matchups';
-  const event = url.searchParams.get('event');
+  let params;
+  try {
+    params = validate(tableEventQuerySchema, {
+      table: url.searchParams.get('table') ?? undefined,
+      event: url.searchParams.get('event') ?? undefined,
+    });
+  } catch (error) {
+    return NextResponse.json({ error: 'Invalid query parameters' }, { status: 400 });
+  }
+  const { table, event } = params;
   
   try {
     // First, get a count by event_id

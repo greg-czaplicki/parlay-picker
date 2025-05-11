@@ -1,5 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { validate } from '@/lib/validation'
+import { tourParamSchema } from '@/lib/schemas'
 
 // Define interfaces for the Data Golf API response
 interface LivePlayerData {
@@ -149,7 +151,18 @@ async function upsertStats(stats: SupabaseLiveStat[], round: string): Promise<st
 export async function GET(request: Request) {
   // Extract the tour parameter from query string with default 'pga'
   const { searchParams } = new URL(request.url);
-  const tour = searchParams.get('tour') || 'pga';
+  let tour: string = 'pga';
+  try {
+    const params = validate(tourParamSchema, {
+      tour: searchParams.get('tour') ?? undefined,
+    });
+    if (params.tour) tour = params.tour;
+  } catch (error) {
+    return NextResponse.json({
+      success: false,
+      message: 'Invalid tour parameter',
+    }, { status: 400 });
+  }
   
   // Validate tour parameter
   if (!['pga', 'opp', 'euro'].includes(tour)) {
