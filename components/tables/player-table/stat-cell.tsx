@@ -124,9 +124,9 @@ export function StatCell({ value, colorClass, trend, precision = 2, isPercentage
         >
           <div className="flex items-center space-x-1">
             <span className="inline-block min-w-[40px] text-center">
-              {value !== null 
-                ? isPercentage 
-                  ? `${(value * 100).toFixed(precision)}%` 
+              {typeof value === 'number' && !isNaN(value)
+                ? isPercentage
+                  ? `${(value * 100).toFixed(precision)}%`
                   : value.toFixed(precision)
                 : 'N/A'}
             </span>
@@ -163,9 +163,9 @@ export function StatCell({ value, colorClass, trend, precision = 2, isPercentage
     >
       <div className="flex items-center space-x-1">
         <span className="inline-block min-w-[40px] text-center">
-          {value !== null 
-            ? isPercentage 
-              ? `${(value * 100).toFixed(precision)}%` 
+          {typeof value === 'number' && !isNaN(value)
+            ? isPercentage
+              ? `${(value * 100).toFixed(precision)}%`
               : value.toFixed(precision)
             : 'N/A'}
         </span>

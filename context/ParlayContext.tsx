@@ -47,15 +47,12 @@ export function ParlayProvider({ children }: { children: ReactNode }) {
 
   // Add selection to parlay
   const addSelection = (newSelection: Partial<ParlaySelection>) => {
-    console.log("Adding selection:", newSelection)
-    
     // Generate ID if not provided
     const id = newSelection.id || Date.now().toString()
     
     // Check if this player is already in the parlay to avoid duplicates
     if (newSelection.player && newSelection.player.trim() !== "" && 
         selections.some(s => s.player.toLowerCase() === newSelection.player?.toLowerCase())) {
-      console.log(`Player ${newSelection.player} already exists in parlay`)
       return
     }
     
@@ -72,9 +69,6 @@ export function ParlayProvider({ children }: { children: ReactNode }) {
       eventName: newSelection.eventName,
       roundNum: newSelection.roundNum
     } as ParlaySelection]
-    
-    console.log("Current selections:", selections)
-    console.log("New selections array:", updatedSelections)
     
     setSelections(updatedSelections)
   }
@@ -103,17 +97,13 @@ export function ParlayProvider({ children }: { children: ReactNode }) {
   
   // Calculate total odds and potential payout
   const calculateParlay = () => {
-    console.log("🔄 calculateParlay called with", selections.length, "selections")
-    
     if (selections.length === 0) {
-      console.log("No selections, resetting odds and payout")
       setTotalOdds(0);
       setPotentialPayout(0);
       return;
     }
     
     try {
-      console.log("🧮 Calculating parlay with selections:", selections)
       // Convert American odds to decimal odds
       const decimalOdds = selections.map((selection) => {
         const americanOdds = Number(selection.odds); // Ensure it's a number
@@ -125,13 +115,8 @@ export function ParlayProvider({ children }: { children: ReactNode }) {
           : (100 / Math.abs(americanOdds)) + 1;
       });
       
-      // Log for debugging
-      console.log("American odds:", selections.map(s => s.odds));
-      console.log("Decimal odds:", decimalOdds);
-      
       // Multiply all decimal odds together to get total decimal odds
       const totalDecimalOdds = decimalOdds.reduce((acc, curr) => acc * curr, 1);
-      console.log("Total decimal odds:", totalDecimalOdds);
       
       // Convert total decimal odds back to American odds
       // For parlays, we make sure all positive odds are properly converted
@@ -142,17 +127,13 @@ export function ParlayProvider({ children }: { children: ReactNode }) {
         americanOdds = Math.round(-100 / (totalDecimalOdds - 1));
       }
       
-      console.log("Total American odds:", americanOdds);
       setTotalOdds(americanOdds);
       
       // Calculate payout directly using the decimal odds
       // Note: This includes the original stake (same as FanDuel display)
       const totalPayout = Number(stake) * totalDecimalOdds;
-      console.log("Stake:", stake);
-      console.log("Total payout:", totalPayout);
       setPotentialPayout(Number(totalPayout.toFixed(2)));
     } catch (error) {
-      console.error("Error calculating parlay:", error);
       // Set defaults on error
       setTotalOdds(0);
       setPotentialPayout(0);
@@ -175,11 +156,9 @@ export function ParlayProvider({ children }: { children: ReactNode }) {
   const handleStakeChange = (value: number) => {
     // Make sure we're dealing with a number
     const numericValue = Number(value);
-    console.log("handleStakeChange called with value:", value, "converted to:", numericValue);
     
     // Check for valid value
     if (isNaN(numericValue) || numericValue < 0) {
-      console.log("Invalid stake value, using 0");
       setStake(0);
     } else {
       setStake(numericValue);
@@ -191,8 +170,6 @@ export function ParlayProvider({ children }: { children: ReactNode }) {
   
   // Automatically recalculate the parlay when selections change
   useEffect(() => {
-    console.log("Selections changed - recalculating parlay with", selections.length, "selections")
-    // Force calculator to run in the next tick to ensure state is updated
     setTimeout(() => {
       if (selections.length > 0) {
         calculateParlay()

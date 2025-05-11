@@ -62,4 +62,23 @@ alwaysApply: true
   - All documentation, scripts, and onboarding instructions must reference pnpm
   - Do not use npm or yarn for any package management tasks
   - If a script or CI step references npm or yarn, update it to use pnpm
-  - Reference: [pnpm documentation](mdc:https:/pnpm.io) 
+  - Reference: [pnpm documentation](mdc:https:/pnpm.io)
+
+- **Always use the queryKeys factory from [query-keys.ts](mdc:lib/query-keys.ts) for all React Query queryKey definitions**
+  - Do not use inline arrays for query keys
+  - Reference the query-keys.ts file for all cache key construction
+  - Ensures type safety, cache consistency, and easier invalidation
+  - Example:
+    ```typescript
+    // ✅ DO: Use the factory
+    queryKey: queryKeys.matchups.byEventAndType(eventId, '3ball')
+    queryKey: queryKeys.playerData.season({ dataSource })
+    queryKey: queryKeys.playerData.live(eventId, roundFilter)
+    ```
+    ```typescript
+    // ❌ DON'T: Use inline arrays
+    queryKey: ['matchups', 'event', eventId, '3ball']
+    queryKey: ['playerData', 'season', dataSource]
+    ```
+  - Update all hooks and components to follow this pattern
+  - Reference: [lib/query-keys.ts](mdc:lib/query-keys.ts) 

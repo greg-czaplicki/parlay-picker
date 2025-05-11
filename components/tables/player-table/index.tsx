@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback, useMemo } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
@@ -10,10 +10,9 @@ import {
   getSortedRowModel,
 } from "@tanstack/react-table"
 import { useColumns } from "./columns"
-import { SyncControls } from "./sync-controls"
-import { usePlayerData } from "@/hooks/use-player-data"
+import { usePlayerTableQuery } from "@/hooks/use-player-table-query"
 import { useInitializePlayerView } from "@/hooks/use-initialize-player-view"
-import type { PlayerSkillRating, LiveTournamentStat } from "@/types/definitions"
+import type { PlayerSkillRating, LiveTournamentStat, PgaTourPlayerStats } from "@/types/definitions"
 
 interface PlayerTableProps {
   initialSeasonSkills: PlayerSkillRating[]
@@ -26,6 +25,7 @@ export default function PlayerTable({
   initialLiveStats, 
   initialPgaTourStats = [] 
 }: PlayerTableProps) {
+  console.log('PlayerTable render');
   const [roundFilter, setRoundFilter] = useState<string>("event_avg")
   const [dataSource, setDataSource] = useState<'data_golf' | 'pga_tour'>('pga_tour') // Default to PGA Tour data
   
@@ -39,58 +39,84 @@ export default function PlayerTable({
     currentEventEnded
   } = useInitializePlayerView()
 
+  // Use new React Query hook for all data
   const {
-    sorting,
-    setSorting,
-    displayPlayers,
-    loading,
-    isSyncingSkills,
-    isSyncingPgaTour,
-    isSyncingLive,
-    lastSkillUpdate,
-    lastPgaTourUpdate,
-    lastLiveUpdate,
-    displayedSkillsTimestamp,
-    currentLiveEvent,
-    getHeatmapColor,
-    triggerSkillSyncAndRefetch,
-    triggerPgaTourSyncAndRefetch,
-    triggerLiveSyncAndRefetch
-  } = usePlayerData({
-    initialSeasonSkills,
-    initialLiveStats,
-    initialPgaTourStats,
+    seasonSkills,
+    seasonSkillsLoading,
+    seasonSkillsError,
+    liveStats,
+    liveStatsLoading,
+    liveStatsError,
+    pgaTourStats,
+    pgaTourStatsLoading,
+    pgaTourStatsError
+  } = usePlayerTableQuery({
+    eventId: selectedEventId,
     dataView,
     dataSource,
     roundFilter,
-    selectedEventId, // pass to hook
-    eventOptions     // pass eventOptions
+    eventOptions
   })
-
-  const columns = useColumns({ dataView, getHeatmapColor })
-
-  const table = useReactTable({
-    data: displayPlayers,
-    columns,
-    initialState: {
-      get sorting() {
-        if (dataView === 'tournament') {
-          return [{ id: 'total', desc: false }]
-        } else {
-          return [{ id: 'sg_total', desc: true }]
-        }
-      }
-    },
-    state: {
-      sorting,
-    },
-    onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-  })
+  console.log('usePlayerTableQuery', { seasonSkills, liveStats, pgaTourStats });
 
   // Round filter options
   const roundOptions = ["1", "2", "3", "4", "event_avg"]
+
+  // Memoized getHeatmapColor function
+  const getHeatmapColor = useCallback(
+    (value: number | null, statKey: string, isHigherBetter: boolean = true) => {
+      // TODO: Implement actual heatmap logic if needed
+      return ""
+    },
+    []
+  )
+
+  // Call useColumns directly at the top level for both views
+  const seasonColumns = useColumns<PlayerSkillRating>({ dataView: 'season', getHeatmapColor })
+  const tournamentColumns = useColumns<LiveTournamentStat>({ dataView: 'tournament', getHeatmapColor })
+  const seasonPlayers = useMemo(() => (seasonSkills ?? []) as PlayerSkillRating[], [seasonSkills])
+  const tournamentPlayers = useMemo(() => (liveStats ?? []) as LiveTournamentStat[], [liveStats])
+
+  let columns, displayPlayers, loading, table
+  if (dataView === 'season') {
+    columns = seasonColumns
+    displayPlayers = seasonPlayers
+    loading = seasonSkillsLoading
+    table = useReactTable<PlayerSkillRating>({
+      data: displayPlayers,
+      columns,
+      initialState: {
+        get sorting() {
+          return [{ id: 'sg_total', desc: true }]
+        }
+      },
+      state: {
+        sorting: [],
+      },
+      onSortingChange: () => {},
+      getCoreRowModel: getCoreRowModel(),
+      getSortedRowModel: getSortedRowModel(),
+    })
+  } else {
+    columns = tournamentColumns
+    displayPlayers = tournamentPlayers
+    loading = liveStatsLoading
+    table = useReactTable<LiveTournamentStat>({
+      data: displayPlayers,
+      columns,
+      initialState: {
+        get sorting() {
+          return [{ id: 'total', desc: false }]
+        }
+      },
+      state: {
+        sorting: [],
+      },
+      onSortingChange: () => {},
+      getCoreRowModel: getCoreRowModel(),
+      getSortedRowModel: getSortedRowModel(),
+    })
+  }
 
   return (
     <div>
@@ -108,7 +134,6 @@ export default function PlayerTable({
                   <select
                     value={selectedEventId ?? ''}
                     onChange={e => {
-                      // When changing event, clear cache of live stats
                       if (typeof window !== 'undefined') {
                         try {
                           localStorage.removeItem('gpp_live_stats_cache_v1');
@@ -154,26 +179,7 @@ export default function PlayerTable({
                   )}
                 </div>
               )}
-              {dataView === 'tournament' && currentLiveEvent && (
-                <p className="text-xs text-gray-400 mt-1">Event: {currentLiveEvent}</p>
-              )}
             </div>
-            
-            {/* Sync Buttons and Timestamps */}
-            <SyncControls
-              lastSkillUpdate={lastSkillUpdate}
-              lastPgaTourUpdate={lastPgaTourUpdate}
-              lastLiveUpdate={lastLiveUpdate}
-              isSyncingSkills={isSyncingSkills}
-              isSyncingPgaTour={isSyncingPgaTour}
-              isSyncingLive={isSyncingLive}
-              currentLiveEvent={currentLiveEvent}
-              dataSource={dataView === 'season' ? dataSource : 'pga_tour'}
-              onSyncSkills={triggerSkillSyncAndRefetch}
-              onSyncPgaTour={triggerPgaTourSyncAndRefetch}
-              onSyncLive={triggerLiveSyncAndRefetch}
-              onChangeDataSource={dataView === 'season' ? setDataSource : undefined}
-            />
           </div>
 
           {/* Add Round Filter Row */}
@@ -202,116 +208,155 @@ export default function PlayerTable({
           ) : (
             <div className="rounded-lg overflow-hidden border border-gray-800">
               {/* Super simple fixed-width table */}
-              <Table 
-                style={{ 
-                  borderCollapse: 'collapse', 
-                  borderSpacing: 0,
-                  tableLayout: 'fixed',
-                  width: '100%'
-                }}
-                className="border-collapse"
-              >
-                {/* Define column widths explicitly */}
-                <colgroup>
-                  {dataView === "season" ? 
-                    <>
-                      <col style={{ width: "170px" }} />
-                      <col style={{ width: "75px" }} />
-                      <col style={{ width: "75px" }} />
-                      <col style={{ width: "75px" }} />
-                      <col style={{ width: "75px" }} />
-                      <col style={{ width: "75px" }} />
-                      <col style={{ width: "75px" }} />
-                      <col style={{ width: "75px" }} />
-                      <col style={{ width: "75px" }} />
-                    </> : 
-                    <>
-                      <col style={{ width: "50px" }} />
-                      <col style={{ width: "170px" }} />
-                      <col style={{ width: "60px" }} />
-                      <col style={{ width: "50px" }} />
-                      <col style={{ width: "50px" }} />
-                      <col style={{ width: "75px" }} />
-                      <col style={{ width: "75px" }} />
-                      <col style={{ width: "75px" }} />
-                      <col style={{ width: "75px" }} />
-                      <col style={{ width: "75px" }} />
-                      <col style={{ width: "75px" }} />
-                    </>
-                  }
-                </colgroup>
-                <TableHeader className="bg-[#1e1e23]">
-                  {table.getHeaderGroups().map((headerGroup) => (
-                    <TableRow key={headerGroup.id}>
-                      {headerGroup.headers.map((header) => (
-                        <TableHead 
-                          key={header.id}
-                          style={{ 
-                            padding: "4px 8px",
-                            ...(header.column.columnDef.meta as any)?.customStyles?.header
-                          }}
-                          className={`text-white whitespace-nowrap text-xs sm:text-sm ${(header.column.columnDef.meta as any)?.headerClassName}`}
-                        >
-                          {header.isPlaceholder
-                            ? null
-                            : flexRender(header.column.columnDef.header, header.getContext())}
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  ))}
-                </TableHeader>
-                <TableBody>
-                  {table.getRowModel().rows?.length ? (
-                    table.getRowModel().rows.map((row) => (
-                      <TableRow
-                        key={`${row.original.dg_id || row.original.pga_player_id || row.id}-${row.index}`}
-                        data-state={row.getIsSelected() && "selected"}
-                        style={{ border: 'none', margin: 0, padding: 0 }}
-                        className="hover:bg-[#2a2a35] border-0"
-                      >
-                        {row.getVisibleCells().map((cell) => (
-                          <TableCell 
-                            key={cell.id}
+              {dataView === 'season' ? (
+                <Table 
+                  style={{ 
+                    borderCollapse: 'collapse', 
+                    borderSpacing: 0,
+                    tableLayout: 'fixed',
+                    width: '100%'
+                  }}
+                  className="border-collapse"
+                >
+                  {/* Define column widths explicitly */}
+                  <colgroup>
+                    <col style={{ width: "170px" }} />
+                    <col style={{ width: "75px" }} />
+                    <col style={{ width: "75px" }} />
+                    <col style={{ width: "75px" }} />
+                    <col style={{ width: "75px" }} />
+                    <col style={{ width: "75px" }} />
+                    <col style={{ width: "75px" }} />
+                    <col style={{ width: "75px" }} />
+                    <col style={{ width: "75px" }} />
+                  </colgroup>
+                  <TableHeader className="bg-[#1e1e23]">
+                    {table.getHeaderGroups().map((headerGroup) => (
+                      <TableRow key={headerGroup.id}>
+                        {headerGroup.headers.map((header) => (
+                          <TableHead 
+                            key={header.id}
                             style={{ 
-                              padding: 0, 
-                              borderTopWidth: 1,
-                              borderRightWidth: 1,
-                              borderBottomWidth: 1,
-                              borderLeftWidth: 1,
-                              borderTopStyle: 'solid',
-                              borderRightStyle: 'solid',
-                              borderBottomStyle: 'solid',
-                              borderLeftStyle: 'solid',
-                              borderTopColor: 'rgba(75, 85, 99, 0.15)',
-                              borderRightColor: 'rgba(75, 85, 99, 0.15)',
-                              borderBottomColor: 'rgba(75, 85, 99, 0.15)',
-                              borderLeftColor: 'rgba(75, 85, 99, 0.15)',
-                              borderCollapse: 'collapse',
-                              // Only allow customStyles to override individual border sides, not any border shorthand
-                              ...(cell.column.columnDef.meta && cell.column.columnDef.meta.customStyles && cell.column.columnDef.meta.customStyles.cell
-                                ? Object.fromEntries(Object.entries(cell.column.columnDef.meta.customStyles.cell).filter(([k]) => !k.startsWith('border') || [
-                                  'borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth',
-                                  'borderTopStyle','borderRightStyle','borderBottomStyle','borderLeftStyle',
-                                  'borderTopColor','borderRightColor','borderBottomColor','borderLeftColor'
-                                ].includes(k)))
+                              padding: "4px 8px",
+                              ...(header.column.columnDef.meta && (header.column.columnDef.meta as any).customStyles && (header.column.columnDef.meta as any).customStyles.header
+                                ? (header.column.columnDef.meta as any).customStyles.header
                                 : {})
                             }}
-                            className={`p-0 text-xs sm:text-sm ${(cell.column.columnDef.meta as any)?.cellClassName}`}
+                            className={`text-white whitespace-nowrap text-xs sm:text-sm ${(header.column.columnDef.meta as any)?.headerClassName}`}
                           >
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </TableCell>
+                            {header.isPlaceholder
+                              ? null
+                              : flexRender(header.column.columnDef.header, header.getContext())}
+                          </TableHead>
                         ))}
                       </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={columns.length} className="h-24 text-center">
-                        No player data found for the selected view.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                    ))}
+                  </TableHeader>
+                  <TableBody>
+                    {table.getRowModel().rows.map((row) => {
+                      return (
+                        <TableRow
+                          key={row.id}
+                        >
+                          {row.getVisibleCells().map((cell) => (
+                            <TableCell 
+                              key={cell.id}
+                              style={{
+                                padding: 0,
+                                ...(cell.column.columnDef.meta && (cell.column.columnDef.meta as any).customStyles && (cell.column.columnDef.meta as any).customStyles.cell
+                                  ? Object.fromEntries(Object.entries((cell.column.columnDef.meta as any).customStyles.cell).filter(([k]) => !k.startsWith('border') || [
+                                    'borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth',
+                                    'borderTopStyle','borderRightStyle','borderBottomStyle','borderLeftStyle',
+                                    'borderTopColor','borderRightColor','borderBottomColor','borderLeftColor'
+                                  ].includes(k)))
+                                  : {})
+                              }}
+                              className={`p-0 text-xs sm:text-sm ${(cell.column.columnDef.meta as any)?.cellClassName}`}
+                            >
+                              {flexRender(cell.column.columnDef.cell as any, cell.getContext())}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              ) : (
+                <Table 
+                  style={{ 
+                    borderCollapse: 'collapse', 
+                    borderSpacing: 0,
+                    tableLayout: 'fixed',
+                    width: '100%'
+                  }}
+                  className="border-collapse"
+                >
+                  {/* Define column widths explicitly */}
+                  <colgroup>
+                    <col style={{ width: "50px" }} />
+                    <col style={{ width: "170px" }} />
+                    <col style={{ width: "60px" }} />
+                    <col style={{ width: "50px" }} />
+                    <col style={{ width: "50px" }} />
+                    <col style={{ width: "75px" }} />
+                    <col style={{ width: "75px" }} />
+                    <col style={{ width: "75px" }} />
+                    <col style={{ width: "75px" }} />
+                    <col style={{ width: "75px" }} />
+                    <col style={{ width: "75px" }} />
+                  </colgroup>
+                  <TableHeader className="bg-[#1e1e23]">
+                    {table.getHeaderGroups().map((headerGroup) => (
+                      <TableRow key={headerGroup.id}>
+                        {headerGroup.headers.map((header) => (
+                          <TableHead 
+                            key={header.id}
+                            style={{ 
+                              padding: "4px 8px",
+                              ...(header.column.columnDef.meta && (header.column.columnDef.meta as any).customStyles && (header.column.columnDef.meta as any).customStyles.header
+                                ? (header.column.columnDef.meta as any).customStyles.header
+                                : {})
+                            }}
+                            className={`text-white whitespace-nowrap text-xs sm:text-sm ${(header.column.columnDef.meta as any)?.headerClassName}`}
+                          >
+                            {header.isPlaceholder
+                              ? null
+                              : flexRender(header.column.columnDef.header, header.getContext())}
+                          </TableHead>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableHeader>
+                  <TableBody>
+                    {table.getRowModel().rows.map((row) => {
+                      return (
+                        <TableRow
+                          key={row.id}
+                        >
+                          {row.getVisibleCells().map((cell) => (
+                            <TableCell 
+                              key={cell.id}
+                              style={{
+                                padding: 0,
+                                ...(cell.column.columnDef.meta && (cell.column.columnDef.meta as any).customStyles && (cell.column.columnDef.meta as any).customStyles.cell
+                                  ? Object.fromEntries(Object.entries((cell.column.columnDef.meta as any).customStyles.cell).filter(([k]) => !k.startsWith('border') || [
+                                    'borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth',
+                                    'borderTopStyle','borderRightStyle','borderBottomStyle','borderLeftStyle',
+                                    'borderTopColor','borderRightColor','borderBottomColor','borderLeftColor'
+                                  ].includes(k)))
+                                  : {})
+                              }}
+                              className={`p-0 text-xs sm:text-sm ${(cell.column.columnDef.meta as any)?.cellClassName}`}
+                            >
+                              {flexRender(cell.column.columnDef.cell as any, cell.getContext())}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              )}
             </div>
           )}
         </CardContent>

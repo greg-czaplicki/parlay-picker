@@ -9,6 +9,7 @@ interface PlayerTableWrapperProps {
 }
 
 export default function PlayerTableWrapper({ initialSeasonSkills, initialLiveStats }: PlayerTableWrapperProps) {
+  console.log('PlayerTableWrapper render');
   return (
     <PlayerTable 
       initialSeasonSkills={initialSeasonSkills}
