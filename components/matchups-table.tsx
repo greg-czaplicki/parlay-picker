@@ -37,6 +37,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { detect3BallDivergence } from "@/lib/utils"
+import { useMatchupsQuery } from "@/hooks/use-matchups-query"
+import { usePlayerStatsQuery, PlayerStat } from "@/hooks/use-player-stats-query"
 
 // Only 3-ball matchups
 interface SupabaseMatchupRow {
@@ -103,116 +105,31 @@ export default function MatchupsTable({
   eventId: number | null;
   matchupType?: "2ball" | "3ball";
 }) {
-  const [matchups, setMatchups] = useState<MatchupRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [selectedBookmaker, setSelectedBookmaker] = useState<"fanduel">("fanduel");
-  const [lastUpdateTime, setLastUpdateTime] = useState<string | null>(null);
   const [activeMatchupType, setActiveMatchupType] = useState<"2ball" | "3ball">(matchupType);
-  
   // Odds gap filter state
   const [oddsGapThreshold, setOddsGapThreshold] = useState(40); // Default 40 points in American odds
   const [showFiltersDialog, setShowFiltersDialog] = useState(false);
-  
-  // State for live tournament stats
-  const [playerStats, setPlayerStats] = useState<Record<number, LiveTournamentStat>>({});
-  const [loadingStats, setLoadingStats] = useState(false);
 
-  useEffect(() => {
-    // Reset state before fetching new data
-    setMatchups([]);
-    setLoading(true);
-    setError(null);
-    setPlayerStats({});
-    
-    // For debugging - print event ID
-    console.log("Current eventId in MatchupsTable:", eventId, 
-                "activeMatchupType:", activeMatchupType);
-    
-    fetchMatchupsFromApi();
-  }, [eventId, activeMatchupType]);
-  
-  // Function to fetch live stats for players in the matchups
-  const fetchPlayerStats = async (matchups: MatchupRow[]) => {
-    if (!matchups || matchups.length === 0) return;
-    
-    setLoadingStats(true);
-    
-    try {
-      // Extract all player IDs from the matchups
-      const playerIds = new Set<number>();
-      
-      matchups.forEach(matchup => {
-        if (matchup.p1_dg_id) playerIds.add(matchup.p1_dg_id);
-        if (matchup.p2_dg_id) playerIds.add(matchup.p2_dg_id);
-        
-        // If it's a 3-ball matchup, add player 3
-        if ('p3_dg_id' in matchup && matchup.p3_dg_id) {
-          playerIds.add(matchup.p3_dg_id);
-        }
-      });
-      
-      if (playerIds.size === 0) {
-        setLoadingStats(false);
-        return;
-      }
-      
-      console.log(`Fetching live stats for ${playerIds.size} players...`);
-      
-      // Query the database for live stats for these players
-      const supabase = createBrowserClient();
-      
-      // Look for stats for the current event first
-      const currentEventName = matchups[0].event_name;
-      const { data: eventStats, error: eventError } = await supabase
-        .from('live_tournament_stats')
-        .select('*')
-        .in('dg_id', Array.from(playerIds))
-        .eq('event_name', currentEventName)
-        .order('data_golf_updated_at', { ascending: false });
-        
-      if (eventStats && eventStats.length > 0) {
-        console.log(`Found ${eventStats.length} stats for event ${currentEventName}`);
-        
-        // Convert to a map for easier lookup
-        const statsMap: Record<number, LiveTournamentStat> = {};
-        eventStats.forEach(stat => {
-          // Only store the most recent stats for each player (we already ordered by timestamp)
-          if (!statsMap[stat.dg_id]) {
-            statsMap[stat.dg_id] = stat;
-          }
-        });
-        
-        setPlayerStats(statsMap);
-      } else {
-        console.log(`No stats found for event ${currentEventName}, trying any recent stats`);
-        
-        // If no stats for this event, get any recent stats
-        const { data: anyStats, error: anyError } = await supabase
-          .from('live_tournament_stats')
-          .select('*')
-          .in('dg_id', Array.from(playerIds))
-          .order('data_golf_updated_at', { ascending: false });
-          
-        if (anyStats && anyStats.length > 0) {
-          // Convert to a map for easier lookup
-          const statsMap: Record<number, LiveTournamentStat> = {};
-          anyStats.forEach(stat => {
-            // Only store the most recent stats for each player
-            if (!statsMap[stat.dg_id]) {
-              statsMap[stat.dg_id] = stat;
-            }
-          });
-          
-          setPlayerStats(statsMap);
-        }
-      }
-    } catch (err) {
-      console.error("Error fetching player stats:", err);
-    } finally {
-      setLoadingStats(false);
-    }
-  };
+  // Use React Query for matchups
+  const { data: matchups, isLoading, isError, error, lastUpdateTime } = useMatchupsQuery(eventId, activeMatchupType);
+
+  // Extract all unique player IDs from matchups for stats
+  const playerIds = (matchups ?? []).flatMap(m => {
+    const ids = [m.p1_dg_id, m.p2_dg_id];
+    if ('p3_dg_id' in m && m.p3_dg_id) ids.push(m.p3_dg_id);
+    return ids;
+  });
+
+  // Use React Query for player stats (assume roundNum = 1 for now, or extract from matchups if needed)
+  const roundNum = (matchups ?? []).length > 0 ? (matchups ?? [])[0].round_num : 1;
+  const { data: playerStats, isLoading: loadingStats, isError: isErrorStats, error: errorStats } = usePlayerStatsQuery(eventId, roundNum, playerIds);
+
+  // After fetching playerStats (which is PlayerStat[] | undefined), create a lookup object:
+  const playerStatsMap: Record<number, PlayerStat> = (playerStats ?? []).reduce((acc, stat) => {
+    if (stat.player_id != null) acc[stat.player_id] = stat;
+    return acc;
+  }, {} as Record<number, PlayerStat>);
 
   // Update the local state when the prop changes
   useEffect(() => {
@@ -227,189 +144,6 @@ export default function MatchupsTable({
       window.dispatchEvent(event);
     }
   }, [activeMatchupType]);
-
-  // NOTE: We removed the direct fetch function since we're fixing the database directly
-  // This is much cleaner than adding complex workarounds in the frontend
-
-  const fetchMatchupsFromApi = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      // First try our more reliable debug endpoint
-      const debugEndpoint = `/api/debug/db-check${eventId ? `?eventId=${eventId}` : ''}`;
-      console.log(`First checking database content via: ${debugEndpoint}`);
-      
-      let dbCheck = null;
-      try {
-        const debugResponse = await fetch(debugEndpoint);
-        dbCheck = await debugResponse.json();
-        
-        console.log("Database check:", {
-          success: dbCheck.success,
-          matchupCount: dbCheck.matchupCount,
-          eventCounts: dbCheck.eventCounts,
-          sampleMatchups: dbCheck.sampleMatchups
-        });
-      } catch (dbErr) {
-        console.warn("Error checking database directly:", dbErr);
-      }
-      
-      // Standard endpoint for all cases
-      const endpoint = eventId 
-        ? `/api/matchups/${activeMatchupType}?eventId=${eventId}` 
-        : `/api/matchups/${activeMatchupType}`;
-      
-      console.log(`Fetching matchups from endpoint: ${endpoint}`);
-      
-      // Try the API endpoint
-      let data;
-      try {
-        const response = await fetch(endpoint);
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`API error: ${errorText}`);
-          throw new Error(`Failed to fetch ${activeMatchupType} matchups: ${errorText}`);
-        }
-        
-        data = await response.json();
-        
-        if (!data.success) {
-          throw new Error(data.error || "API returned success: false");
-        }
-      } catch (apiErr) {
-        console.error("API fetch error:", apiErr);
-        
-        // If we have DB check results, use those as a fallback
-        if (dbCheck && dbCheck.success && dbCheck.sampleMatchups && dbCheck.sampleMatchups.length > 0) {
-          console.log("Using DB sample as fallback since API failed");
-          setMatchups(dbCheck.sampleMatchups);
-          setLastUpdateTime(null);
-          setLoading(false);
-          return;
-        }
-        
-        // Otherwise propagate the error
-        throw apiErr;
-      }
-      
-      // Process the successful API response
-      console.log(`API Response for ${activeMatchupType} matchups:`, {
-        success: data.success,
-        eventId: eventId,
-        hasMatchups: Array.isArray(data.matchups) ? data.matchups.length : 0
-      });
-      
-      // Check different possible structures in the API response
-      let matchupsData = [];
-      
-      // Case 1: Standard format with 'matchups' array
-      if (Array.isArray(data.matchups)) {
-        console.log("Using data.matchups array format");
-        matchupsData = data.matchups;
-        
-        // Debug logging of all matchups event_ids and names
-        const eventIdToName = {};
-        matchupsData.forEach(m => {
-          if (m.event_id && m.event_name) {
-            eventIdToName[m.event_id] = m.event_name;
-          }
-        });
-        console.log("Events in API response:", eventIdToName);
-      } 
-      // Case 2: Format with 'events' array (grouped by event)
-      else if (Array.isArray(data.events)) {
-        console.log("Using data.events array format");
-        
-        // Log all available events
-        console.log("Events in API response:", data.events.map(e => ({
-          event_id: e.event_id,
-          event_name: e.event_name,
-          matchup_count: e.matchups?.length || 0
-        })));
-        
-        // Find the event that matches our eventId
-        if (eventId) {
-          // Convert to numbers first for consistent comparison
-          const eventIdNum = Number(eventId);
-          const selectedEvent = data.events.find((e: any) => 
-            Number(e.event_id) === eventIdNum
-          );
-          
-          if (selectedEvent && Array.isArray(selectedEvent.matchups)) {
-            console.log(`Found event ${selectedEvent.event_name} (ID: ${selectedEvent.event_id}) with ${selectedEvent.matchups.length} matchups`);
-            matchupsData = selectedEvent.matchups;
-          } else {
-            console.log(`No event found with ID ${eventIdNum} - checking all events for this ID`);
-          }
-        } else {
-          // No eventId, combine all matchups from all events
-          matchupsData = data.events.flatMap((e: any) => e.matchups || []);
-        }
-      }
-      
-      // Filter by eventId if we still need to (in case we got all matchups)
-      let filtered = matchupsData;
-      
-      if (eventId && matchupsData.length > 0) {
-        const eventIdNum = Number(eventId);
-        
-        // First double-check what we're filtering by
-        const eventCounts = {};
-        matchupsData.forEach(m => {
-          const mEventId = Number(m.event_id);
-          if (!eventCounts[mEventId]) {
-            eventCounts[mEventId] = {
-              name: m.event_name,
-              count: 0
-            };
-          }
-          eventCounts[mEventId].count++;
-        });
-        console.log("Matchups by event_id before filtering:", eventCounts);
-        
-        // Try filtering by event_id
-        filtered = matchupsData.filter((m: any) => {
-          const matchupEventId = Number(m.event_id);
-          return matchupEventId === eventIdNum;
-        });
-        
-        console.log(`After filtering: ${filtered.length} matchups match eventId=${eventId}`);
-        
-        // If nothing found, try to get the event name and filter by that
-        if (filtered.length === 0 && window.currentEvents) {
-          // @ts-ignore
-          const currentEvents = window.currentEvents || [];
-          const event = currentEvents.find((e: any) => Number(e.event_id) === eventIdNum);
-          
-          if (event) {
-            console.log(`Trying to filter by event name "${event.event_name}" for eventId=${eventId}`);
-            filtered = matchupsData.filter((m: any) => 
-              m.event_name && m.event_name.includes(event.event_name)
-            );
-            console.log(`Found ${filtered.length} matchups by event name`);
-          }
-        }
-      }
-      
-      setMatchups(filtered);
-      if (filtered.length > 0) setLastUpdateTime(filtered[0].data_golf_update_time);
-      else setLastUpdateTime(null);
-      
-      // Now that we have matchups, fetch the player stats
-      if (filtered.length > 0) {
-        await fetchPlayerStats(filtered);
-      }
-      
-    } catch (err: any) {
-      console.error("Error in fetchMatchupsFromApi:", err);
-      setError(err.message);
-      setMatchups([]);
-      setLastUpdateTime(null);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const decimalToAmerican = (decimalOdds: number): string => {
     if (decimalOdds >= 2.0) return `+${Math.round((decimalOdds - 1) * 100)}`;
@@ -451,7 +185,7 @@ export default function MatchupsTable({
     return diff >= oddsGapThreshold;
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <Card className="glass-card">
         <CardContent className="p-6 text-center">
@@ -464,12 +198,14 @@ export default function MatchupsTable({
     );
   }
 
-  if (error) {
+  if (isError) {
     return (
       <Card className="glass-card">
         <CardContent className="p-6 text-center">
-          <div className="text-red-500">Error: {error}</div>
-          <Button onClick={fetchMatchupsFromApi} className="mt-4">Try Again</Button>
+          <div className="text-red-500">Error: {error?.message}</div>
+          <Button onClick={() => {
+            // Implement retry logic here
+          }} className="mt-4">Try Again</Button>
         </CardContent>
       </Card>
     );
@@ -488,7 +224,7 @@ export default function MatchupsTable({
             <div className="flex justify-between items-center">
               <div>
                 <h2 className="text-xl font-bold">{activeMatchupType === "3ball" ? "3-Ball" : "2-Ball"} Matchups</h2>
-                {matchups.length > 0 && <p className="text-sm text-gray-400">Event: {matchups[0].event_name}</p>}
+                {matchups && matchups.length > 0 && <p className="text-sm text-gray-400">Event: {matchups[0].event_name}</p>}
               </div>
               <div className="flex items-center gap-2">
                 <Dialog open={showFiltersDialog} onOpenChange={setShowFiltersDialog}>
@@ -503,8 +239,8 @@ export default function MatchupsTable({
                       }
                       {(() => {
                         // Calculate how many matchups have highlighted odds
-                        if (oddsGapThreshold > 0 && matchups.length > 0) {
-                          const highlightedCount = matchups.reduce((count, matchup) => {
+                        if (oddsGapThreshold > 0 && (matchups ?? []).length > 0) {
+                          const highlightedCount = (matchups ?? []).reduce((count, matchup) => {
                             if (is3BallMatchup(matchup)) {
                               // For 3-ball, calculate gaps using the same logic as in the render
                               const players = [
@@ -599,7 +335,7 @@ export default function MatchupsTable({
               </div>
             </div>
           </div>
-          {matchups.length > 0 ? (
+          {matchups && (matchups ?? []).length > 0 ? (
             <div className="rounded-lg overflow-hidden border border-gray-800">
               <Table>
                 <TableHeader className="bg-[#1e1e23]">
@@ -613,7 +349,7 @@ export default function MatchupsTable({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {matchups.map((matchup, index) => {
+                  {(matchups ?? []).map((matchup, index) => {
                     // Generate a stable key - use id if available, otherwise use index and a type identifier
                     const key = matchup.id ? `matchup-${matchup.id}` : `matchup-${index}-${matchup.p1_dg_id}-${matchup.p2_dg_id}`;
                     
@@ -784,7 +520,7 @@ export default function MatchupsTable({
 
                       // Format the player's tournament position and score
                       const formatPlayerPosition = (playerId: number) => {
-                        const playerStat = playerStats[playerId];
+                        const playerStat = playerStatsMap[playerId];
                         if (!playerStat) return null;
                         
                         // Format the position display
@@ -1010,7 +746,7 @@ export default function MatchupsTable({
 
                       // Format the player's tournament position and score
                       const formatPlayerPosition = (playerId: number) => {
-                        const playerStat = playerStats[playerId];
+                        const playerStat = playerStatsMap[playerId];
                         if (!playerStat) return null;
                         
                         // Format the position display

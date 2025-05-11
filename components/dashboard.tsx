@@ -26,6 +26,8 @@ import RecommendedPicks from "./recommended-picks"
 import { createBrowserClient } from "@/lib/supabase"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
 import { ParlayProvider } from "@/context/ParlayContext"
+import { useCurrentWeekEventsQuery, Event as TournamentEvent } from "@/hooks/use-current-week-events-query"
+import { useMatchupTypeQuery } from "@/hooks/use-matchup-type-query"
 
 const filters = [
   { name: "Balanced", icon: <Filter className="w-4 h-4" /> },
@@ -53,115 +55,23 @@ export default function Dashboard({
   const [activeFilter, setActiveFilter] = useState("Balanced")
   const [activeTab, setActiveTab] = useState(defaultTab)
   const [showCustom, setShowCustom] = useState(false)
-  const [matchupType, setMatchupType] = useState("3ball")
-  const [currentEvents, setCurrentEvents] = useState<{ event_id: number, event_name: string, start_date: string, end_date: string }[]>([])
+  const { data: currentEvents, isLoading: isLoadingEvents, isError: isErrorEvents, error: eventsError } = useCurrentWeekEventsQuery()
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null)
+  const { data: matchupTypeRaw, isLoading: isLoadingMatchupType, isError: isErrorMatchupType, error: matchupTypeError } = useMatchupTypeQuery(selectedEventId)
+  const matchupType: string = matchupTypeRaw ?? "3ball" // fallback to '3ball' if undefined/null
 
   useEffect(() => {
-    // Fetch tournaments for the current week (Monday-Sunday)
-    const fetchCurrentWeekEvents = async () => {
-      const supabase = createBrowserClient();
-      const today = new Date();
-      // Get Monday of this week
-      const dayOfWeek = today.getDay(); // 0 (Sun) - 6 (Sat)
-      const monday = new Date(today);
-      monday.setDate(today.getDate() - ((dayOfWeek + 6) % 7));
-      monday.setHours(0,0,0,0);
-      // Get Sunday of this week
-      const sunday = new Date(monday);
-      sunday.setDate(monday.getDate() + 6);
-      sunday.setHours(23,59,59,999);
-      const mondayStr = monday.toISOString().split("T")[0];
-      const sundayStr = sunday.toISOString().split("T")[0];
-      // Find tournaments where any part of the event is in this week
-      const { data, error } = await supabase
-        .from("tournaments")
-        .select("event_id, event_name, start_date, end_date")
-        .lte("start_date", sundayStr)
-        .gte("end_date", mondayStr);
-      if (!error && data) {
-        // Store events in state
-        setCurrentEvents(data);
-        
-        // Also make events available globally for other components
-        if (typeof window !== 'undefined') {
-          // @ts-ignore - Adding custom property to window
-          window.currentEvents = data;
-          console.log("Set currentEvents in window:", data.map(e => `${e.event_name} (${e.event_id})`).join(", "));
-        }
-        
-        // Default to main event (Truist Championship) if available, otherwise first event
-        if (data.length > 0) {
-          // Find Truist Championship by looking for 'truist' in the name (case-insensitive)
-          const mainEvent = data.find(e => 
-            e.event_name.toLowerCase().includes('truist')
-          );
-          
-          if (mainEvent) {
-            console.log(`Setting default event to main tournament: ${mainEvent.event_name} (${mainEvent.event_id})`);
-            setSelectedEventId(mainEvent.event_id);
-          } else {
-            // Fallback to first event if main event not found
-            console.log(`Main tournament not found, defaulting to first event: ${data[0].event_name} (${data[0].event_id})`);
-            setSelectedEventId(data[0].event_id);
-          }
-        }
-      }
-    };
-    fetchCurrentWeekEvents();
-  }, []);
-
-  // Add: auto-detect matchup type (3ball preferred, fallback to 2ball)
-  useEffect(() => {
-    if (!selectedEventId) return;
-    let cancelled = false;
-    const supabase = createBrowserClient();
-    const checkMatchupType = async () => {
-      // Try 3ball first
-      const { data: threeBall, error: err3 } = await supabase
-        .from("latest_three_ball_matchups")
-        .select("id")
-        .eq("event_id", selectedEventId)
-        .limit(1);
-      if (!cancelled && threeBall && threeBall.length > 0) {
-        setMatchupType("3ball");
-        return;
-      }
-      // If no 3ball, try 2ball
-      const { data: twoBall, error: err2 } = await supabase
-        .from("latest_two_ball_matchups")
-        .select("id")
-        .eq("event_id", selectedEventId)
-        .limit(1);
-      if (!cancelled && twoBall && twoBall.length > 0) {
-        setMatchupType("2ball");
-        return;
-      }
-      // If neither, default to 3ball
-      if (!cancelled) setMatchupType("3ball");
-    };
-    checkMatchupType();
-    return () => { cancelled = true; };
-  }, [selectedEventId]);
-  
-  // Listen for matchup type changes from MatchupsTable component
-  useEffect(() => {
-    const handleMatchupTypeChange = (event: any) => {
-      if (event.detail && (event.detail === "2ball" || event.detail === "3ball")) {
-        setMatchupType(event.detail);
-      }
-    };
-    
-    window.addEventListener('matchupTypeChanged', handleMatchupTypeChange);
-    
-    return () => {
-      window.removeEventListener('matchupTypeChanged', handleMatchupTypeChange);
-    };
-  }, []);
+    if (!currentEvents || currentEvents.length === 0) return;
+    setSelectedEventId(currentEvents[0].event_id);
+  }, [currentEvents]);
 
   const handleFilterChange = (filterName: string) => {
     setActiveFilter(filterName)
     setShowCustom(filterName === "Custom")
+  }
+
+  const handleEventChange = (value: string) => {
+    setSelectedEventId(Number(value));
   }
 
   return (
@@ -209,27 +119,16 @@ export default function Dashboard({
               <CardContent className="p-6">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
                   <h2 className="text-xl font-bold">Filters</h2>
-                  {currentEvents.length > 0 && (
+                  {currentEvents && (
                     <div className="flex items-center gap-2">
                       <span className="text-sm text-gray-400">Event:</span>
-                      <Select value={selectedEventId ? String(selectedEventId) : undefined} onValueChange={v => setSelectedEventId(Number(v))}>
+                      <Select value={selectedEventId ? String(selectedEventId) : undefined} onValueChange={handleEventChange}>
                         <SelectTrigger className="w-[220px] bg-[#1e1e23] border-none">
                           <SelectValue placeholder="Select Event" />
                         </SelectTrigger>
                         <SelectContent>
                           {currentEvents
-                            // Sort events to show main events first
-                            .sort((a, b) => {
-                              // Main events (like Truist Championship) should appear first
-                              const aIsMain = a.event_name.toLowerCase().includes('truist');
-                              const bIsMain = b.event_name.toLowerCase().includes('truist');
-                              
-                              if (aIsMain && !bIsMain) return -1;
-                              if (!aIsMain && bIsMain) return 1;
-                              
-                              // If both are main or both are not main, sort by event_id
-                              return a.event_id - b.event_id;
-                            })
+                            .sort((a: TournamentEvent, b: TournamentEvent) => a.start_date.localeCompare(b.start_date))
                             .map(ev => (
                               <SelectItem key={ev.event_id} value={String(ev.event_id)}>
                                 {ev.event_name}

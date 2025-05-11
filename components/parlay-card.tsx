@@ -200,7 +200,6 @@ export default function ParlayCard({
         .from('live_tournament_stats')
         .select('*')
         .or(likeQueries)
-        .eq('event_name', 'Truist Championship') // Try to match current event
         .order('data_golf_updated_at', { ascending: false })
         .limit(10)
         .returns<LiveTournamentStat[]>();

@@ -604,36 +604,31 @@ export async function getLiveStatsForPlayers(
     const supabase = createServerClient();
 
     try {
-        // First check the event name from the recent Truist Championship data
-        // Try to get specifically round 2 stats for the current tournament
+        // Try to get specifically round 2 stats for the current tournament (no event_name filter)
         const { data: round2Stats, error: round2Error } = await supabase
             .from('live_tournament_stats')
             .select('*')
             .in('dg_id', playerIds)
             .eq('round_num', '2') // Explicitly fetch Round 2 stats
-            .eq('event_name', 'Truist Championship') // Focus on current tournament
             .returns<LiveTournamentStat[]>();
-            
+        
         if (round2Stats && round2Stats.length > 0) {
-            console.log(`Found ${round2Stats.length} Round 2 stats records for Truist Championship`);
             return { stats: round2Stats };
         }
         
-        // Try to get Round 1 stats for Truist Championship
+        // Try to get Round 1 stats (no event_name filter)
         const { data: round1Stats, error: round1Error } = await supabase
             .from('live_tournament_stats')
             .select('*')
             .in('dg_id', playerIds)
             .eq('round_num', '1') // Try Round 1 stats
-            .eq('event_name', 'Truist Championship') // Focus on current tournament
             .returns<LiveTournamentStat[]>();
-            
+        
         if (round1Stats && round1Stats.length > 0) {
-            console.log(`Found ${round1Stats.length} Round 1 stats records for Truist Championship`);
             return { stats: round1Stats };
         }
-            
-        // If we don't find stats for the current tournament, get any stats for these players
+        
+        // If we don't find stats for the current round, get any stats for these players
         const { data, error } = await supabase
             .from('live_tournament_stats')
             .select('*')
@@ -646,11 +641,6 @@ export async function getLiveStatsForPlayers(
             throw new Error(`Database error fetching live stats: ${error.message}`);
         }
 
-        if (!data || data.length === 0) {
-            // console.log(`[getLiveStatsForPlayers] No live stats found for player IDs [${playerIds.join(', ')}].`); // REMOVE
-        }
-
-        // console.log(`[getLiveStatsForPlayers] Successfully fetched ${data?.length ?? 0} stat records for IDs [${playerIds.join(', ')}].`); // REMOVE
         return { stats: data || [] };
 
     } catch (error) {

@@ -168,7 +168,6 @@ export async function GET(request: Request) {
         eventMapping[nameLower] = t.event_id;
         
         // Add partial matches too for backward compatibility
-        if (nameLower.includes('truist')) eventMapping['truist'] = t.event_id;
         if (nameLower.includes('myrtle')) eventMapping['myrtle'] = t.event_id;
       });
     }
