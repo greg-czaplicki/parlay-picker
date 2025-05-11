@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { handleApiError } from '@/lib/utils'
 
 // Initialize Supabase client
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -77,27 +78,18 @@ export async function GET() {
     const myrtleTournament = tournaments.find(t => t.event_name.includes('Myrtle'));
     
     if (!truistTournament) {
-      return NextResponse.json({ 
-        success: false, 
-        error: "Truist Championship not found in database" 
-      }, { status: 404 });
+      return handleApiError("Truist Championship not found in database", undefined, 404)
     }
     
     if (!myrtleTournament) {
-      return NextResponse.json({ 
-        success: false, 
-        error: "Myrtle Beach Classic not found in database" 
-      }, { status: 404 });
+      return handleApiError("Myrtle Beach Classic not found in database", undefined, 404)
     }
     
     // 3. Prepare PGA matchups
     console.log("ALL MATCHUPS DEBUG: Preparing PGA matchups for insertion...");
     
     if (!Array.isArray(pgaData.match_list)) {
-      return NextResponse.json({ 
-        success: false, 
-        error: "PGA match_list in API response is not an array" 
-      }, { status: 500 });
+      return handleApiError("PGA match_list in API response is not an array")
     }
     
     const pgaMatchupsToInsert = pgaData.match_list.map(matchup => {

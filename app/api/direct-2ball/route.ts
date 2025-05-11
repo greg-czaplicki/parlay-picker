@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { handleApiError } from '@/lib/utils'
 
 // This is a bare-minimum API endpoint with no frills - just gets the data
 
@@ -29,10 +30,7 @@ export async function GET(request: Request) {
     const { data, error } = await query;
     
     if (error) {
-      return NextResponse.json({ 
-        success: false, 
-        error: error.message 
-      }, { status: 500 });
+      return handleApiError(error)
     }
     
     return NextResponse.json({
@@ -40,9 +38,6 @@ export async function GET(request: Request) {
       matchups: data || []
     });
   } catch (error) {
-    return NextResponse.json({
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error"
-    }, { status: 500 });
+    return handleApiError(error)
   }
 }

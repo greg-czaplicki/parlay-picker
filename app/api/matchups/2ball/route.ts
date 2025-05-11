@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { handleApiError } from '@/lib/utils'
 
 // Define interfaces for the Data Golf API response (2-ball)
 interface Odds {
@@ -281,13 +282,6 @@ export async function GET(request: Request) {
     });
     
   } catch (error) {
-    console.error("Error in GET /api/matchups/2ball:", error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 },
-    );
+    return handleApiError(error)
   }
 }

@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { handleApiError } from '@/lib/utils'
 
 // Initialize Supabase client
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -26,10 +27,7 @@ export async function GET() {
     const oppResponse = await fetch(OPP_URL, { cache: 'no-store' });
     
     if (!oppResponse.ok) {
-      return NextResponse.json({ 
-        success: false, 
-        error: `Failed to fetch from Data Golf API: ${oppResponse.status}` 
-      }, { status: 500 });
+      return handleApiError(`Failed to fetch from Data Golf API: ${oppResponse.status}`, undefined, 500);
     }
     
     const oppData = await oppResponse.json();
@@ -44,17 +42,11 @@ export async function GET() {
       .single();
     
     if (tournamentError) {
-      return NextResponse.json({ 
-        success: false, 
-        error: `Failed to find Myrtle Beach tournament: ${tournamentError.message}` 
-      }, { status: 500 });
+      return handleApiError(`Failed to find Myrtle Beach tournament: ${tournamentError.message}`, undefined, 500);
     }
     
     if (!myrtleTournament) {
-      return NextResponse.json({ 
-        success: false, 
-        error: "No Myrtle Beach tournament found in database" 
-      }, { status: 404 });
+      return handleApiError("No Myrtle Beach tournament found in database", undefined, 404);
     }
     
     console.log("MYRTLE BEACH DEBUG: Found tournament:", myrtleTournament);
@@ -77,10 +69,7 @@ export async function GET() {
     console.log("MYRTLE BEACH DEBUG: Preparing matchups for insertion...");
     
     if (!Array.isArray(oppData.match_list)) {
-      return NextResponse.json({ 
-        success: false, 
-        error: "match_list in API response is not an array" 
-      }, { status: 500 });
+      return handleApiError("match_list in API response is not an array");
     }
     
     const matchupsToInsert = oppData.match_list.map(matchup => {
@@ -122,10 +111,7 @@ export async function GET() {
     
     if (insertError) {
       console.log("MYRTLE BEACH DEBUG: Insert error:", insertError);
-      return NextResponse.json({ 
-        success: false, 
-        error: `Failed to insert historical matchups: ${insertError.message}` 
-      }, { status: 500 });
+      return handleApiError(`Failed to insert historical matchups: ${insertError.message}`, undefined, 500);
     }
     
     console.log("MYRTLE BEACH DEBUG: Upserting into latest table...");
@@ -137,10 +123,7 @@ export async function GET() {
     
     if (upsertError) {
       console.log("MYRTLE BEACH DEBUG: Upsert error:", upsertError);
-      return NextResponse.json({ 
-        success: false, 
-        error: `Failed to upsert latest matchups: ${upsertError.message}` 
-      }, { status: 500 });
+      return handleApiError(`Failed to upsert latest matchups: ${upsertError.message}`);
     }
     
     console.log("MYRTLE BEACH DEBUG: Successfully inserted/upserted matchups");
@@ -155,13 +138,6 @@ export async function GET() {
     });
     
   } catch (error) {
-    console.error("Error in Myrtle Beach debug endpoint:", error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 },
-    );
+    return handleApiError(error);
   }
 }

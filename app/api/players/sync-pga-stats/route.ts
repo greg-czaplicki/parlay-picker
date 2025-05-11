@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { spawn } from "child_process";
 import path from "path";
+import { handleApiError } from '@/lib/utils'
 
 // --- Supabase Setup ---
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -158,13 +159,6 @@ export async function GET() {
     });
     
   } catch (error) {
-    console.error("Error in GET /api/players/sync-pga-stats:", error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error"
-      },
-      { status: 500 },
-    );
+    return handleApiError(error)
   }
 }

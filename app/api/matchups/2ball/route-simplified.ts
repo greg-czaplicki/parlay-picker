@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { handleApiError } from '@/lib/utils'
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -52,11 +53,7 @@ export async function GET(request: Request) {
     }
     
     if (matchupsError) {
-      console.error("Error fetching matchups:", matchupsError);
-      return NextResponse.json({
-        success: false,
-        error: matchupsError.message
-      }, { status: 500 });
+      return handleApiError(matchupsError)
     }
     
     // Process matchups to ensure event_id is a number (not a string)
@@ -70,13 +67,6 @@ export async function GET(request: Request) {
       matchups: processedMatchups 
     });
   } catch (error) {
-    console.error("Error in GET /api/matchups/2ball:", error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 },
-    );
+    return handleApiError(error)
   }
 }

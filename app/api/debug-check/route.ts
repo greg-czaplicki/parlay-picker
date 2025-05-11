@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { handleApiError } from '@/lib/utils'
 
 export async function GET(request: Request) {
   try {
@@ -68,10 +69,6 @@ export async function GET(request: Request) {
       }
     });
   } catch (error) {
-    console.error("Error in debug-check:", error);
-    return NextResponse.json({
-      fetchSuccess: false,
-      error: error instanceof Error ? error.message : "Unknown error"
-    }, { status: 500 });
+    return handleApiError(error)
   }
 }

@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { handleApiError } from '@/lib/utils'
 
 // Define interfaces for the Data Golf API response
 interface Odds {
@@ -373,13 +374,8 @@ export async function GET(request: Request) {
     });
     
   } catch (error) {
-    console.error("Error in GET /api/matchups/3ball:", error);
-
     // Enhanced error reporting
-    let errorMessage = error instanceof Error ? error.message : "Unknown error";
     let errorDetails = {};
-
-    // Include diagnostic info
     try {
       errorDetails = {
         pgaDataExists: !!pgaData,
@@ -398,16 +394,8 @@ export async function GET(request: Request) {
         errorStack: error instanceof Error ? error.stack : null
       };
     } catch (diagnosticError) {
-      errorDetails.diagnosticError = `Error collecting diagnostics: ${diagnosticError.message}`;
+      errorDetails = { diagnosticError: `Error collecting diagnostics: ${diagnosticError.message}` };
     }
-
-    return NextResponse.json(
-      {
-        success: false,
-        error: errorMessage,
-        diagnostic: errorDetails
-      },
-      { status: 500 },
-    );
+    return handleApiError(error, { diagnostic: errorDetails })
   }
 }

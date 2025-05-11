@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { handleApiError } from '@/lib/utils'
 
 // Initialize Supabase client
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -115,13 +116,6 @@ export async function GET() {
       diagnostic_report: diagnosticReport
     });
   } catch (error) {
-    console.error("Error in diagnostic endpoint:", error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 },
-    );
+    return handleApiError(error)
   }
 }

@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { handleApiError } from '@/lib/utils'
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -32,7 +33,7 @@ export async function GET(request: Request) {
     }
     
     // Count by event ID
-    const eventCounts = {};
+    const eventCounts: Record<string, { event_id: number | null, event_name: string, count: number }> = {};
     (matchups || []).forEach(m => {
       const eventId = m.event_id || 'null';
       if (!eventCounts[eventId]) {
@@ -58,13 +59,6 @@ export async function GET(request: Request) {
       }))
     });
   } catch (error) {
-    console.error("Error in db-check:", error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 },
-    );
+    return handleApiError(error)
   }
 }

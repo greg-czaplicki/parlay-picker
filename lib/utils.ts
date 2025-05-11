@@ -1,6 +1,7 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 import type { TrendIndicator } from "@/types/definitions"
+import { NextResponse } from 'next/server'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -76,4 +77,29 @@ export function detect3BallDivergence(matchup: any) {
     datagolfFavorite,
     isDivergence: fanduelFavorite !== datagolfFavorite
   };
+}
+
+/**
+ * Standardized API error handler for Next.js API routes.
+ * @param error - The error object (unknown or Error)
+ * @param diagnostic - Optional extra diagnostic info (object)
+ * @param status - HTTP status code (default 500)
+ * @returns NextResponse with standardized error JSON
+ * @example
+ *   return handleApiError(error, { extra: 'info' }, 400)
+ */
+export function handleApiError(
+  error: unknown,
+  diagnostic?: Record<string, unknown>,
+  status = 500
+) {
+  const errorMessage = error instanceof Error ? error.message : (typeof error === 'string' ? error : 'Unknown error')
+  if (process.env.NODE_ENV !== 'production') {
+    // eslint-disable-next-line no-console
+    console.error('API Error:', error)
+  }
+  return NextResponse.json(
+    { success: false, error: errorMessage, ...(diagnostic || {}) },
+    { status }
+  )
 }
