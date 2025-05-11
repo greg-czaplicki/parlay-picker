@@ -40,6 +40,7 @@ export const queryKeys = {
     live: (eventId: number, roundAndPlayers: string) => ["playerData", "live", eventId, roundAndPlayers] as const,
     pgaTour: (filters?: Record<string, unknown>) => ["playerData", "pgaTour", filters] as const,
     field: (eventId: number) => ["playerData", "field", eventId] as const,
+    direct: () => ["playerData", "direct"] as const,
   },
   // Tournament schedule
   tournamentSchedule: () => ["tournamentSchedule"] as const,
@@ -72,6 +73,7 @@ type QueryKey =
   | ReturnType<typeof queryKeys.playerData.live>
   | ReturnType<typeof queryKeys.playerData.pgaTour>
   | ReturnType<typeof queryKeys.playerData.field>
+  | ReturnType<typeof queryKeys.playerData.direct>
   | ReturnType<typeof queryKeys.tournamentSchedule>
   | ReturnType<typeof queryKeys.currentWeekEvents>
   | ReturnType<typeof queryKeys.matchupType>

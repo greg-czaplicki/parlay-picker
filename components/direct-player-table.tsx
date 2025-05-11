@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
@@ -14,90 +14,22 @@ import {
 import { ArrowUpDown, ChevronDown, ChevronUp, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/use-toast"
-
-type Player = {
-  id: string
-  name: string
-  sgTotal: number
-  sgTeeToGreen: number
-  sgApproach: number
-  sgAroundGreen: number
-  sgPutting: number
-  drivingAccuracy?: number
-  drivingDistance?: number
-}
+import { useDirectPlayerStatsQuery } from '@/hooks/use-direct-player-stats-query'
 
 export default function DirectPlayerTable() {
   const [sorting, setSorting] = useState<SortingState>([{ id: "sgTotal", desc: true }])
-  const [players, setPlayers] = useState<Player[]>([])
-  const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
-  const [lastUpdated, setLastUpdated] = useState<string>("")
+  const { data: players = [], isLoading, isError, error, refetch } = useDirectPlayerStatsQuery()
 
-  // Fetch player data directly from API
-  useEffect(() => {
-    fetchPlayers()
-  }, [])
-
-  const fetchPlayers = async () => {
-    setLoading(true)
-    try {
-      const response = await fetch("/api/direct-player-stats")
-      if (!response.ok) {
-        throw new Error(`Server responded with status: ${response.status}`)
-      }
-      const data = await response.json()
-      if (data.success) {
-        setPlayers(data.players)
-        setLastUpdated(data.lastUpdated || "")
-
-        // Verify Scheffler is first
-        const topPlayer = data.players[0]
-        if (topPlayer && topPlayer.name === "Scheffler, Scottie") {
-          console.log("✅ VERIFICATION PASSED: Scheffler is correctly the top player")
-        } else {
-          console.error("❌ VERIFICATION FAILED: Scheffler should be the top player")
-        }
-      } else {
-        toast({
-          title: "Error fetching players",
-          description: data.error || "Unknown error occurred",
-          variant: "destructive",
-        })
-      }
-    } catch (error) {
-      console.error("Error fetching players:", error)
-      toast({
-        title: "Error fetching players",
-        description: error instanceof Error ? error.message : "Failed to connect to the server",
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
-    }
+  // Show error toast if error occurs
+  if (isError && error) {
+    toast({
+      title: "Error fetching players",
+      description: error.message,
+      variant: "destructive",
+    })
   }
 
-  const refreshPlayerStats = async () => {
-    setRefreshing(true)
-    try {
-      await fetchPlayers()
-      toast({
-        title: "Player stats refreshed",
-        description: "Successfully fetched latest player stats from DataGolf API",
-      })
-    } catch (error) {
-      console.error("Error refreshing player stats:", error)
-      toast({
-        title: "Error refreshing player stats",
-        description: error instanceof Error ? error.message : "Failed to connect to the server",
-        variant: "destructive",
-      })
-    } finally {
-      setRefreshing(false)
-    }
-  }
-
-  const columns: ColumnDef<Player>[] = [
+  const columns: ColumnDef<typeof players[0]>[] = [
     {
       accessorKey: "name",
       header: "Name",
@@ -303,21 +235,20 @@ export default function DirectPlayerTable() {
         <div className="flex justify-between items-center mb-4">
           <div>
             <h2 className="text-xl font-bold">Player Stats (Direct from DataGolf API)</h2>
-            {lastUpdated && <p className="text-sm text-gray-400 mt-1">Last updated: {lastUpdated}</p>}
           </div>
           <Button
             variant="outline"
             size="sm"
-            onClick={refreshPlayerStats}
-            disabled={refreshing}
+            onClick={() => { refetch(); }}
+            disabled={isLoading}
             className="flex items-center gap-2 bg-[#1e1e23] border-none"
           >
-            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-            {refreshing ? "Refreshing..." : "Refresh Stats"}
+            <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+            {isLoading ? "Refreshing..." : "Refresh Stats"}
           </Button>
         </div>
 
-        {loading ? (
+        {isLoading ? (
           <div className="text-center py-8">
             <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
             <p>Loading player data directly from DataGolf API...</p>
