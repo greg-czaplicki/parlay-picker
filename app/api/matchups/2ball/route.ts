@@ -106,19 +106,20 @@ export async function GET(request: Request) {
   try {
     params = getQueryParams(request, querySchema)
   } catch (error) {
+    logger.error('Zod param parse error', { error });
     return handleApiError(error);
   }
   const { eventId, tour } = params;
   logger.info(`API: Received request with eventId=${eventId}, tour=${tour}`);
   try {
     const supabase = createSupabaseClient()
+    logger.info('Fetching from DataGolf APIs...');
     // Fetch from DataGolf APIs directly
-    logger.info("Fetching from DataGolf APIs...");
     // Fetch all tours in parallel
     const [pgaRes, oppRes, euroRes] = await Promise.all([
-      fetch(process.env.DATA_GOLF_PGA_URL!, { cache: 'no-store' }),
-      fetch(process.env.DATA_GOLF_OPP_URL!, { cache: 'no-store' }),
-      fetch(process.env.DATA_GOLF_EURO_URL!, { cache: 'no-store' })
+      fetch(DATA_GOLF_PGA_URL, { cache: 'no-store' }),
+      fetch(DATA_GOLF_OPP_URL, { cache: 'no-store' }),
+      fetch(DATA_GOLF_EURO_URL, { cache: 'no-store' })
     ]);
     // Check if at least one API call succeeded
     if (!pgaRes.ok && !oppRes.ok && !euroRes.ok) {
@@ -132,7 +133,9 @@ export async function GET(request: Request) {
       if (pgaRes.ok) {
         pgaData = await pgaRes.json();
         if (pgaData) {
-          logger.info(`PGA event: ${pgaData.event_name}, matchups: ${pgaData.match_list?.length || 0}`);
+          logger.info(
+            `PGA event: ${pgaData?.event_name ?? 'N/A'}, matchups: ${Array.isArray(pgaData?.match_list) ? pgaData.match_list.length : 0}`
+          );
         }
       }
     } catch (error) {
@@ -142,7 +145,9 @@ export async function GET(request: Request) {
       if (oppRes.ok) {
         oppData = await oppRes.json();
         if (oppData) {
-          logger.info(`Opposite field event: ${oppData.event_name}, matchups: ${oppData.match_list?.length || 0}`);
+          logger.info(
+            `Opposite field event: ${oppData?.event_name ?? 'N/A'}, matchups: ${Array.isArray(oppData?.match_list) ? oppData.match_list.length : 0}`
+          );
         }
       }
     } catch (error) {
@@ -152,7 +157,9 @@ export async function GET(request: Request) {
       if (euroRes.ok) {
         euroData = await euroRes.json();
         if (euroData) {
-          logger.info(`European Tour event: ${euroData.event_name}, matchups: ${euroData.match_list?.length || 0}`);
+          logger.info(
+            `European Tour event: ${euroData?.event_name ?? 'N/A'}, matchups: ${Array.isArray(euroData?.match_list) ? euroData.match_list.length : 0}`
+          );
         }
       }
     } catch (error) {
@@ -177,7 +184,11 @@ export async function GET(request: Request) {
     const euroMatchups = euroData ? processMatchups(euroData, eventMapping, "euro", 600) : [];
     // Combine all matchups
     const allMatchups = [...pgaMatchups, ...oppMatchups, ...euroMatchups];
-    logger.info(`Processed ${allMatchups.length} total matchups across all tours`);
+    logger.info('All matchups:', { allMatchups });
+    // Log event mapping and event IDs before filtering
+    logger.info('EventId from request:', { eventId });
+    logger.info('eventMapping:', eventMapping);
+    logger.info('Event IDs in allMatchups:', { eventIds: allMatchups.map(m => m.event_id) });
     // Apply filters if specified
     let filteredMatchups = allMatchups;
     // Filter by event ID if provided
@@ -185,6 +196,7 @@ export async function GET(request: Request) {
       const eventIdInt = parseInt(eventId, 10);
       filteredMatchups = filteredMatchups.filter(m => Number(m.event_id) === eventIdInt);
       logger.info(`Filtered to ${filteredMatchups.length} matchups for event ${eventIdInt}`);
+      logger.info('Event IDs in filteredMatchups:', { eventIds: filteredMatchups.map(m => m.event_id) });
     }
     // Filter by tour if provided
     if (tour) {
@@ -211,6 +223,14 @@ export async function GET(request: Request) {
       }
       matchupsByEvent[eventIdKey].matchups.push(m);
     });
+    logger.info('Filtered matchups:', { filteredMatchups });
+    logger.info('Returning from /2ball', {
+      eventId,
+      tour,
+      filteredMatchups,
+      matchupsByEventKeys: Object.keys(matchupsByEvent),
+      matchupsByEvent,
+    });
     return jsonSuccess({
       success: true,
       matchups: filteredMatchups,
@@ -222,6 +242,7 @@ export async function GET(request: Request) {
       }
     });
   } catch (error) {
+    logger.error('Error in /2ball endpoint', { error, eventId, tour });
     return handleApiError(error)
   }
 }

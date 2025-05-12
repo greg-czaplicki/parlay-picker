@@ -56,7 +56,7 @@ export async function GET(request: Request) {
 
       // 3.3 If we have an active tournament matching the eventId, try by name
       let nameMatched2Ball = null;
-      const matchingTournament = activeTournaments?.find(t => t.event_id.toString() === eventId);
+      const matchingTournament = activeTournaments?.find(t => (t.event_id != null ? t.event_id.toString() : '') === eventId);
       if (matchingTournament) {
         const { data: nameMatched } = await supabase
           .from("latest_two_ball_matchups")

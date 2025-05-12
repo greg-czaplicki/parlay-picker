@@ -57,8 +57,7 @@ export default function Dashboard({
   const [showCustom, setShowCustom] = useState(false)
   const { data: currentEvents, isLoading: isLoadingEvents, isError: isErrorEvents, error: eventsError } = useCurrentWeekEventsQuery()
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null)
-  const { data: matchupTypeRaw, isLoading: isLoadingMatchupType, isError: isErrorMatchupType, error: matchupTypeError } = useMatchupTypeQuery(selectedEventId)
-  const matchupType: string = matchupTypeRaw ?? "3ball" // fallback to '3ball' if undefined/null
+  const [matchupType, setMatchupType] = useState<"2ball" | "3ball">("3ball")
 
   useEffect(() => {
     if (!currentEvents || currentEvents.length === 0) return;
@@ -140,6 +139,16 @@ export default function Dashboard({
                             ))}
                         </SelectContent>
                       </Select>
+                      <span className="text-sm text-gray-400 ml-4">Matchup Type:</span>
+                      <Select value={matchupType} onValueChange={v => setMatchupType(v as "2ball" | "3ball") }>
+                        <SelectTrigger className="w-[120px] bg-[#1e1e23] border-none">
+                          <SelectValue placeholder="Type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="3ball">3-Ball</SelectItem>
+                          <SelectItem value="2ball">2-Ball</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   )}
                 </div>
@@ -182,13 +191,13 @@ export default function Dashboard({
 
           {/* Row 2: Main Matchups Table (Left) */}
           <div className="md:col-span-3">
-            <MatchupsTable eventId={selectedEventId} matchupType={matchupType as "3ball" | "2ball"} />
+            <MatchupsTable eventId={selectedEventId} matchupType={matchupType} />
           </div>
 
           {/* Row 2: Recommended Picks (Right) */}
           <div className="md:col-span-1">
             <RecommendedPicks 
-              matchupType={matchupType as "3ball" | "2ball"} 
+              matchupType={matchupType} 
               limit={10} 
               oddsGapPercentage={40} // 40 point American odds gap
               bookmaker="fanduel" // Use same bookmaker as matchups table default

@@ -106,13 +106,12 @@ export default function MatchupsTable({
   matchupType?: "2ball" | "3ball";
 }) {
   const [selectedBookmaker, setSelectedBookmaker] = useState<"fanduel">("fanduel");
-  const [activeMatchupType, setActiveMatchupType] = useState<"2ball" | "3ball">(matchupType);
   // Odds gap filter state
   const [oddsGapThreshold, setOddsGapThreshold] = useState(40); // Default 40 points in American odds
   const [showFiltersDialog, setShowFiltersDialog] = useState(false);
 
   // Use React Query for matchups
-  const { data: matchups, isLoading, isError, error, lastUpdateTime } = useMatchupsQuery(eventId, activeMatchupType);
+  const { data: matchups, isLoading, isError, error, lastUpdateTime } = useMatchupsQuery(eventId, matchupType);
 
   // Extract all unique player IDs from matchups for stats
   const playerIds = (matchups ?? []).flatMap(m => {
@@ -130,20 +129,6 @@ export default function MatchupsTable({
     if (stat.player_id != null) acc[stat.player_id] = stat;
     return acc;
   }, {} as Record<number, PlayerStat>);
-
-  // Update the local state when the prop changes
-  useEffect(() => {
-    setActiveMatchupType(matchupType);
-  }, [matchupType]);
-  
-  // Notify parent component when matchup type changes
-  useEffect(() => {
-    // If the parent has passed a callback function, call it when the matchup type changes
-    if (typeof window !== 'undefined' && window.dispatchEvent) {
-      const event = new CustomEvent('matchupTypeChanged', { detail: activeMatchupType });
-      window.dispatchEvent(event);
-    }
-  }, [activeMatchupType]);
 
   const decimalToAmerican = (decimalOdds: number): string => {
     if (decimalOdds >= 2.0) return `+${Math.round((decimalOdds - 1) * 100)}`;
@@ -163,23 +148,17 @@ export default function MatchupsTable({
   // Calculate if the odds gap exceeds the threshold
   const hasSignificantOddsGap = (playerOdds: number | null, referenceOdds: number | null): boolean => {
     if (!playerOdds || !referenceOdds || playerOdds <= 1 || referenceOdds <= 1) return false;
-    
-    // For 3ball matchups, we want to highlight value - odds that are higher than expected
+    // For 3-ball matchups, we want to highlight value - odds that are higher than expected
     // compared to the second favorite
-    
     // Convert decimal odds to American for comparison
     const americanStrPlayer = decimalToAmerican(playerOdds);
     const americanStrReference = decimalToAmerican(referenceOdds);
-    
     // Parse American odds to numbers, respecting negative values for favorites
     const americanPlayer = parseInt(americanStrPlayer);
     const americanReference = parseInt(americanStrReference);
-    
     if (isNaN(americanPlayer) || isNaN(americanReference)) return false;
-    
     // Calculate the absolute difference between the odds
     const diff = Math.abs(americanPlayer - americanReference);
-    
     // For the comparison to be meaningful, we're looking for significant discrepancies
     // where the player's odds are notably different from the second-best player
     return diff >= oddsGapThreshold;
@@ -223,7 +202,7 @@ export default function MatchupsTable({
           <div className="flex flex-col gap-4 mb-4">
             <div className="flex justify-between items-center">
               <div>
-                <h2 className="text-xl font-bold">{activeMatchupType === "3ball" ? "3-Ball" : "2-Ball"} Matchups</h2>
+                <h2 className="text-xl font-bold">{matchupType === "3ball" ? "3-Ball" : "2-Ball"} Matchups</h2>
                 {matchups && matchups.length > 0 && <p className="text-sm text-gray-400">Event: {matchups[0].event_name}</p>}
               </div>
               <div className="flex items-center gap-2">
@@ -320,18 +299,6 @@ export default function MatchupsTable({
                     </div>
                   </DialogContent>
                 </Dialog>
-                <Select 
-                  value={activeMatchupType} 
-                  onValueChange={(value: string) => setActiveMatchupType(value as "2ball" | "3ball")}
-                >
-                  <SelectTrigger className="w-[120px] bg-[#1e1e23] border-none">
-                    <SelectValue placeholder="Type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="3ball">3-Ball</SelectItem>
-                    <SelectItem value="2ball">2-Ball</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
             </div>
           </div>
@@ -344,7 +311,7 @@ export default function MatchupsTable({
                     <TableHead className="text-white text-center">Position</TableHead>
                     <TableHead className="text-white text-center">FanDuel Odds</TableHead>
                     <TableHead className="text-white text-center">
-                      {activeMatchupType === "3ball" ? "Data Golf Odds" : "DraftKings Odds"}
+                      {matchupType === "3ball" ? "Data Golf Odds" : "DraftKings Odds"}
                     </TableHead>
                   </TableRow>
                 </TableHeader>
@@ -521,23 +488,17 @@ export default function MatchupsTable({
                       // Format the player's tournament position and score
                       const formatPlayerPosition = (playerId: number) => {
                         const playerStat = playerStatsMap[playerId];
-                        if (!playerStat) return null;
-                        
-                        // Format the position display
-                        const position = playerStat.position || '';
-                        
-                        // Ensure score is always a string
-                        let score: string | null = null;
-                        if (playerStat.total !== null && playerStat.total !== undefined) {
-                          if (playerStat.total === 0) {
-                            score = 'E';
-                          } else if (playerStat.total > 0) {
-                            score = `+${playerStat.total}`;
-                          } else {
-                            score = playerStat.total.toString();
-                          }
+                        if (!playerStat) return { position: '-', score: '-' };
+
+                        const position = playerStat.position || '-';
+                        let score: string = '-';
+                        if (playerStat.total === 0) {
+                          score = 'E';
+                        } else if (typeof playerStat.total === 'number' && playerStat.total > 0) {
+                          score = `+${playerStat.total}`;
+                        } else if (typeof playerStat.total === 'number' && playerStat.total < 0) {
+                          score = playerStat.total.toString();
                         }
-                          
                         return { position, score };
                       };
                       
@@ -560,68 +521,64 @@ export default function MatchupsTable({
                               
                               return (
                                 <div key={`position-${idx}`} className="py-1 h-8 flex items-center justify-center">
-                                  {positionData ? (
-                                    <div className="flex items-center justify-center space-x-2 w-full">
+                                  <div className="flex items-center justify-center space-x-2 w-full">
+                                    <span className={`px-2 py-0.5 text-xs rounded min-w-12 text-center font-medium ${
+                                      // Position heatmap - from gold (1st) to blue gradient (top 30) to gray (below top 30)
+                                      positionData.position === '1' 
+                                        ? 'bg-yellow-500/40 text-yellow-100' 
+                                        : positionData.position === 'T1'
+                                          ? 'bg-yellow-500/30 text-yellow-100'
+                                        : positionData.position === '2' || positionData.position === 'T2'
+                                          ? 'bg-amber-500/30 text-amber-100'
+                                        : positionData.position === '3' || positionData.position === 'T3'
+                                          ? 'bg-orange-500/30 text-orange-100'
+                                        : positionData.position?.match(/^T?[4-5]$/)
+                                          ? 'bg-red-500/30 text-red-100'
+                                        : positionData.position?.match(/^T?[6-9]$/) || positionData.position === 'T10' || positionData.position === '10'
+                                          ? 'bg-purple-500/30 text-purple-100'
+                                        : positionData.position?.match(/^T?1[1-9]$/) || positionData.position?.match(/^T?2[0-5]$/)
+                                          ? 'bg-blue-500/30 text-blue-100'
+                                        : positionData.position?.match(/^T?2[6-9]$/) || positionData.position?.match(/^T?3[0-9]$/)
+                                          ? 'bg-blue-700/30 text-blue-200' 
+                                          : positionData.position === 'CUT' || positionData.position === 'WD'
+                                            ? 'bg-rose-950/30 text-rose-300'
+                                            : 'bg-gray-500/30 text-gray-300'
+                                    }`}>
+                                      {positionData.position}
+                                    </span>
+                                    {positionData.score && (
                                       <span className={`px-2 py-0.5 text-xs rounded min-w-12 text-center font-medium ${
-                                        // Position heatmap - from gold (1st) to blue gradient (top 30) to gray (below top 30)
-                                        positionData.position === '1' 
-                                          ? 'bg-yellow-500/40 text-yellow-100' 
-                                          : positionData.position === 'T1'
-                                            ? 'bg-yellow-500/30 text-yellow-100'
-                                          : positionData.position === '2' || positionData.position === 'T2'
-                                            ? 'bg-amber-500/30 text-amber-100'
-                                          : positionData.position === '3' || positionData.position === 'T3'
-                                            ? 'bg-orange-500/30 text-orange-100'
-                                          : positionData.position?.match(/^T?[4-5]$/)
-                                            ? 'bg-red-500/30 text-red-100'
-                                          : positionData.position?.match(/^T?[6-9]$/) || positionData.position === 'T10' || positionData.position === '10'
-                                            ? 'bg-purple-500/30 text-purple-100'
-                                          : positionData.position?.match(/^T?1[1-9]$/) || positionData.position?.match(/^T?2[0-5]$/)
-                                            ? 'bg-blue-500/30 text-blue-100'
-                                          : positionData.position?.match(/^T?2[6-9]$/) || positionData.position?.match(/^T?3[0-9]$/)
-                                            ? 'bg-blue-700/30 text-blue-200' 
-                                            : positionData.position === 'CUT' || positionData.position === 'WD'
-                                              ? 'bg-rose-950/30 text-rose-300'
-                                              : 'bg-gray-500/30 text-gray-300'
+                                        // Score heatmap - from deep red (best) to green (even) to gray (over par)
+                                        positionData.score === 'E' 
+                                          ? 'bg-green-600/30 text-green-100' 
+                                          : positionData.score.startsWith('-') ? (
+                                              // Under par gradient (better scores have deeper red)
+                                              positionData.score <= '-10' 
+                                                ? 'bg-red-900/40 text-red-100' 
+                                                : positionData.score <= '-7'
+                                                  ? 'bg-red-800/40 text-red-100'
+                                                  : positionData.score <= '-5'
+                                                    ? 'bg-red-700/40 text-red-100'
+                                                    : positionData.score <= '-3'
+                                                      ? 'bg-red-600/40 text-red-100'
+                                                      : 'bg-red-500/40 text-red-100'
+                                            ) : (
+                                              // Over par gradient (worse scores have deeper gray)
+                                              positionData.score >= '+10'
+                                                ? 'bg-gray-900/40 text-gray-100'
+                                                : positionData.score >= '+7'
+                                                  ? 'bg-gray-800/40 text-gray-100'
+                                                  : positionData.score >= '+5'
+                                                    ? 'bg-gray-700/40 text-gray-100'
+                                                    : positionData.score >= '+3'
+                                                      ? 'bg-gray-600/40 text-gray-100'
+                                                      : 'bg-gray-500/40 text-gray-100'
+                                            )
                                       }`}>
-                                        {positionData.position}
+                                        {positionData.score}
                                       </span>
-                                      {positionData.score && (
-                                        <span className={`px-2 py-0.5 text-xs rounded min-w-12 text-center font-medium ${
-                                          // Score heatmap - from deep red (best) to green (even) to gray (over par)
-                                          positionData.score === 'E' 
-                                            ? 'bg-green-600/30 text-green-100' 
-                                            : positionData.score.startsWith('-') ? (
-                                                // Under par gradient (better scores have deeper red)
-                                                positionData.score <= '-10' 
-                                                  ? 'bg-red-900/40 text-red-100' 
-                                                  : positionData.score <= '-7'
-                                                    ? 'bg-red-800/40 text-red-100'
-                                                    : positionData.score <= '-5'
-                                                      ? 'bg-red-700/40 text-red-100'
-                                                      : positionData.score <= '-3'
-                                                        ? 'bg-red-600/40 text-red-100'
-                                                        : 'bg-red-500/40 text-red-100'
-                                              ) : (
-                                                // Over par gradient (worse scores have deeper gray)
-                                                positionData.score >= '+10'
-                                                  ? 'bg-gray-900/40 text-gray-100'
-                                                  : positionData.score >= '+7'
-                                                    ? 'bg-gray-800/40 text-gray-100'
-                                                    : positionData.score >= '+5'
-                                                      ? 'bg-gray-700/40 text-gray-100'
-                                                      : positionData.score >= '+3'
-                                                        ? 'bg-gray-600/40 text-gray-100'
-                                                        : 'bg-gray-500/40 text-gray-100'
-                                              )
-                                        }`}>
-                                          {positionData.score}
-                                        </span>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    <span className="text-gray-400">-</span>
-                                  )}
+                                    )}
+                                  </div>
                                 </div>
                               );
                             })}
@@ -747,23 +704,17 @@ export default function MatchupsTable({
                       // Format the player's tournament position and score
                       const formatPlayerPosition = (playerId: number) => {
                         const playerStat = playerStatsMap[playerId];
-                        if (!playerStat) return null;
-                        
-                        // Format the position display
-                        const position = playerStat.position || '';
-                        
-                        // Ensure score is always a string
-                        let score: string | null = null;
-                        if (playerStat.total !== null && playerStat.total !== undefined) {
-                          if (playerStat.total === 0) {
-                            score = 'E';
-                          } else if (playerStat.total > 0) {
-                            score = `+${playerStat.total}`;
-                          } else {
-                            score = playerStat.total.toString();
-                          }
+                        if (!playerStat) return { position: '-', score: '-' };
+
+                        const position = playerStat.position || '-';
+                        let score: string = '-';
+                        if (playerStat.total === 0) {
+                          score = 'E';
+                        } else if (typeof playerStat.total === 'number' && playerStat.total > 0) {
+                          score = `+${playerStat.total}`;
+                        } else if (typeof playerStat.total === 'number' && playerStat.total < 0) {
+                          score = playerStat.total.toString();
                         }
-                          
                         return { position, score };
                       };
                       
@@ -785,68 +736,64 @@ export default function MatchupsTable({
                               
                               return (
                                 <div key={`position-${idx}`} className="py-1 h-8 flex items-center justify-center">
-                                  {positionData ? (
-                                    <div className="flex items-center justify-center space-x-2 w-full">
+                                  <div className="flex items-center justify-center space-x-2 w-full">
+                                    <span className={`px-2 py-0.5 text-xs rounded min-w-12 text-center font-medium ${
+                                      // Position heatmap - from gold (1st) to blue gradient (top 30) to gray (below top 30)
+                                      positionData.position === '1' 
+                                        ? 'bg-yellow-500/40 text-yellow-100' 
+                                        : positionData.position === 'T1'
+                                          ? 'bg-yellow-500/30 text-yellow-100'
+                                        : positionData.position === '2' || positionData.position === 'T2'
+                                          ? 'bg-amber-500/30 text-amber-100'
+                                        : positionData.position === '3' || positionData.position === 'T3'
+                                          ? 'bg-orange-500/30 text-orange-100'
+                                        : positionData.position?.match(/^T?[4-5]$/)
+                                          ? 'bg-red-500/30 text-red-100'
+                                        : positionData.position?.match(/^T?[6-9]$/) || positionData.position === 'T10' || positionData.position === '10'
+                                          ? 'bg-purple-500/30 text-purple-100'
+                                        : positionData.position?.match(/^T?1[1-9]$/) || positionData.position?.match(/^T?2[0-5]$/)
+                                          ? 'bg-blue-500/30 text-blue-100'
+                                        : positionData.position?.match(/^T?2[6-9]$/) || positionData.position?.match(/^T?3[0-9]$/)
+                                          ? 'bg-blue-700/30 text-blue-200' 
+                                        : positionData.position === 'CUT' || positionData.position === 'WD'
+                                          ? 'bg-rose-950/30 text-rose-300'
+                                        : 'bg-gray-500/30 text-gray-300'
+                                    }`}>
+                                      {positionData.position}
+                                    </span>
+                                    {positionData.score && (
                                       <span className={`px-2 py-0.5 text-xs rounded min-w-12 text-center font-medium ${
-                                        // Position heatmap - from gold (1st) to blue gradient (top 30) to gray (below top 30)
-                                        positionData.position === '1' 
-                                          ? 'bg-yellow-500/40 text-yellow-100' 
-                                          : positionData.position === 'T1'
-                                            ? 'bg-yellow-500/30 text-yellow-100'
-                                          : positionData.position === '2' || positionData.position === 'T2'
-                                            ? 'bg-amber-500/30 text-amber-100'
-                                          : positionData.position === '3' || positionData.position === 'T3'
-                                            ? 'bg-orange-500/30 text-orange-100'
-                                          : positionData.position?.match(/^T?[4-5]$/)
-                                            ? 'bg-red-500/30 text-red-100'
-                                          : positionData.position?.match(/^T?[6-9]$/) || positionData.position === 'T10' || positionData.position === '10'
-                                            ? 'bg-purple-500/30 text-purple-100'
-                                          : positionData.position?.match(/^T?1[1-9]$/) || positionData.position?.match(/^T?2[0-5]$/)
-                                            ? 'bg-blue-500/30 text-blue-100'
-                                          : positionData.position?.match(/^T?2[6-9]$/) || positionData.position?.match(/^T?3[0-9]$/)
-                                            ? 'bg-blue-700/30 text-blue-200' 
-                                            : positionData.position === 'CUT' || positionData.position === 'WD'
-                                              ? 'bg-rose-950/30 text-rose-300'
-                                              : 'bg-gray-500/30 text-gray-300'
+                                        // Score heatmap - from deep red (best) to green (even) to gray (over par)
+                                        positionData.score === 'E' 
+                                          ? 'bg-green-600/30 text-green-100' 
+                                          : positionData.score.startsWith('-') ? (
+                                              // Under par gradient (better scores have deeper red)
+                                              positionData.score <= '-10' 
+                                                ? 'bg-red-900/40 text-red-100' 
+                                                : positionData.score <= '-7'
+                                                  ? 'bg-red-800/40 text-red-100'
+                                                  : positionData.score <= '-5'
+                                                    ? 'bg-red-700/40 text-red-100'
+                                                    : positionData.score <= '-3'
+                                                      ? 'bg-red-600/40 text-red-100'
+                                                      : 'bg-red-500/40 text-red-100'
+                                            ) : (
+                                              // Over par gradient (worse scores have deeper gray)
+                                              positionData.score >= '+10'
+                                                ? 'bg-gray-900/40 text-gray-100'
+                                                : positionData.score >= '+7'
+                                                  ? 'bg-gray-800/40 text-gray-100'
+                                                  : positionData.score >= '+5'
+                                                    ? 'bg-gray-700/40 text-gray-100'
+                                                    : positionData.score >= '+3'
+                                                      ? 'bg-gray-600/40 text-gray-100'
+                                                      : 'bg-gray-500/40 text-gray-100'
+                                            )
                                       }`}>
-                                        {positionData.position}
+                                        {positionData.score}
                                       </span>
-                                      {positionData.score && (
-                                        <span className={`px-2 py-0.5 text-xs rounded min-w-12 text-center font-medium ${
-                                          // Score heatmap - from deep red (best) to green (even) to gray (over par)
-                                          positionData.score === 'E' 
-                                            ? 'bg-green-600/30 text-green-100' 
-                                            : positionData.score.startsWith('-') ? (
-                                                // Under par gradient (better scores have deeper red)
-                                                positionData.score <= '-10' 
-                                                  ? 'bg-red-900/40 text-red-100' 
-                                                  : positionData.score <= '-7'
-                                                    ? 'bg-red-800/40 text-red-100'
-                                                    : positionData.score <= '-5'
-                                                      ? 'bg-red-700/40 text-red-100'
-                                                      : positionData.score <= '-3'
-                                                        ? 'bg-red-600/40 text-red-100'
-                                                        : 'bg-red-500/40 text-red-100'
-                                              ) : (
-                                                // Over par gradient (worse scores have deeper gray)
-                                                positionData.score >= '+10'
-                                                  ? 'bg-gray-900/40 text-gray-100'
-                                                  : positionData.score >= '+7'
-                                                    ? 'bg-gray-800/40 text-gray-100'
-                                                    : positionData.score >= '+5'
-                                                      ? 'bg-gray-700/40 text-gray-100'
-                                                      : positionData.score >= '+3'
-                                                        ? 'bg-gray-600/40 text-gray-100'
-                                                        : 'bg-gray-500/40 text-gray-100'
-                                              )
-                                        }`}>
-                                          {positionData.score}
-                                        </span>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    <span className="text-gray-400">-</span>
-                                  )}
+                                    )}
+                                  </div>
                                 </div>
                               );
                             })}
@@ -875,7 +822,7 @@ export default function MatchupsTable({
             </div>
           ) : (
             <div className="p-8 text-center">
-              <p className="text-gray-400">No {activeMatchupType === "3ball" ? "3-ball" : "2-ball"} matchups found for the selected event.</p>
+              <p className="text-gray-400">No {matchupType === "3ball" ? "3-ball" : "2-ball"} matchups found for the selected event.</p>
             </div>
           )}
         </CardContent>

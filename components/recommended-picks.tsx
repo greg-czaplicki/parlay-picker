@@ -61,14 +61,13 @@ export default function RecommendedPicks({
   oddsGapPercentage = 40, // Default minimum 40 point American odds gap
   eventId, // Selected event ID to filter by
 }: RecommendedPicksProps) {
-  const [activeMatchupType, setActiveMatchupType] = useState<"2ball" | "3ball">(matchupType as "2ball" | "3ball")
   // Get the parlay context
   const { addSelection, removeSelection, selections } = useParlay()
   // Track which players have been added to the parlay
   const [addedPlayers, setAddedPlayers] = useState<Record<string, boolean>>({})
 
   // Use React Query for recommendations
-  const { data: recommendations, isLoading, isError, error } = useRecommendedPicksQuery(eventId ?? null, activeMatchupType, bookmaker, oddsGapPercentage, limit)
+  const { data: recommendations, isLoading, isError, error } = useRecommendedPicksQuery(eventId ?? null, matchupType as "2ball" | "3ball", bookmaker, oddsGapPercentage, limit)
 
   // Function to add a player to the parlay
   const addToParlay = (selection: ParlaySelection, playerId: number) => {
@@ -142,42 +141,26 @@ export default function RecommendedPicks({
     return { inParlay: false }
   }
 
-  // Update local state when prop changes
-  useEffect(() => {
-    setActiveMatchupType(matchupType as "2ball" | "3ball");
-  }, [matchupType]);
-  
   // Sync addedPlayers state with selections from context
   useEffect(() => {
     // Find players that are currently in recommendations and also in selections
     const newAddedPlayers: Record<string, boolean> = {...addedPlayers};
-    
-    // Loop through recommendations to check if any are in the parlay
     (recommendations ?? []).forEach((player: Player) => {
-      // Format player name for comparison
       let formattedPlayerName = player.name
       if (formattedPlayerName.includes(",")) {
         const [lastName, firstName] = formattedPlayerName.split(",").map(part => part.trim())
         formattedPlayerName = `${firstName} ${lastName}`
       }
-      
-      // Check if this player is in the selections
       const isInParlay = selections.some((selection: ParlaySelection) => {
-        // Format selection player name for comparison
         let selectionPlayerName = selection.player
         if (selectionPlayerName.includes(",")) {
           const [lastName, firstName] = selectionPlayerName.split(",").map(part => part.trim())
           selectionPlayerName = `${firstName} ${lastName}`
         }
-        
         return selectionPlayerName.toLowerCase() === formattedPlayerName.toLowerCase()
       })
-      
-      // Update tracking state
       newAddedPlayers[player.id] = isInParlay
     })
-    
-    // Update state if needed
     setAddedPlayers(newAddedPlayers)
   }, [selections, recommendations]);
 
@@ -185,7 +168,7 @@ export default function RecommendedPicks({
     <Card className="glass-card highlight-card">
       <CardContent className="p-6">
         <h2 className="text-xl font-bold mb-4">
-          Top {activeMatchupType === "3ball" ? "3-Ball" : "2-Ball"} Picks
+          Top {matchupType === "3ball" ? "3-Ball" : "2-Ball"} Picks
         </h2>
 
         {isLoading && (
@@ -264,7 +247,7 @@ export default function RecommendedPicks({
                         // Add player to parlay context
                         addToParlay({
                           id: Date.now().toString(),
-                          matchupType: activeMatchupType,
+                          matchupType: matchupType,
                           group: player.eventName || 'Unknown Event',
                           player: player.name,
                           odds: americanOdds,
