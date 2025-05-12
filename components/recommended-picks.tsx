@@ -140,7 +140,7 @@ export default function RecommendedPicks({
     
     return { inParlay: false }
   }
-
+  
   // Sync addedPlayers state with selections from context
   useEffect(() => {
     // Find players that are currently in recommendations and also in selections

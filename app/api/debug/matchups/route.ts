@@ -22,22 +22,22 @@ export async function GET(request: Request) {
     const { data: twoBallCounts, error: twoBallCountError } = await supabase
       .from("latest_two_ball_matchups")
       .select("event_id, event_name, count(*)");
-
+    
     const { data: threeBallCounts, error: threeBallCountError } = await supabase
       .from("latest_three_ball_matchups")
       .select("event_id, event_name, count(*)");
-
+    
     // 2. Get the active tournaments
     const { data: activeTournaments, error: tournamentsError } = await supabase
       .from("tournaments")
       .select("*")
       .gte("end_date", new Date().toISOString().split('T')[0])
       .order("start_date", { ascending: true });
-
+    
     // 3. Fetch sample data for the requested event
     let twoBallSample = null;
     let threeBallSample = null;
-
+    
     if (eventId) {
       // Test different ways of querying to see what works
       // 3.1 Direct event_id match (stringified)
@@ -46,14 +46,14 @@ export async function GET(request: Request) {
         .select("*")
         .eq("event_id", eventId)
         .limit(5);
-
+      
       // 3.2 Direct event_id match (parsed as number)
       const { data: numeric2Ball } = await supabase
         .from("latest_two_ball_matchups")
         .select("*")
         .eq("event_id", parseInt(eventId, 10))
         .limit(5);
-
+      
       // 3.3 If we have an active tournament matching the eventId, try by name
       let nameMatched2Ball = null;
       const matchingTournament = activeTournaments?.find(t => (t.event_id != null ? t.event_id.toString() : '') === eventId);
@@ -78,10 +78,10 @@ export async function GET(request: Request) {
         .limit(5);
       threeBallSample = direct3Ball || [];
     }
-
+    
     // 4. Raw SQL query to check data types
     const { data: rawTypes } = await supabase.rpc('check_event_id_types');
-
+    
     logger.info('Returning debug/matchups response');
     return jsonSuccess({
       twoBallCounts,

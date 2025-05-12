@@ -9,10 +9,10 @@ export async function GET(request: Request) {
   logger.info('Received debug/compare-filters request', { url: request.url });
   try {
     const { eventId } = getQueryParams(request, querySchema);
-    if (!eventId) {
+  if (!eventId) {
       logger.warn('eventId is required');
       return handleApiError('eventId is required');
-    }
+  }
     const supabase = createSupabaseClient()
     // First get the event name from tournaments
     const { data: tournamentData, error: tournamentError } = await supabase

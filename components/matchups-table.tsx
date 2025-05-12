@@ -321,16 +321,16 @@ export default function MatchupsTable({
                     const key = matchup.id ? `matchup-${matchup.id}` : `matchup-${index}-${matchup.p1_dg_id}-${matchup.p2_dg_id}`;
                     
                     // Debug: print first 5 2-ball matchups
-                    if (index < 5 && !is3BallMatchup(matchup)) {
-                      console.log('2-ball matchup', index, {
-                        fanduel_p1_odds: matchup.fanduel_p1_odds,
-                        fanduel_p2_odds: matchup.fanduel_p2_odds,
-                        draftkings_p1_odds: matchup.draftkings_p1_odds,
-                        draftkings_p2_odds: matchup.draftkings_p2_odds,
-                        p1: matchup.p1_player_name,
-                        p2: matchup.p2_player_name,
-                      });
-                    }
+                    // if (index < 5 && !is3BallMatchup(matchup)) {
+                    //   console.log('2-ball matchup', index, {
+                    //     fanduel_p1_odds: matchup.fanduel_p1_odds,
+                    //     fanduel_p2_odds: matchup.fanduel_p2_odds,
+                    //     draftkings_p1_odds: matchup.draftkings_p1_odds,
+                    //     draftkings_p2_odds: matchup.draftkings_p2_odds,
+                    //     p1: matchup.p1_player_name,
+                    //     p2: matchup.p2_player_name,
+                    //   });
+                    // }
 
                     if (is3BallMatchup(matchup)) {
                       const dg_p1_odds = matchup.datagolf_p1_odds ?? matchup.odds?.datagolf?.p1 ?? null;
@@ -479,12 +479,12 @@ export default function MatchupsTable({
 
                         const position = playerStat.position || '-';
                         let score: string = '-';
-                        if (playerStat.total === 0) {
-                          score = 'E';
+                          if (playerStat.total === 0) {
+                            score = 'E';
                         } else if (typeof playerStat.total === 'number' && playerStat.total > 0) {
-                          score = `+${playerStat.total}`;
+                            score = `+${playerStat.total}`;
                         } else if (typeof playerStat.total === 'number' && playerStat.total < 0) {
-                          score = playerStat.total.toString();
+                            score = playerStat.total.toString();
                         }
                         return { position, score };
                       };
@@ -508,64 +508,64 @@ export default function MatchupsTable({
                               
                               return (
                                 <div key={`position-${idx}`} className="py-1 h-8 flex items-center justify-center">
-                                  <div className="flex items-center justify-center space-x-2 w-full">
-                                    <span className={`px-2 py-0.5 text-xs rounded min-w-12 text-center font-medium ${
-                                      // Position heatmap - from gold (1st) to blue gradient (top 30) to gray (below top 30)
-                                      positionData.position === '1' 
-                                        ? 'bg-yellow-500/40 text-yellow-100' 
-                                        : positionData.position === 'T1'
-                                          ? 'bg-yellow-500/30 text-yellow-100'
-                                        : positionData.position === '2' || positionData.position === 'T2'
-                                          ? 'bg-amber-500/30 text-amber-100'
-                                        : positionData.position === '3' || positionData.position === 'T3'
-                                          ? 'bg-orange-500/30 text-orange-100'
-                                        : positionData.position?.match(/^T?[4-5]$/)
-                                          ? 'bg-red-500/30 text-red-100'
-                                        : positionData.position?.match(/^T?[6-9]$/) || positionData.position === 'T10' || positionData.position === '10'
-                                          ? 'bg-purple-500/30 text-purple-100'
-                                        : positionData.position?.match(/^T?1[1-9]$/) || positionData.position?.match(/^T?2[0-5]$/)
-                                          ? 'bg-blue-500/30 text-blue-100'
-                                        : positionData.position?.match(/^T?2[6-9]$/) || positionData.position?.match(/^T?3[0-9]$/)
-                                          ? 'bg-blue-700/30 text-blue-200' 
-                                          : positionData.position === 'CUT' || positionData.position === 'WD'
-                                            ? 'bg-rose-950/30 text-rose-300'
-                                            : 'bg-gray-500/30 text-gray-300'
-                                    }`}>
-                                      {positionData.position}
-                                    </span>
-                                    {positionData.score && (
+                                    <div className="flex items-center justify-center space-x-2 w-full">
                                       <span className={`px-2 py-0.5 text-xs rounded min-w-12 text-center font-medium ${
-                                        // Score heatmap - from deep red (best) to green (even) to gray (over par)
-                                        positionData.score === 'E' 
-                                          ? 'bg-green-600/30 text-green-100' 
-                                          : positionData.score.startsWith('-') ? (
-                                              // Under par gradient (better scores have deeper red)
-                                              positionData.score <= '-10' 
-                                                ? 'bg-red-900/40 text-red-100' 
-                                                : positionData.score <= '-7'
-                                                  ? 'bg-red-800/40 text-red-100'
-                                                  : positionData.score <= '-5'
-                                                    ? 'bg-red-700/40 text-red-100'
-                                                    : positionData.score <= '-3'
-                                                      ? 'bg-red-600/40 text-red-100'
-                                                      : 'bg-red-500/40 text-red-100'
-                                            ) : (
-                                              // Over par gradient (worse scores have deeper gray)
-                                              positionData.score >= '+10'
-                                                ? 'bg-gray-900/40 text-gray-100'
-                                                : positionData.score >= '+7'
-                                                  ? 'bg-gray-800/40 text-gray-100'
-                                                  : positionData.score >= '+5'
-                                                    ? 'bg-gray-700/40 text-gray-100'
-                                                    : positionData.score >= '+3'
-                                                      ? 'bg-gray-600/40 text-gray-100'
-                                                      : 'bg-gray-500/40 text-gray-100'
-                                            )
+                                        // Position heatmap - from gold (1st) to blue gradient (top 30) to gray (below top 30)
+                                        positionData.position === '1' 
+                                          ? 'bg-yellow-500/40 text-yellow-100' 
+                                          : positionData.position === 'T1'
+                                            ? 'bg-yellow-500/30 text-yellow-100'
+                                          : positionData.position === '2' || positionData.position === 'T2'
+                                            ? 'bg-amber-500/30 text-amber-100'
+                                          : positionData.position === '3' || positionData.position === 'T3'
+                                            ? 'bg-orange-500/30 text-orange-100'
+                                          : positionData.position?.match(/^T?[4-5]$/)
+                                            ? 'bg-red-500/30 text-red-100'
+                                          : positionData.position?.match(/^T?[6-9]$/) || positionData.position === 'T10' || positionData.position === '10'
+                                            ? 'bg-purple-500/30 text-purple-100'
+                                          : positionData.position?.match(/^T?1[1-9]$/) || positionData.position?.match(/^T?2[0-5]$/)
+                                            ? 'bg-blue-500/30 text-blue-100'
+                                          : positionData.position?.match(/^T?2[6-9]$/) || positionData.position?.match(/^T?3[0-9]$/)
+                                            ? 'bg-blue-700/30 text-blue-200' 
+                                            : positionData.position === 'CUT' || positionData.position === 'WD'
+                                              ? 'bg-rose-950/30 text-rose-300'
+                                              : 'bg-gray-500/30 text-gray-300'
                                       }`}>
-                                        {positionData.score}
+                                        {positionData.position}
                                       </span>
-                                    )}
-                                  </div>
+                                      {positionData.score && (
+                                        <span className={`px-2 py-0.5 text-xs rounded min-w-12 text-center font-medium ${
+                                          // Score heatmap - from deep red (best) to green (even) to gray (over par)
+                                          positionData.score === 'E' 
+                                            ? 'bg-green-600/30 text-green-100' 
+                                            : positionData.score.startsWith('-') ? (
+                                                // Under par gradient (better scores have deeper red)
+                                                positionData.score <= '-10' 
+                                                  ? 'bg-red-900/40 text-red-100' 
+                                                  : positionData.score <= '-7'
+                                                    ? 'bg-red-800/40 text-red-100'
+                                                    : positionData.score <= '-5'
+                                                      ? 'bg-red-700/40 text-red-100'
+                                                      : positionData.score <= '-3'
+                                                        ? 'bg-red-600/40 text-red-100'
+                                                        : 'bg-red-500/40 text-red-100'
+                                              ) : (
+                                                // Over par gradient (worse scores have deeper gray)
+                                                positionData.score >= '+10'
+                                                  ? 'bg-gray-900/40 text-gray-100'
+                                                  : positionData.score >= '+7'
+                                                    ? 'bg-gray-800/40 text-gray-100'
+                                                    : positionData.score >= '+5'
+                                                      ? 'bg-gray-700/40 text-gray-100'
+                                                      : positionData.score >= '+3'
+                                                        ? 'bg-gray-600/40 text-gray-100'
+                                                        : 'bg-gray-500/40 text-gray-100'
+                                              )
+                                        }`}>
+                                          {positionData.score}
+                                        </span>
+                                      )}
+                                    </div>
                                 </div>
                               );
                             })}
@@ -618,13 +618,13 @@ export default function MatchupsTable({
                       if (!hasAnyValidOdds) {
                         return null; // Skip this matchup
                       }
-
+                      
                       // Initialize gap flags for both FanDuel and DraftKings
                       let p1HasFDGap = false;
                       let p2HasFDGap = false;
                       let p1HasDKGap = false;
                       let p2HasDKGap = false;
-
+                      
                       // Check for FanDuel gaps
                       // Check if player 1 is the favorite with a significant gap in FanDuel
                       if (fdP1Odds > 1 && fdP2Odds > 1 && fdP1Odds < fdP2Odds) {
@@ -682,12 +682,12 @@ export default function MatchupsTable({
 
                         const position = playerStat.position || '-';
                         let score: string = '-';
-                        if (playerStat.total === 0) {
-                          score = 'E';
+                          if (playerStat.total === 0) {
+                            score = 'E';
                         } else if (typeof playerStat.total === 'number' && playerStat.total > 0) {
-                          score = `+${playerStat.total}`;
+                            score = `+${playerStat.total}`;
                         } else if (typeof playerStat.total === 'number' && playerStat.total < 0) {
-                          score = playerStat.total.toString();
+                            score = playerStat.total.toString();
                         }
                         return { position, score };
                       };
@@ -710,64 +710,64 @@ export default function MatchupsTable({
                               
                               return (
                                 <div key={`position-${idx}`} className="py-1 h-8 flex items-center justify-center">
-                                  <div className="flex items-center justify-center space-x-2 w-full">
-                                    <span className={`px-2 py-0.5 text-xs rounded min-w-12 text-center font-medium ${
-                                      // Position heatmap - from gold (1st) to blue gradient (top 30) to gray (below top 30)
-                                      positionData.position === '1' 
-                                        ? 'bg-yellow-500/40 text-yellow-100' 
-                                        : positionData.position === 'T1'
-                                          ? 'bg-yellow-500/30 text-yellow-100'
-                                        : positionData.position === '2' || positionData.position === 'T2'
-                                          ? 'bg-amber-500/30 text-amber-100'
-                                        : positionData.position === '3' || positionData.position === 'T3'
-                                          ? 'bg-orange-500/30 text-orange-100'
-                                        : positionData.position?.match(/^T?[4-5]$/)
-                                          ? 'bg-red-500/30 text-red-100'
-                                        : positionData.position?.match(/^T?[6-9]$/) || positionData.position === 'T10' || positionData.position === '10'
-                                          ? 'bg-purple-500/30 text-purple-100'
-                                        : positionData.position?.match(/^T?1[1-9]$/) || positionData.position?.match(/^T?2[0-5]$/)
-                                          ? 'bg-blue-500/30 text-blue-100'
-                                        : positionData.position?.match(/^T?2[6-9]$/) || positionData.position?.match(/^T?3[0-9]$/)
-                                          ? 'bg-blue-700/30 text-blue-200' 
-                                        : positionData.position === 'CUT' || positionData.position === 'WD'
-                                          ? 'bg-rose-950/30 text-rose-300'
-                                        : 'bg-gray-500/30 text-gray-300'
-                                    }`}>
-                                      {positionData.position}
-                                    </span>
-                                    {positionData.score && (
+                                    <div className="flex items-center justify-center space-x-2 w-full">
                                       <span className={`px-2 py-0.5 text-xs rounded min-w-12 text-center font-medium ${
-                                        // Score heatmap - from deep red (best) to green (even) to gray (over par)
-                                        positionData.score === 'E' 
-                                          ? 'bg-green-600/30 text-green-100' 
-                                          : positionData.score.startsWith('-') ? (
-                                              // Under par gradient (better scores have deeper red)
-                                              positionData.score <= '-10' 
-                                                ? 'bg-red-900/40 text-red-100' 
-                                                : positionData.score <= '-7'
-                                                  ? 'bg-red-800/40 text-red-100'
-                                                  : positionData.score <= '-5'
-                                                    ? 'bg-red-700/40 text-red-100'
-                                                    : positionData.score <= '-3'
-                                                      ? 'bg-red-600/40 text-red-100'
-                                                      : 'bg-red-500/40 text-red-100'
-                                            ) : (
-                                              // Over par gradient (worse scores have deeper gray)
-                                              positionData.score >= '+10'
-                                                ? 'bg-gray-900/40 text-gray-100'
-                                                : positionData.score >= '+7'
-                                                  ? 'bg-gray-800/40 text-gray-100'
-                                                  : positionData.score >= '+5'
-                                                    ? 'bg-gray-700/40 text-gray-100'
-                                                    : positionData.score >= '+3'
-                                                      ? 'bg-gray-600/40 text-gray-100'
-                                                      : 'bg-gray-500/40 text-gray-100'
-                                            )
+                                        // Position heatmap - from gold (1st) to blue gradient (top 30) to gray (below top 30)
+                                        positionData.position === '1' 
+                                          ? 'bg-yellow-500/40 text-yellow-100' 
+                                          : positionData.position === 'T1'
+                                            ? 'bg-yellow-500/30 text-yellow-100'
+                                          : positionData.position === '2' || positionData.position === 'T2'
+                                            ? 'bg-amber-500/30 text-amber-100'
+                                          : positionData.position === '3' || positionData.position === 'T3'
+                                            ? 'bg-orange-500/30 text-orange-100'
+                                          : positionData.position?.match(/^T?[4-5]$/)
+                                            ? 'bg-red-500/30 text-red-100'
+                                          : positionData.position?.match(/^T?[6-9]$/) || positionData.position === 'T10' || positionData.position === '10'
+                                            ? 'bg-purple-500/30 text-purple-100'
+                                          : positionData.position?.match(/^T?1[1-9]$/) || positionData.position?.match(/^T?2[0-5]$/)
+                                            ? 'bg-blue-500/30 text-blue-100'
+                                          : positionData.position?.match(/^T?2[6-9]$/) || positionData.position?.match(/^T?3[0-9]$/)
+                                            ? 'bg-blue-700/30 text-blue-200' 
+                                            : positionData.position === 'CUT' || positionData.position === 'WD'
+                                              ? 'bg-rose-950/30 text-rose-300'
+                                              : 'bg-gray-500/30 text-gray-300'
                                       }`}>
-                                        {positionData.score}
+                                        {positionData.position}
                                       </span>
-                                    )}
-                                  </div>
+                                      {positionData.score && (
+                                        <span className={`px-2 py-0.5 text-xs rounded min-w-12 text-center font-medium ${
+                                          // Score heatmap - from deep red (best) to green (even) to gray (over par)
+                                          positionData.score === 'E' 
+                                            ? 'bg-green-600/30 text-green-100' 
+                                            : positionData.score.startsWith('-') ? (
+                                                // Under par gradient (better scores have deeper red)
+                                                positionData.score <= '-10' 
+                                                  ? 'bg-red-900/40 text-red-100' 
+                                                  : positionData.score <= '-7'
+                                                    ? 'bg-red-800/40 text-red-100'
+                                                    : positionData.score <= '-5'
+                                                      ? 'bg-red-700/40 text-red-100'
+                                                      : positionData.score <= '-3'
+                                                        ? 'bg-red-600/40 text-red-100'
+                                                        : 'bg-red-500/40 text-red-100'
+                                              ) : (
+                                                // Over par gradient (worse scores have deeper gray)
+                                                positionData.score >= '+10'
+                                                  ? 'bg-gray-900/40 text-gray-100'
+                                                  : positionData.score >= '+7'
+                                                    ? 'bg-gray-800/40 text-gray-100'
+                                                    : positionData.score >= '+5'
+                                                      ? 'bg-gray-700/40 text-gray-100'
+                                                      : positionData.score >= '+3'
+                                                        ? 'bg-gray-600/40 text-gray-100'
+                                                        : 'bg-gray-500/40 text-gray-100'
+                                              )
+                                        }`}>
+                                          {positionData.score}
+                                        </span>
+                                      )}
+                                    </div>
                                 </div>
                               );
                             })}

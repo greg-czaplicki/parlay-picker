@@ -94,9 +94,10 @@ export function handleApiError(
   status = 500
 ) {
   const errorMessage = error instanceof Error ? error.message : (typeof error === 'string' ? error : 'Unknown error')
+  // Only log in development, not in production
   if (process.env.NODE_ENV !== 'production') {
     // eslint-disable-next-line no-console
-    console.error('API Error:', error)
+    // console.error('API Error:', error)
   }
   return NextResponse.json(
     { success: false, error: errorMessage, ...(diagnostic || {}) },

@@ -130,32 +130,32 @@ export async function GET(request: Request) {
   logger.info('Received live-stats/sync-tour request', { url: request.url });
   try {
     const { tour } = getQueryParams(request, tourParamSchema);
-    
-    // Validate tour parameter
-    if (!['pga', 'opp', 'euro'].includes(tour)) {
+  
+  // Validate tour parameter
+  if (!['pga', 'opp', 'euro'].includes(tour)) {
       return handleApiError(`Invalid tour parameter: ${tour}. Must be one of: pga, opp, euro.`);
-    }
-    
+  }
+  
     logger.info(`Starting multi-round live stats sync for ${tour.toUpperCase()} tour...`);
-    let totalInsertedCount = 0;
-    let lastSourceTimestamp: string | null = null;
-    let fetchedEventName: string | null = null;
-    const errors: string[] = [];
+  let totalInsertedCount = 0;
+  let lastSourceTimestamp: string | null = null;
+  let fetchedEventName: string | null = null;
+  const errors: string[] = [];
     const supabase = createSupabaseClient();
 
-    // Only fetch Euro tour data if tour is 'euro' and handle appropriately
-    if (tour === 'euro') {
+  // Only fetch Euro tour data if tour is 'euro' and handle appropriately
+  if (tour === 'euro') {
       return handleApiError('Euro tour data is not supported by DataGolf API. Only PGA and Opposite Field events are supported.');
-    }
+  }
 
-    for (const round of ROUNDS_TO_FETCH) {
-      try {
-        const data = await fetchLiveStats(tour, round);
-        if (!data) continue;
-        const currentRoundTimestamp = new Date(data.last_updated.replace(" UTC", "Z")).toISOString();
-        lastSourceTimestamp = currentRoundTimestamp;
-        fetchedEventName = data.event_name;
-        const statsToInsert = mapStatsToInsert(data, currentRoundTimestamp);
+  for (const round of ROUNDS_TO_FETCH) {
+    try {
+      const data = await fetchLiveStats(tour, round);
+      if (!data) continue;
+      const currentRoundTimestamp = new Date(data.last_updated.replace(" UTC", "Z")).toISOString();
+      lastSourceTimestamp = currentRoundTimestamp;
+      fetchedEventName = data.event_name;
+      const statsToInsert = mapStatsToInsert(data, currentRoundTimestamp);
         // Upsert on (dg_id, round_num, event_name)
         const { error } = await supabase
           .from("live_tournament_stats")
@@ -163,28 +163,28 @@ export async function GET(request: Request) {
         if (error) {
           errors.push(`Upsert failed for round ${round}: ${error.message}`);
           logger.error(`Upsert failed for round ${round}: ${error.message}`);
-        } else {
-          totalInsertedCount += statsToInsert.length;
-        }
-      } catch (err: any) {
-        errors.push(err.message || String(err));
-        logger.error(`Error syncing round ${round}: ${err.message || String(err)}`);
+      } else {
+        totalInsertedCount += statsToInsert.length;
       }
+    } catch (err: any) {
+      errors.push(err.message || String(err));
+        logger.error(`Error syncing round ${round}: ${err.message || String(err)}`);
     }
+  }
 
-    const finalMessage = `${tour.toUpperCase()} tour sync complete. Total records inserted/updated: ${totalInsertedCount} across attempted rounds for ${fetchedEventName ?? 'event'}.`;
-    if (errors.length > 0) {
+  const finalMessage = `${tour.toUpperCase()} tour sync complete. Total records inserted/updated: ${totalInsertedCount} across attempted rounds for ${fetchedEventName ?? 'event'}.`;
+  if (errors.length > 0) {
       logger.warn(`${tour.toUpperCase()} sync completed with errors:`, errors);
-    }
+  }
 
     logger.info('Returning live-stats/sync-tour response');
-    return jsonSuccess({
-      processedCount: totalInsertedCount,
-      sourceTimestamp: lastSourceTimestamp,
-      eventName: fetchedEventName,
-      tour: tour,
-      errors,
-    }, finalMessage + (errors.length > 0 ? ` Errors: ${errors.join(', ')}` : ''));
+  return jsonSuccess({
+    processedCount: totalInsertedCount,
+    sourceTimestamp: lastSourceTimestamp,
+    eventName: fetchedEventName,
+    tour: tour,
+    errors,
+  }, finalMessage + (errors.length > 0 ? ` Errors: ${errors.join(', ')}` : ''));
   } catch (error) {
     logger.error('Error in live-stats/sync-tour endpoint:', error);
     return handleApiError(error);

@@ -36,3 +36,41 @@ export function useActiveEvents() {
     }
   })
 }
+
+// Query to fetch the next scheduled event (upcoming)
+export function useUpcomingEvent() {
+  return useQuery({
+    queryKey: ["upcomingEvent"],
+    queryFn: async () => {
+      const supabase = getSupabase()
+      const today = new Date().toISOString().split('T')[0]
+      const { data, error } = await supabase
+        .from('tournaments')
+        .select('event_id, event_name, start_date, end_date')
+        .gt('start_date', today)
+        .order('start_date', { ascending: true })
+        .limit(1)
+      if (error) throw error
+      return data?.[0] || null
+    }
+  })
+}
+
+// Query to fetch the most recent completed event
+export function useLastCompletedEvent() {
+  return useQuery({
+    queryKey: ["lastCompletedEvent"],
+    queryFn: async () => {
+      const supabase = getSupabase()
+      const today = new Date().toISOString().split('T')[0]
+      const { data, error } = await supabase
+        .from('tournaments')
+        .select('event_id, event_name, start_date, end_date')
+        .lt('end_date', today)
+        .order('end_date', { ascending: false })
+        .limit(1)
+      if (error) throw error
+      return data?.[0] || null
+    }
+  })
+}

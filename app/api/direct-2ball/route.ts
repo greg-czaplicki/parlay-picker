@@ -17,7 +17,7 @@ export async function GET(request: Request) {
     logger.warn('Invalid query parameters', { error });
     return handleApiError(error);
   }
-
+  
   try {
     const supabase = createSupabaseClient()
     // Just get the data - no fancy stuff
