@@ -242,7 +242,6 @@ export async function GET(request: Request) {
     return jsonSuccess({
       success: true,
       matchups: filteredMatchups,
-      events: Object.values(matchupsByEvent),
       tourCounts: {
         pga: pgaMatchups.length,
         opp: oppMatchups.length,
