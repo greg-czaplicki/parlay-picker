@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Plus, RefreshCw, Loader2 } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
+import { useTopGolfersQuery } from '@/hooks/use-top-golfers-query'
 
 interface TopGolfer {
   name: string
@@ -22,41 +23,8 @@ export default function TopGolfersList({
   matchupType: string
   activeFilter: string
 }) {
-  const [topGolfers, setTopGolfers] = useState<TopGolfer[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [refreshing, setRefreshing] = useState(false)
-
-  // Fetch top golfers when component mounts or dependencies change
-  useEffect(() => {
-    fetchTopGolfers()
-  }, [matchupType, activeFilter])
-
-  const fetchTopGolfers = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      // Build the URL with query parameters
-      const url = `/api/top-golfers?type=${matchupType}&filter=${encodeURIComponent(activeFilter)}&limit=10`
-
-      const response = await fetch(url)
-      if (!response.ok) {
-        throw new Error(`Server responded with status: ${response.status}`)
-      }
-
-      const data = await response.json()
-      if (data.success) {
-        setTopGolfers(data.topGolfers)
-      } else {
-        throw new Error(data.error || "Failed to fetch top golfers")
-      }
-    } catch (err) {
-      setError("Failed to fetch top golfers")
-      console.error(err)
-    } finally {
-      setLoading(false)
-    }
-  }
+  // Use React Query for top golfers
+  const { data: topGolfers = [], isLoading, isError, error, refetch, isFetching } = useTopGolfersQuery(matchupType, activeFilter)
 
   // Format player name (Last, First -> First Last)
   const formatPlayerName = (name: string) => {
@@ -73,25 +41,14 @@ export default function TopGolfersList({
   }
 
   const handleRefresh = async () => {
-    setRefreshing(true)
-    try {
-      await fetchTopGolfers()
-      toast({
-        title: "Refreshed",
-        description: "Top golfers list has been refreshed",
-      })
-    } catch (err) {
-      toast({
-        title: "Error",
-        description: "Failed to refresh top golfers",
-        variant: "destructive",
-      })
-    } finally {
-      setRefreshing(false)
-    }
+    await refetch()
+    toast({
+      title: "Refreshed",
+      description: "Top golfers list has been refreshed",
+    })
   }
 
-  if (loading) {
+  if (isLoading || isFetching) {
     return (
       <Card className="glass-card">
         <CardContent className="p-6 text-center">
@@ -113,16 +70,16 @@ export default function TopGolfersList({
             variant="outline"
             size="sm"
             onClick={handleRefresh}
-            disabled={refreshing}
+            disabled={isFetching}
             className="flex items-center gap-2 bg-[#1e1e23] border-none"
           >
-            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+            <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
           </Button>
         </div>
 
-        {error ? (
+        {isError ? (
           <div className="p-4 bg-red-900/30 rounded-lg text-center">
-            <p className="text-red-400">{error}</p>
+            <p className="text-red-400">{error instanceof Error ? error.message : String(error)}</p>
             <Button onClick={handleRefresh} className="mt-2" variant="outline">
               Try Again
             </Button>
