@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { spawn } from "child_process";
 import path from "path";
 import { handleApiError } from '@/lib/utils'
+import 'next-logger'
+import { logger } from '@/lib/logger'
 
 // --- Supabase Setup ---
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -15,7 +17,8 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 /**
  * Fetches most recent player stats from the PGA Tour site
  */
-export async function GET() {
+export async function GET(request: Request) {
+  logger.info('Received players/sync-pga-stats request', { url: request.url });
   console.log("Starting PGA Tour stats sync process...");
   
   try {
@@ -150,6 +153,7 @@ export async function GET() {
     }
     
     // Return success response with counts
+    logger.info('Returning players/sync-pga-stats response');
     return NextResponse.json({
       success: true,
       message: `PGA Tour stats sync completed successfully`,
@@ -159,6 +163,7 @@ export async function GET() {
     });
     
   } catch (error) {
+    logger.error('Error in players/sync-pga-stats endpoint', { error });
     return handleApiError(error)
   }
 }

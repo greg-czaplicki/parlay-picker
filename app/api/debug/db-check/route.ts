@@ -1,32 +1,24 @@
-import { createClient } from "@supabase/supabase-js";
-import { NextResponse } from "next/server";
-import { handleApiError } from '@/lib/utils'
-import { validate } from '@/lib/validation'
-import { eventIdParamSchema } from '@/lib/schemas'
+import { logger } from '@/lib/logger'
+import { z } from 'zod'
+import { createSupabaseClient, getQueryParams, handleApiError, jsonSuccess } from '@/lib/api-utils'
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error("Supabase URL or Service Role Key is missing in environment variables.");
-}
-const supabase = createClient(supabaseUrl, supabaseKey);
+const eventIdSchema = z.object({ eventId: z.string().optional() })
 
 export async function GET(request: Request) {
-  const url = new URL(request.url);
+  logger.info('Received debug/db-check request', { url: request.url });
   let eventId: string | undefined = undefined;
   try {
-    const params = validate(eventIdParamSchema.extend({ eventId: eventIdParamSchema.shape.eventId.optional() }), {
-      eventId: url.searchParams.get('eventId') ?? undefined,
-    });
-    eventId = params.eventId;
+    const params = getQueryParams(request, eventIdSchema)
+    eventId = params.eventId
   } catch (error) {
+    logger.warn('Invalid query parameters', { error });
     return handleApiError(error);
   }
-  
+
   try {
+    const supabase = createSupabaseClient()
     // Query matchups table directly
     let query = supabase.from("latest_two_ball_matchups").select("*");
-    
     if (eventId) {
       // If event ID is provided, use it to filter
       const eventIdInt = parseInt(eventId, 10);
@@ -34,14 +26,11 @@ export async function GET(request: Request) {
         query = query.eq("event_id", eventIdInt);
       }
     }
-    
     const { data: matchups, error } = await query;
-    
     if (error) {
-      console.error("Error querying matchups:", error);
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+      logger.error("Error querying matchups:", error);
+      return handleApiError(error);
     }
-    
     // Count by event ID
     const eventCounts: Record<string, { event_id: number | null, event_name: string, count: number }> = {};
     (matchups || []).forEach(m => {
@@ -55,8 +44,8 @@ export async function GET(request: Request) {
       }
       eventCounts[eventId].count++;
     });
-    
-    return NextResponse.json({
+    logger.info('Returning debug/db-check response', { eventId });
+    return jsonSuccess({
       success: true,
       matchupCount: matchups?.length || 0,
       eventCounts: Object.values(eventCounts),
@@ -69,6 +58,7 @@ export async function GET(request: Request) {
       }))
     });
   } catch (error) {
+    logger.error('Error in debug/db-check endpoint', { error });
     return handleApiError(error)
   }
 }

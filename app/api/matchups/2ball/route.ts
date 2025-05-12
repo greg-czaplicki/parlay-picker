@@ -1,8 +1,6 @@
-import { createClient } from "@supabase/supabase-js";
-import { NextResponse } from "next/server";
-import { handleApiError } from '@/lib/utils'
-import { validate } from '@/lib/validation'
-import { twoBallMatchupsQuerySchema } from '@/lib/schemas'
+import { logger } from '@/lib/logger'
+import { z } from 'zod'
+import { createSupabaseClient, getQueryParams, handleApiError, jsonSuccess, jsonError } from '@/lib/api-utils'
 
 // Define interfaces for the Data Golf API response (2-ball)
 interface Odds {
@@ -49,13 +47,6 @@ interface SupabaseMatchup {
   tour?: string; // Added tour field
 }
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error("Supabase URL or Service Role Key is missing in environment variables.");
-}
-const supabase = createClient(supabaseUrl, supabaseKey);
-
 const dataGolfApiKey = process.env.DATAGOLF_API_KEY;
 if (!dataGolfApiKey) {
   throw new Error("Data Golf API Key is missing in environment variables.");
@@ -67,12 +58,16 @@ const DATA_GOLF_OPP_URL = `https://feeds.datagolf.com/betting-tools/matchups?tou
 const DATA_GOLF_EURO_URL = `https://feeds.datagolf.com/betting-tools/matchups?tour=euro&market=round_matchups&odds_format=decimal&file_format=json&key=${dataGolfApiKey}`;
 
 // Helper function to process matchups for a specific tour
-async function processMatchups(data: DataGolfResponse, eventMapping: Record<string, number>, tourCode: string, fallbackEventId: number): SupabaseMatchup[] {
+function processMatchups(
+  data: DataGolfResponse,
+  eventMapping: Record<string, number>,
+  tourCode: string,
+  fallbackEventId: number
+): SupabaseMatchup[] {
   if (!data || !data.match_list) {
-    console.log(`No matchups found for ${tourCode} tour`);
+    logger.info(`No matchups found for ${tourCode} tour`);
     return [];
   }
-  
   // Find appropriate event ID based on event name
   let eventId = fallbackEventId;
   if (data.event_name) {
@@ -81,14 +76,16 @@ async function processMatchups(data: DataGolfResponse, eventMapping: Record<stri
       eventId = eventMapping[nameLower];
     }
   }
-  
-  console.log(`Processing ${data.match_list.length} matchups for ${tourCode} tour - ${data.event_name} (Event ID: ${eventId})`);
-  
-  return data.match_list.map(m => ({
+  logger.info(
+    `Processing ${data.match_list.length} matchups for ${tourCode} tour - ${data.event_name} (Event ID: ${eventId})`
+  );
+  return data.match_list.map((m) => ({
     event_id: eventId,
     event_name: data.event_name,
     round_num: data.round_num,
-    data_golf_update_time: new Date(data.last_updated.replace(" UTC", "Z")).toISOString(),
+    data_golf_update_time: new Date(
+      data.last_updated.replace(" UTC", "Z")
+    ).toISOString(),
     p1_dg_id: m.p1_dg_id,
     p1_player_name: m.p1_player_name,
     p2_dg_id: m.p2_dg_id,
@@ -98,175 +95,103 @@ async function processMatchups(data: DataGolfResponse, eventMapping: Record<stri
     fanduel_p2_odds: m.odds?.fanduel?.p2 || null,
     draftkings_p1_odds: m.odds?.draftkings?.p1 || null,
     draftkings_p2_odds: m.odds?.draftkings?.p2 || null,
-    tour: tourCode.toLowerCase()
+    tour: tourCode.toLowerCase(),
   }));
 }
 
-export async function GET(request: Request): Promise<Response> {
-  // Parse and validate query parameters
-  const url = new URL(request.url);
+const querySchema = z.object({ eventId: z.string().optional(), tour: z.string().optional() })
+
+export async function GET(request: Request) {
   let params;
   try {
-    params = validate(twoBallMatchupsQuerySchema, {
-      eventId: url.searchParams.get('eventId') ?? undefined,
-      tour: url.searchParams.get('tour') ?? undefined,
-    });
+    params = getQueryParams(request, querySchema)
   } catch (error) {
     return handleApiError(error);
   }
   const { eventId, tour } = params;
-  console.log(`API: Received request with eventId=${eventId}, tour=${tour}`);
-  
+  logger.info(`API: Received request with eventId=${eventId}, tour=${tour}`);
   try {
+    const supabase = createSupabaseClient()
     // Fetch from DataGolf APIs directly
-    console.log("Fetching from DataGolf APIs...");
-    
+    logger.info("Fetching from DataGolf APIs...");
     // Fetch all tours in parallel
     const [pgaRes, oppRes, euroRes] = await Promise.all([
-      fetch(DATA_GOLF_PGA_URL, { cache: 'no-store' }),
-      fetch(DATA_GOLF_OPP_URL, { cache: 'no-store' }),
-      fetch(DATA_GOLF_EURO_URL, { cache: 'no-store' })
+      fetch(process.env.DATA_GOLF_PGA_URL!, { cache: 'no-store' }),
+      fetch(process.env.DATA_GOLF_OPP_URL!, { cache: 'no-store' }),
+      fetch(process.env.DATA_GOLF_EURO_URL!, { cache: 'no-store' })
     ]);
-    
     // Check if at least one API call succeeded
     if (!pgaRes.ok && !oppRes.ok && !euroRes.ok) {
       throw new Error("Failed to fetch from DataGolf API for all tours");
     }
-    
     // Parse the responses with error handling
-    let pgaData: DataGolfResponse | null = null;
-    let oppData: DataGolfResponse | null = null;
-    let euroData: DataGolfResponse | null = null;
-    
+    let pgaData = null;
+    let oppData = null;
+    let euroData = null;
     try {
       if (pgaRes.ok) {
         pgaData = await pgaRes.json();
         if (pgaData) {
-          console.log(`PGA event: ${pgaData.event_name}, matchups: ${pgaData.match_list?.length || 0}`);
+          logger.info(`PGA event: ${pgaData.event_name}, matchups: ${pgaData.match_list?.length || 0}`);
         }
       }
     } catch (error) {
-      console.error("Error parsing PGA data:", error);
+      logger.error("Error parsing PGA data:", error);
     }
-    
     try {
       if (oppRes.ok) {
         oppData = await oppRes.json();
         if (oppData) {
-          console.log(`Opposite field event: ${oppData.event_name}, matchups: ${oppData.match_list?.length || 0}`);
+          logger.info(`Opposite field event: ${oppData.event_name}, matchups: ${oppData.match_list?.length || 0}`);
         }
       }
     } catch (error) {
-      console.error("Error parsing Opposite field data:", error);
+      logger.error("Error parsing Opposite field data:", error);
     }
-    
     try {
       if (euroRes.ok) {
         euroData = await euroRes.json();
         if (euroData) {
-          console.log(`European Tour event: ${euroData.event_name}, matchups: ${euroData.match_list?.length || 0}`);
+          logger.info(`European Tour event: ${euroData.event_name}, matchups: ${euroData.match_list?.length || 0}`);
         }
       }
     } catch (error) {
-      console.error("Error parsing European Tour data:", error);
+      logger.error("Error parsing European Tour data:", error);
     }
-    
     // Get tournaments to map event names to IDs
     const { data: tournaments } = await supabase
       .from("tournaments")
       .select("event_id, event_name, tour");
-    
     // Create a map to look up event IDs
     const eventMapping: Record<string, number> = {};
     if (tournaments) {
-      tournaments.forEach((t: { event_name: string; event_id: number }) => {
+      tournaments.forEach((t) => {
         const nameLower = t.event_name.toLowerCase();
         eventMapping[nameLower] = t.event_id;
-        // Add partial matches too for backward compatibility
         if (nameLower.includes('myrtle')) eventMapping['myrtle'] = t.event_id;
       });
     }
-    
     // Process matchups for each tour
-    const pgaMatchups = pgaData ? await processMatchups(pgaData, eventMapping, "pga", 480) : [];
-    const oppMatchups = oppData ? await processMatchups(oppData, eventMapping, "opp", 553) : [];
-    const euroMatchups = euroData ? await processMatchups(euroData, eventMapping, "euro", 600) : []; // Using 600 as fallback ID for Euro events
-    
+    const pgaMatchups = pgaData ? processMatchups(pgaData, eventMapping, "pga", 480) : [];
+    const oppMatchups = oppData ? processMatchups(oppData, eventMapping, "opp", 553) : [];
+    const euroMatchups = euroData ? processMatchups(euroData, eventMapping, "euro", 600) : [];
     // Combine all matchups
     const allMatchups = [...pgaMatchups, ...oppMatchups, ...euroMatchups];
-    
-    console.log(`Processed ${allMatchups.length} total matchups across all tours`);
-    
-    // Save matchups to both latest and historical tables
-    try {
-      // First check if we already have newer data in the historical table
-      const { data: latestHistory, error: historyError } = await supabase
-        .from("two_ball_matchups")
-        .select("data_golf_update_time")
-        .order("data_golf_update_time", { ascending: false })
-        .limit(1);
-        
-      let shouldSaveHistory = true;
-      
-      if (!historyError && latestHistory && latestHistory.length > 0) {
-        const historyTime = new Date(latestHistory[0].data_golf_update_time);
-        // Check update times from all tours that have data
-        const updateTimes = [
-          pgaData ? new Date(pgaData.last_updated.replace(" UTC", "Z")) : null,
-          oppData ? new Date(oppData.last_updated.replace(" UTC", "Z")) : null,
-          euroData ? new Date(euroData.last_updated.replace(" UTC", "Z")) : null
-        ].filter(Boolean);
-        
-        // Only save to history if any tour has newer data
-        shouldSaveHistory = updateTimes.some(time => time && time > historyTime);
-      }
-      
-      // Save to historical table if we have newer data
-      if (shouldSaveHistory && allMatchups.length > 0) {
-        console.log("Saving matchups to historical table...");
-        await supabase
-          .from("two_ball_matchups")
-          .insert(allMatchups);
-      }
-      
-      // Update latest matchups table (always)
-      if (allMatchups.length > 0) {
-        // First clear existing data
-        await supabase.from("latest_two_ball_matchups").delete().gte("id", 0);
-        
-        // Then insert new data
-        const { error: insertError } = await supabase
-          .from("latest_two_ball_matchups")
-          .insert(allMatchups);
-          
-        if (insertError) {
-          console.error("Error inserting matchups:", insertError);
-        } else {
-          console.log(`Successfully updated latest_two_ball_matchups with ${allMatchups.length} matchups`);
-        }
-      }
-    } catch (dbError) {
-      console.error("Database error:", dbError);
-      // Continue anyway - we'll return the API data directly
-    }
-    
+    logger.info(`Processed ${allMatchups.length} total matchups across all tours`);
     // Apply filters if specified
     let filteredMatchups = allMatchups;
-    
     // Filter by event ID if provided
     if (eventId) {
       const eventIdInt = parseInt(eventId, 10);
       filteredMatchups = filteredMatchups.filter(m => Number(m.event_id) === eventIdInt);
-      console.log(`Filtered to ${filteredMatchups.length} matchups for event ${eventIdInt}`);
+      logger.info(`Filtered to ${filteredMatchups.length} matchups for event ${eventIdInt}`);
     }
-    
     // Filter by tour if provided
     if (tour) {
       const tourLower = tour.toLowerCase();
       filteredMatchups = filteredMatchups.filter(m => m.tour === tourLower);
-      console.log(`Filtered to ${filteredMatchups.length} matchups for tour ${tourLower}`);
+      logger.info(`Filtered to ${filteredMatchups.length} matchups for tour ${tourLower}`);
     }
-    
     // Group matchups by event
     const matchupsByEvent: Record<string | number, {
       event_id: number;
@@ -274,20 +199,19 @@ export async function GET(request: Request): Promise<Response> {
       tour?: string;
       matchups: SupabaseMatchup[];
     }> = {};
-    filteredMatchups.forEach(m => {
-      const eventIdKey = m.event_id || 'unknown';
+    filteredMatchups.forEach((m) => {
+      const eventIdKey = m.event_id ?? 'unknown';
       if (!matchupsByEvent[eventIdKey]) {
         matchupsByEvent[eventIdKey] = {
           event_id: m.event_id,
           event_name: m.event_name,
           tour: m.tour,
-          matchups: []
+          matchups: [],
         };
       }
       matchupsByEvent[eventIdKey].matchups.push(m);
     });
-    
-    return NextResponse.json({
+    return jsonSuccess({
       success: true,
       matchups: filteredMatchups,
       events: Object.values(matchupsByEvent),
@@ -297,7 +221,6 @@ export async function GET(request: Request): Promise<Response> {
         euro: euroMatchups.length
       }
     });
-    
   } catch (error) {
     return handleApiError(error)
   }

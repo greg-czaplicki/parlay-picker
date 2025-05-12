@@ -1,66 +1,54 @@
-import { createClient } from "@supabase/supabase-js";
-import { NextResponse } from "next/server";
-import { validate } from '@/lib/validation'
-import { tableEventQuerySchema } from '@/lib/schemas'
-import { jsonSuccess, jsonError } from '@/lib/api-response'
+import 'next-logger'
+import { logger } from '@/lib/logger'
+import { z } from 'zod'
+import { createSupabaseClient, getQueryParams, handleApiError, jsonSuccess, jsonError } from '@/lib/api-utils'
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error("Supabase URL or Service Role Key is missing in environment variables.");
-}
-const supabase = createClient(supabaseUrl, supabaseKey);
+const tableEventSchema = z.object({ table: z.string().optional(), event: z.string().optional() })
 
 export async function GET(request: Request) {
-  const url = new URL(request.url);
+  logger.info('Received debug/db request', { url: request.url });
   let params;
   try {
-    params = validate(tableEventQuerySchema, {
-      table: url.searchParams.get('table') ?? undefined,
-      event: url.searchParams.get('event') ?? undefined,
-    });
+    params = getQueryParams(request, tableEventSchema)
   } catch (error) {
-    return NextResponse.json({ error: 'Invalid query parameters' }, { status: 400 });
+    logger.warn('Invalid query parameters', { error });
+    return jsonError('Invalid query parameters', 'VALIDATION_ERROR');
   }
   const { table, event } = params;
   if (!table || typeof table !== 'string') {
+    logger.warn('Missing or invalid table parameter', { table });
     return jsonError('Missing or invalid table parameter', 'VALIDATION_ERROR');
   }
-  
   try {
+    const supabase = createSupabaseClient()
     // First, get a count by event_id
-    // Supabase JS does not support .group, so fetch all and group in JS if needed
     const { data: countData, error: countError } = await supabase
       .from(table)
       .select('event_id, event_name');
-    // TODO: Group by event_id, event_name in JS if needed
-    
     if (countError) {
+      logger.error('DB error on count', { countError });
       return jsonError(countError.message, 'DB_ERROR');
     }
-    
     // Now get details if event parameter is provided
     let detailData = null;
     let detailError = null;
-    
     if (event && typeof event === 'string') {
       const { data, error } = await supabase
         .from(table)
         .select('*')
         .eq('event_id', event)
         .limit(10);
-      
       detailData = data;
       detailError = error;
     }
-    
+    logger.info('Returning debug/db response', { counts: countData?.length, details: detailData?.length });
     return jsonSuccess({
       counts: countData,
       details: detailData,
       detailError: detailError ? detailError.message : null
     });
   } catch (error) {
-    console.error("Error in debug endpoint:", error);
+    logger.error('Error in debug endpoint', { error });
     return jsonError(error instanceof Error ? error.message : 'Unknown error', 'INTERNAL_ERROR');
   }
 }

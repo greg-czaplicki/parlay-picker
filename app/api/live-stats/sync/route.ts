@@ -1,6 +1,7 @@
-import { createClient } from "@supabase/supabase-js";
+import { logger } from '@/lib/logger'
+import { createSupabaseClient, handleApiError, jsonSuccess } from '@/lib/api-utils'
 import { NextResponse } from "next/server";
-import { jsonSuccess, jsonError } from '@/lib/api-response'
+import { jsonError } from '@/lib/api-response'
 
 // Define interfaces for the Data Golf API response
 interface LivePlayerData {
@@ -58,18 +59,6 @@ interface SupabaseLiveStat {
   data_golf_updated_at: string;
 }
 
-// Initialize Supabase client
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error(
-    "Supabase URL or Service Role Key is missing in environment variables.",
-  );
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
-
 // Data Golf API Key
 const dataGolfApiKey = process.env.DATAGOLF_API_KEY;
 if (!dataGolfApiKey) {
@@ -88,7 +77,7 @@ async function fetchLiveStats(round: string): Promise<DataGolfLiveStatsResponse 
     const response = await fetch(url, { cache: 'no-store' });
     if (!response.ok) {
       if (response.status === 404) {
-        console.warn(`Round ${round} data not found (404), skipping.`);
+        logger.warn(`Round ${round} data not found (404), skipping.`);
         return null;
       }
       const errorText = await response.text();
@@ -127,26 +116,13 @@ function mapStatsToInsert(data: DataGolfLiveStatsResponse, timestamp: string): S
   }));
 }
 
-// Helper to upsert stats into Supabase
-async function upsertStats(stats: SupabaseLiveStat[], round: string): Promise<string | null> {
-  if (!stats.length) return null;
-  // Upsert on (dg_id, round_num, event_name)
-  const { error } = await supabase
-    .from("live_tournament_stats")
-    .upsert(stats, { onConflict: "dg_id,round_num,event_name" });
-  if (error) {
-    return `Upsert failed for round ${round}: ${error.message}`;
-  }
-  return null;
-}
-
 export async function GET() {
-  console.log("Starting multi-round live stats sync...");
+  logger.info("Starting multi-round live stats sync...");
   let totalInsertedCount = 0;
   let lastSourceTimestamp: string | null = null;
   let fetchedEventName: string | null = null;
   const errors: string[] = [];
-
+  const supabase = createSupabaseClient();
   for (const round of ROUNDS_TO_FETCH) {
     try {
       const data = await fetchLiveStats(round);
@@ -155,22 +131,25 @@ export async function GET() {
       lastSourceTimestamp = currentRoundTimestamp;
       fetchedEventName = data.event_name;
       const statsToInsert = mapStatsToInsert(data, currentRoundTimestamp);
-      const upsertError = await upsertStats(statsToInsert, round);
-      if (upsertError) {
-        errors.push(upsertError);
+      // Upsert on (dg_id, round_num, event_name)
+      const { error } = await supabase
+        .from("live_tournament_stats")
+        .upsert(statsToInsert, { onConflict: "dg_id,round_num,event_name" });
+      if (error) {
+        errors.push(`Upsert failed for round ${round}: ${error.message}`);
+        logger.error(`Upsert failed for round ${round}: ${error.message}`);
       } else {
         totalInsertedCount += statsToInsert.length;
       }
     } catch (err: any) {
       errors.push(err.message || String(err));
+      logger.error(`Error syncing round ${round}: ${err.message || String(err)}`);
     }
   }
-
   const finalMessage = `Sync complete. Total records inserted/updated: ${totalInsertedCount} across attempted rounds for ${fetchedEventName ?? 'event'}.`;
   if (errors.length > 0) {
-    console.warn("Sync completed with errors:", errors);
+    logger.warn("Sync completed with errors:", errors);
   }
-
   return jsonSuccess({
     processedCount: totalInsertedCount,
     sourceTimestamp: lastSourceTimestamp,

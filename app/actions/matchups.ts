@@ -2,6 +2,7 @@
 
 import { createServerClient } from "@/lib/supabase";
 import { LiveTournamentStat } from "@/types/definitions";
+import { logger } from '@/lib/logger'
 
 // --- Helper Functions ---
 
@@ -188,13 +189,13 @@ function calculateScore(player: PlayerWithProbability, groupPlayers: PlayerWithP
 export async function getMatchups(matchupType: string, bookmaker?: string): Promise<{ matchups: Matchup[]; error?: string }> {
   // Support both 2ball and 3ball matchup types
   if (matchupType !== '3ball' && matchupType !== '2ball') {
-      console.warn(`getMatchups called with unsupported type ${matchupType}. Only '3ball' and '2ball' are supported.`);
+      logger.info(`getMatchups called with unsupported type ${matchupType}. Only '3ball' and '2ball' are supported.`);
       return { matchups: [], error: `Unsupported matchupType: ${matchupType}` };
   }
 
   // Default to draftkings if no bookmaker specified
   const selectedBookmaker = bookmaker === 'fanduel' ? 'fanduel' : 'draftkings';
-  console.log(`Fetching ${matchupType} matchups using ${selectedBookmaker} odds.`);
+  logger.info(`Fetching ${matchupType} matchups using ${selectedBookmaker} odds.`);
 
   const supabase = createServerClient();
 
@@ -241,12 +242,12 @@ export async function getMatchups(matchupType: string, bookmaker?: string): Prom
     }
 
     if (matchupsError) {
-      console.error(`Supabase error fetching latest_${matchupType}_matchups:`, matchupsError);
+      logger.error(`Supabase error fetching latest_${matchupType}_matchups:`, matchupsError);
       throw new Error(`Error fetching matchups: ${matchupsError.message}`);
     }
     
     if (!matchupRows || matchupRows.length === 0) {
-      console.log(`No matchup data returned from latest_${matchupType}_matchups.`);
+      logger.info(`No matchup data returned from latest_${matchupType}_matchups.`);
       return { matchups: [] };
     }
 
@@ -269,7 +270,7 @@ export async function getMatchups(matchupType: string, bookmaker?: string): Prom
     }
 
     if (playerIds.length === 0) {
-        console.log("No valid player IDs found in fetched matchups.");
+        logger.info("No valid player IDs found in fetched matchups.");
         return { matchups: [] };
     }
 
@@ -280,7 +281,7 @@ export async function getMatchups(matchupType: string, bookmaker?: string): Prom
       .in("player_id", playerIds);
 
     if (statsError) {
-      console.error("Supabase error fetching player stats:", statsError);
+      logger.error("Supabase error fetching player stats:", statsError);
       // Decide how to handle missing stats - here we'll default to 0
     }
 
@@ -369,7 +370,7 @@ export async function getMatchups(matchupType: string, bookmaker?: string): Prom
 
         // Need expected number of valid players for a matchup calculation
         if (groupPlayers.length !== expectedPlayerCount) {
-            console.warn(`Matchup ID ${row.id} does not have ${expectedPlayerCount} valid players. Skipping scoring.`);
+            logger.warn(`Matchup ID ${row.id} does not have ${expectedPlayerCount} valid players. Skipping scoring.`);
             return {
                 id: String(row.id),
                 group: `Event: ${row.event_name || 'N/A'}, Round: ${row.round_num || 'N/A'}`,
@@ -412,11 +413,11 @@ export async function getMatchups(matchupType: string, bookmaker?: string): Prom
     })
     .filter(m => m.recommended !== ""); // Keep filtering matchups without recommendations
 
-    console.log(`Processed ${processedMatchups.length} matchups successfully.`);
+    logger.info(`Processed ${processedMatchups.length} matchups successfully.`);
     return { matchups: processedMatchups };
 
   } catch (error) {
-    console.error("Error processing matchups:", error);
+    logger.error("Error processing matchups:", error);
     return { matchups: [], error: error instanceof Error ? error.message : "Unknown error" };
   }
 }
@@ -430,7 +431,7 @@ export async function getMatchups(matchupType: string, bookmaker?: string): Prom
 // 3. Sorting these players based on their calculated confidenceScore or valueRating.
 // 4. Applying the limit and mapping to the required TopGolfer format.
 export async function getTopGolfers(matchupType: string, activeFilter: string, limit = 10) {
-     console.warn("getTopGolfers action is not yet implemented with dynamic scoring and returns placeholder data.");
+     logger.warn("getTopGolfers action is not yet implemented with dynamic scoring and returns placeholder data.");
      // Placeholder implementation
      return { topGolfers: [], error: "getTopGolfers not implemented with new logic yet." };
 }
@@ -447,7 +448,7 @@ export type PlayerMatchupData = LatestThreeBallMatchupRow | null;
  * @returns The matchup row if found, otherwise null. Includes an error string if applicable.
  */
 export async function findPlayerMatchup(playerName: string): Promise<{ matchup: PlayerMatchupData; error?: string }> {
-    console.log(`[findPlayerMatchup] Searching for player: '${playerName}'`);
+    logger.info(`[findPlayerMatchup] Searching for player: '${playerName}'`);
     
     let patterns = [];
     const originalPattern = `%${playerName.trim()}%`;
@@ -468,7 +469,7 @@ export async function findPlayerMatchup(playerName: string): Promise<{ matchup: 
         patterns.push(`%${lastName} ${firstName}%`);
     }
     
-    console.log(`[findPlayerMatchup] Search patterns: ${patterns.join(', ')}`);
+    logger.info(`[findPlayerMatchup] Search patterns: ${patterns.join(', ')}`);
     
     // Build the OR query for all patterns
     const orFilterString = patterns
@@ -491,12 +492,12 @@ export async function findPlayerMatchup(playerName: string): Promise<{ matchup: 
             
         // If we found a round 2 matchup, return it
         if (round2Matchup && !round2MatchupError) {
-            console.log(`[findPlayerMatchup] Found round 2 matchup for ${playerName}`);
+            logger.info(`[findPlayerMatchup] Found round 2 matchup for ${playerName}`);
             return { matchup: round2Matchup };
         }
         
         // If not round 2, try looking for the player in any 3-ball matchup
-        console.log(`[findPlayerMatchup] No round 2 matchup found, searching any round for ${playerName}`);
+        logger.info(`[findPlayerMatchup] No round 2 matchup found, searching any round for ${playerName}`);
         const { data: matchup, error: matchupError } = await supabase
             .from('latest_three_ball_matchups')
             .select('*')
@@ -507,7 +508,7 @@ export async function findPlayerMatchup(playerName: string): Promise<{ matchup: 
         
         // Try the historical three ball matchups table if latest table is empty
         if (!matchup && !matchupError) {
-            console.log(`[findPlayerMatchup] No matchup in latest_three_ball_matchups, trying three_ball_matchups for ${playerName}`);
+            logger.info(`[findPlayerMatchup] No matchup in latest_three_ball_matchups, trying three_ball_matchups for ${playerName}`);
             const { data: historicalMatchup, error: historicalError } = await supabase
                 .from('three_ball_matchups')
                 .select('*')
@@ -517,14 +518,14 @@ export async function findPlayerMatchup(playerName: string): Promise<{ matchup: 
                 .maybeSingle<LatestThreeBallMatchupRow>();
                 
             if (historicalMatchup && !historicalError) {
-                console.log(`[findPlayerMatchup] Found historical 3-ball matchup for ${playerName}`);
+                logger.info(`[findPlayerMatchup] Found historical 3-ball matchup for ${playerName}`);
                 return { matchup: historicalMatchup };
             }
         }
 
         // If that still doesn't work, try 2-ball matchups
         if (!matchup && !matchupError) {
-            console.log(`[findPlayerMatchup] No 3-ball matchup found, trying 2-ball for ${playerName}`);
+            logger.info(`[findPlayerMatchup] No 3-ball matchup found, trying 2-ball for ${playerName}`);
             const { data: twoBallMatchup, error: twoBallError } = await supabase
                 .from('latest_two_ball_matchups')
                 .select('*')
@@ -542,7 +543,7 @@ export async function findPlayerMatchup(playerName: string): Promise<{ matchup: 
                     fanduel_p3_odds: null,
                     draftkings_p3_odds: null
                 };
-                console.log(`[findPlayerMatchup] Found 2-ball matchup for ${playerName}`);
+                logger.info(`[findPlayerMatchup] Found 2-ball matchup for ${playerName}`);
                 return { matchup: converted };
             }
             
@@ -564,25 +565,25 @@ export async function findPlayerMatchup(playerName: string): Promise<{ matchup: 
                     fanduel_p3_odds: null,
                     draftkings_p3_odds: null
                 };
-                console.log(`[findPlayerMatchup] Found historical 2-ball matchup for ${playerName}`);
+                logger.info(`[findPlayerMatchup] Found historical 2-ball matchup for ${playerName}`);
                 return { matchup: converted };
             }
         }
 
         if (matchupError) {
-            console.error(`[findPlayerMatchup] Supabase error finding latest matchup:`, matchupError);
+            logger.error(`[findPlayerMatchup] Supabase error finding latest matchup:`, matchupError);
             throw new Error(`Database error finding matchup: ${matchupError.message}`);
         }
 
         if (!matchup) {
-            console.log(`[findPlayerMatchup] No 3-ball or 2-ball matchup found for ${playerName}`);
+            logger.info(`[findPlayerMatchup] No 3-ball or 2-ball matchup found for ${playerName}`);
             return { matchup: null };
         } else {
-            console.log(`[findPlayerMatchup] Found matchup for ${playerName}`);
+            logger.info(`[findPlayerMatchup] Found matchup for ${playerName}`);
         }
         return { matchup };
     } catch (error) {
-        console.error(`[findPlayerMatchup] Error during execution for ${playerName}:`, error); // KEEP
+        logger.error(`[findPlayerMatchup] Error during execution for ${playerName}:`, error); // KEEP
         return { matchup: null, error: error instanceof Error ? error.message : "Unknown error finding player matchup" };
     }
 }
@@ -600,7 +601,7 @@ export async function getLiveStatsForPlayers(
     if (!playerIds || playerIds.length === 0) {
         return { stats: [] };
     }
-    console.log(`[getLiveStatsForPlayers] Fetching live stats for ${playerIds.length} player IDs:`, playerIds);
+    logger.info(`[getLiveStatsForPlayers] Fetching live stats for ${playerIds.length} player IDs:`, playerIds);
     const supabase = createServerClient();
 
     try {
@@ -637,14 +638,14 @@ export async function getLiveStatsForPlayers(
             .returns<LiveTournamentStat[]>();
 
         if (error) {
-            console.error(`[getLiveStatsForPlayers] Supabase error fetching live stats for IDs [${playerIds.join(', ')}]:`, error); // KEEP
+            logger.error(`[getLiveStatsForPlayers] Supabase error fetching live stats for IDs [${playerIds.join(', ')}]:`, error); // KEEP
             throw new Error(`Database error fetching live stats: ${error.message}`);
         }
 
         return { stats: data || [] };
 
     } catch (error) {
-        console.error(`[getLiveStatsForPlayers] Error during execution for IDs [${playerIds.join(', ')}]:`, error); // KEEP
+        logger.error(`[getLiveStatsForPlayers] Error during execution for IDs [${playerIds.join(', ')}]:`, error); // KEEP
         return { stats: [], error: error instanceof Error ? error.message : "Unknown error fetching live stats" };
     }
 }
@@ -662,11 +663,11 @@ function invalidateParlaysCache() {
         data: null,
         timestamp: 0
     };
-    console.log("[matchups] Parlays cache invalidated");
+    logger.info("[matchups] Parlays cache invalidated");
 }
 
 export async function createParlay(name?: string): Promise<{ parlay: Parlay | null; error?: string }> {
-    console.log("[createParlay] Creating new parlay...");
+    logger.info("[createParlay] Creating new parlay...");
     const supabase = createServerClient();
     try {
         // TODO: Add user_id if auth is implemented
@@ -677,17 +678,17 @@ export async function createParlay(name?: string): Promise<{ parlay: Parlay | nu
             .single();
 
         if (error) {
-            console.error("[createParlay] Supabase error:", error);
+            logger.error("[createParlay] Supabase error:", error);
             throw new Error(`Database error creating parlay: ${error.message}`);
         }
         
         // Invalidate cache since we've created a new parlay
         invalidateParlaysCache();
         
-        console.log("[createParlay] Successfully created parlay ID:", data?.id);
+        logger.info("[createParlay] Successfully created parlay ID:", data?.id);
         return { parlay: data as Parlay };
     } catch (error) {
-        console.error("[createParlay] Error:", error);
+        logger.error("[createParlay] Error:", error);
         return { parlay: null, error: error instanceof Error ? error.message : "Unknown error creating parlay" };
     }
 }
@@ -713,11 +714,11 @@ export async function getParlaysAndPicks(): Promise<{ parlays: ParlayWithPicks[]
     // Check if we have fresh cached data (less than 10 seconds old)
     const now = Date.now();
     if (parlaysCache.data && now - parlaysCache.timestamp < CACHE_TTL) {
-        console.log(`[getParlaysAndPicks] Using cached data from ${new Date(parlaysCache.timestamp).toLocaleTimeString()}`);
+        logger.info(`[getParlaysAndPicks] Using cached data from ${new Date(parlaysCache.timestamp).toLocaleTimeString()}`);
         return { parlays: parlaysCache.data };
     }
     
-    console.log("[getParlaysAndPicks] Fetching all parlays and picks...");
+    logger.info("[getParlaysAndPicks] Fetching all parlays and picks...");
     const supabase = createServerClient();
     try {
         // TODO: Add user filter if auth is implemented e.g., .eq('user_id', userId)
@@ -734,7 +735,7 @@ export async function getParlaysAndPicks(): Promise<{ parlays: ParlayWithPicks[]
             .returns<ParlayWithPicks[]>();
 
         if (error) {
-            console.error("[getParlaysAndPicks] Supabase error fetching data:", error);
+            logger.error("[getParlaysAndPicks] Supabase error fetching data:", error);
             throw new Error(`Database error fetching parlays and picks: ${error.message}`);
         }
         
@@ -744,11 +745,11 @@ export async function getParlaysAndPicks(): Promise<{ parlays: ParlayWithPicks[]
             timestamp: now
         };
         
-        console.log(`[getParlaysAndPicks] Successfully fetched ${data?.length ?? 0} parlays with picks.`);
+        logger.info(`[getParlaysAndPicks] Successfully fetched ${data?.length ?? 0} parlays with picks.`);
         // Now the data should correctly contain a 'picks' array
         return { parlays: data || [] };
     } catch (error) {
-        console.error("[getParlaysAndPicks] Error:", error);
+        logger.error("[getParlaysAndPicks] Error:", error);
         return { parlays: [], error: error instanceof Error ? error.message : "Unknown error fetching data" };
     }
 }
@@ -759,7 +760,7 @@ export async function getParlaysAndPicks(): Promise<{ parlays: ParlayWithPicks[]
  * @returns An object containing the newly added pick or an error message.
  */
 export async function addParlayPick(pickData: Omit<ParlayPick, 'id' | 'created_at'>): Promise<{ pick: ParlayPick | null; error?: string }> {
-    console.log("[addParlayPick] Adding pick:", pickData);
+    logger.info("[addParlayPick] Adding pick:", pickData);
     if (!pickData.parlay_id) {
          return { pick: null, error: "parlay_id is required to add a pick." };
     }
@@ -782,17 +783,17 @@ export async function addParlayPick(pickData: Omit<ParlayPick, 'id' | 'created_a
             .single(); // Expecting one row back
 
         if (error) {
-            console.error("[addParlayPick] Supabase error inserting pick:", error);
+            logger.error("[addParlayPick] Supabase error inserting pick:", error);
             throw new Error(`Database error adding pick: ${error.message}`);
         }
         
         // Invalidate cache since we've added a pick
         invalidateParlaysCache();
         
-        console.log("[addParlayPick] Successfully added pick ID:", data?.id);
+        logger.info("[addParlayPick] Successfully added pick ID:", data?.id);
         return { pick: data as ParlayPick };
     } catch (error) {
-        console.error("[addParlayPick] Error:", error);
+        logger.error("[addParlayPick] Error:", error);
         return { pick: null, error: error instanceof Error ? error.message : "Unknown error adding pick" };
     }
 }
@@ -803,7 +804,7 @@ export async function addParlayPick(pickData: Omit<ParlayPick, 'id' | 'created_a
  * @returns An object indicating success or containing an error message.
  */
 export async function removeParlayPick(pickId: number): Promise<{ success: boolean; error?: string }> {
-    console.log(`[removeParlayPick] Removing pick ID: ${pickId}`);
+    logger.info(`[removeParlayPick] Removing pick ID: ${pickId}`);
     const supabase = createServerClient();
     try {
         // TODO: Add user filter if auth is implemented e.g., .eq('user_id', userId)
@@ -813,17 +814,17 @@ export async function removeParlayPick(pickId: number): Promise<{ success: boole
             .eq('id', pickId);
 
         if (error) {
-            console.error(`[removeParlayPick] Supabase error removing pick ID ${pickId}:`, error);
+            logger.error(`[removeParlayPick] Supabase error removing pick ID ${pickId}:`, error);
             throw new Error(`Database error removing pick: ${error.message}`);
         }
         
         // Invalidate cache since we've removed a pick
         invalidateParlaysCache();
         
-        console.log(`[removeParlayPick] Successfully removed pick ID: ${pickId}`);
+        logger.info(`[removeParlayPick] Successfully removed pick ID: ${pickId}`);
         return { success: true };
     } catch (error) {
-        console.error(`[removeParlayPick] Error for ID ${pickId}:`, error);
+        logger.error(`[removeParlayPick] Error for ID ${pickId}:`, error);
         return { success: false, error: error instanceof Error ? error.message : "Unknown error removing pick" };
     }
 }
@@ -843,7 +844,7 @@ export type ParlayPickWithData = {
 export async function batchLoadParlayPicksData(
     picks: ParlayPick[]
 ): Promise<{ picksWithData: ParlayPickWithData[]; error?: string }> {
-    console.log(`[batchLoadParlayPicksData] Loading data for ${picks.length} picks`);
+    logger.info(`[batchLoadParlayPicksData] Loading data for ${picks.length} picks`);
     
     if (!picks || picks.length === 0) {
         return { picksWithData: [] };
@@ -902,10 +903,10 @@ export async function batchLoadParlayPicksData(
             picksWithData.push(pickResult);
         }
         
-        console.log(`[batchLoadParlayPicksData] Successfully loaded data for ${picksWithData.length} picks`);
+        logger.info(`[batchLoadParlayPicksData] Successfully loaded data for ${picksWithData.length} picks`);
         return { picksWithData };
     } catch (error) {
-        console.error(`[batchLoadParlayPicksData] Error:`, error);
+        logger.error(`[batchLoadParlayPicksData] Error:`, error);
         return { 
             picksWithData: [], 
             error: error instanceof Error ? error.message : "Error loading parlay picks data" 
@@ -915,7 +916,7 @@ export async function batchLoadParlayPicksData(
 
 // Action to delete a parlay (will cascade delete all its picks)
 export async function deleteParlay(parlayId: number): Promise<{ success: boolean; error?: string }> {
-    console.log(`[deleteParlay] Deleting parlay ID: ${parlayId}`);
+    logger.info(`[deleteParlay] Deleting parlay ID: ${parlayId}`);
     const supabase = createServerClient();
     try {
         // TODO: Add user filter if auth is implemented e.g., .eq('user_id', userId)
@@ -925,17 +926,17 @@ export async function deleteParlay(parlayId: number): Promise<{ success: boolean
             .eq('id', parlayId);
 
         if (error) {
-            console.error(`[deleteParlay] Supabase error deleting parlay ID ${parlayId}:`, error);
+            logger.error(`[deleteParlay] Supabase error deleting parlay ID ${parlayId}:`, error);
             throw new Error(`Database error deleting parlay: ${error.message}`);
         }
         
         // Invalidate cache since we've deleted a parlay
         invalidateParlaysCache();
         
-        console.log(`[deleteParlay] Successfully deleted parlay ID: ${parlayId}`);
+        logger.info(`[deleteParlay] Successfully deleted parlay ID: ${parlayId}`);
         return { success: true };
     } catch (error) {
-        console.error(`[deleteParlay] Error for ID ${parlayId}:`, error);
+        logger.error(`[deleteParlay] Error for ID ${parlayId}:`, error);
         return { success: false, error: error instanceof Error ? error.message : "Unknown error deleting parlay" };
     }
 }

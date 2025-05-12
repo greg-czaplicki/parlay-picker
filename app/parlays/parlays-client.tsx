@@ -26,7 +26,7 @@ export default function ParlaysClient({ initialParlays, initialPicksWithData, cu
   const router = useRouter();
   
   // Log current round value from server
-  console.log("ParlaysClient received currentRound:", currentRound);
+  // [logger.ts] Not using console.log in client components. Use browser devtools for debugging if needed.
   
   // Find unique round numbers from all picks
   const uniqueRounds = Array.from(
@@ -102,11 +102,11 @@ export default function ParlaysClient({ initialParlays, initialPicksWithData, cu
           try {
             const { pick, error } = await addParlayPick({
               parlay_id: targetParlayId,
-              picked_player_dg_id: playerId,
-              picked_player_name: playerName,
-              matchup_id: matchupId || undefined,
-              event_name: eventName || undefined,
-              round_num: roundNum,
+              picked_player_dg_id: playerId ?? null,
+              picked_player_name: playerName ?? null,
+              matchup_id: matchupId ?? null,
+              event_name: eventName ?? null,
+              round_num: roundNum ?? null,
             });
             
             if (error) {
@@ -148,14 +148,15 @@ export default function ParlaysClient({ initialParlays, initialPicksWithData, cu
   // Filter parlays based on selected round
   useEffect(() => {
     // Log for debugging
-    console.log("Current server-side round:", currentRound);
-    console.log("Unique rounds from picks:", uniqueRounds);
+    // [logger.ts] Not using console.log in client components. Use browser devtools for debugging if needed.
+    // console.log("Current server-side round:", currentRound);
+    // console.log("Unique rounds from picks:", uniqueRounds);
     
     if (selectedRound === 'all') {
-      console.log("Showing all rounds");
+      // console.log("Showing all rounds");
       setFilteredParlays(parlays);
     } else if (selectedRound === 'current') {
-      console.log(`Filtering for current round (Round 2)`);
+      // console.log(`Filtering for current round (Round 2)`);
       
       // Round 2 is the current round, show:
       // 1. Parlays that have picks from Round 2
@@ -181,7 +182,7 @@ export default function ParlaysClient({ initialParlays, initialPicksWithData, cu
     } else if (selectedRound && !isNaN(Number(selectedRound))) {
       // Filter to show parlays with picks from the selected round
       const roundNum = Number(selectedRound);
-      console.log(`Filtering for specific round: ${roundNum}`);
+      // console.log(`Filtering for specific round: ${roundNum}`);
       setFilteredParlays(
         parlays.filter(parlay => {
           // Don't show empty parlays for non-current rounds
@@ -199,7 +200,7 @@ export default function ParlaysClient({ initialParlays, initialPicksWithData, cu
         })
       );
     } else {
-      console.log("Default case - showing all parlays");
+      // console.log("Default case - showing all parlays");
       setFilteredParlays(parlays);
     }
   }, [selectedRound, parlays, initialPicksWithData, currentRound]);

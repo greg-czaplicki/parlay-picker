@@ -1,7 +1,6 @@
-import { createClient } from "@supabase/supabase-js";
-import { NextResponse } from "next/server";
-import { handleApiError } from '@/lib/utils'
-import { jsonSuccess, jsonError } from '@/lib/api-response'
+import 'next-logger'
+import { logger } from '@/lib/logger'
+import { createSupabaseClient, handleApiError, jsonSuccess } from '@/lib/api-utils'
 
 // Define interfaces for the Data Golf API response
 interface ScheduleEvent {
@@ -31,17 +30,6 @@ interface SupabaseTournament {
   tour?: string; // Added tour field to identify PGA, OPP, or EURO
 }
 
-// Initialize Supabase client
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error(
-    "Supabase URL or Service Role Key missing in environment variables.",
-  );
-}
-const supabase = createClient(supabaseUrl, supabaseKey);
-
 // Data Golf API Key
 const dataGolfApiKey = process.env.DATAGOLF_API_KEY;
 if (!dataGolfApiKey) {
@@ -61,7 +49,7 @@ function calculateEndDate(startDateStr: string): string {
         // Format back to YYYY-MM-DD
         return endDate.toISOString().split('T')[0];
     } catch (e) {
-        console.error(`Error calculating end date for ${startDateStr}:`, e);
+        logger.error(`Error calculating end date for ${startDateStr}:`, e);
         // Return a fallback or handle error appropriately
         return startDateStr; // Fallback to start date
     }
@@ -69,19 +57,19 @@ function calculateEndDate(startDateStr: string): string {
 
 // Helper to fetch schedule data from a specific tour
 async function fetchTourSchedule(url: string, tourCode: string): Promise<SupabaseTournament[]> {
-  console.log(`Fetching schedule for ${tourCode} tour...`);
+  logger.info(`Fetching schedule for ${tourCode} tour...`);
   
   try {
     const response = await fetch(url, { cache: 'no-store' });
     
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Failed to fetch ${tourCode} schedule:`, response.status, errorText);
+      logger.error(`Failed to fetch ${tourCode} schedule:`, response.status, errorText);
       return [];
     }
     
     const data: DataGolfScheduleResponse = await response.json();
-    console.log(`Successfully fetched schedule for ${data.tour} tour, season ${data.current_season}.`);
+    logger.info(`Successfully fetched schedule for ${data.tour} tour, season ${data.current_season}.`);
     
     // Generate a base event ID for tours that might have non-numeric IDs
     // Use 10000 for Euro tour events with non-numeric IDs to avoid conflicts
@@ -92,7 +80,7 @@ async function fetchTourSchedule(url: string, tourCode: string): Promise<Supabas
       .filter(event => {
         // Filter out events with invalid data
         if (!event.event_name || !event.course || !event.start_date) {
-          console.log(`Skipping event with missing data: ${JSON.stringify(event)}`);
+          logger.info(`Skipping event with missing data: ${JSON.stringify(event)}`);
           return false;
         }
         return true;
@@ -106,7 +94,7 @@ async function fetchTourSchedule(url: string, tourCode: string): Promise<Supabas
           // Generate a unique ID for this non-numeric ID event
           nonNumericIdCounter++;
           eventId = baseEventId + nonNumericIdCounter;
-          console.log(`Replacing non-numeric event_id "${event.event_id}" with generated ID: ${eventId}`);
+          logger.info(`Replacing non-numeric event_id "${event.event_id}" with generated ID: ${eventId}`);
         }
         
         return {
@@ -119,35 +107,32 @@ async function fetchTourSchedule(url: string, tourCode: string): Promise<Supabas
         };
       });
     
-    console.log(`Processed ${tournaments.length} tournaments for ${tourCode} tour.`);
+    logger.info(`Processed ${tournaments.length} tournaments for ${tourCode} tour.`);
     return tournaments;
   } catch (error) {
-    console.error(`Error fetching ${tourCode} schedule:`, error);
+    logger.error(`Error fetching ${tourCode} schedule:`, error);
     return [];
   }
 }
 
-export async function GET() {
-  console.log("Fetching tournament schedules from Data Golf...");
-
+export async function GET(request: Request) {
+  logger.info('Received schedule/sync request', { url: request.url });
+  logger.info("Fetching tournament schedules from Data Golf...");
   try {
+    const supabase = createSupabaseClient();
     // Fetch all tour schedules in parallel
     const [pgaTournaments, euroTournaments] = await Promise.all([
       fetchTourSchedule(DATA_GOLF_PGA_SCHEDULE_URL, 'PGA'),
       fetchTourSchedule(DATA_GOLF_EURO_SCHEDULE_URL, 'EURO')
     ]);
-    
     // Combine all tournaments
     const allTournaments = [...pgaTournaments, ...euroTournaments];
-    
-    console.log(`Combined ${allTournaments.length} tournaments from all tours.`);
-    
+    logger.info(`Combined ${allTournaments.length} tournaments from all tours.`);
     // Track tour-specific counts for reporting
     const tourCounts = {
       pga: pgaTournaments.length,
       euro: euroTournaments.length
     };
-
     let processedCount = 0;
     if (allTournaments.length > 0) {
       const { error: upsertError } = await supabase
@@ -156,17 +141,15 @@ export async function GET() {
           onConflict: 'event_id', // Use event_id (Primary Key) for conflict resolution
           ignoreDuplicates: false // Ensure existing records are updated
         });
-
       if (upsertError) {
-        console.error("Error upserting tournaments into Supabase:", upsertError);
+        logger.error("Error upserting tournaments into Supabase:", upsertError);
         throw new Error(`Supabase tournaments upsert failed: ${upsertError.message}`);
       }
       processedCount = allTournaments.length;
-      console.log(`Successfully upserted ${processedCount} tournaments into Supabase.`);
+      logger.info(`Successfully upserted ${processedCount} tournaments into Supabase.`);
     } else {
-      console.log("No tournaments found in the fetched schedules to upsert.");
+      logger.info("No tournaments found in the fetched schedules to upsert.");
     }
-
     // Try to get a source timestamp if available (use the latest start_date as a proxy)
     let sourceTimestamp: string | undefined = undefined;
     if (allTournaments.length > 0) {
@@ -174,14 +157,14 @@ export async function GET() {
       const latest = allTournaments.reduce((a, b) => a.start_date > b.start_date ? a : b);
       sourceTimestamp = new Date(latest.start_date + 'T00:00:00Z').toISOString();
     }
-
+    logger.info('Returning schedule/sync response');
     return jsonSuccess({
       processedCount,
       tourCounts,
       sourceTimestamp,
     }, `Synced schedules for all tours. ${processedCount} tournaments processed.`);
-
   } catch (error) {
+    logger.error('Error in schedule/sync endpoint', { error });
     return handleApiError(error)
   }
 }

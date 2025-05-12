@@ -1,38 +1,30 @@
-import { createClient } from "@supabase/supabase-js";
-import { NextResponse } from "next/server";
-import { handleApiError } from '@/lib/utils'
-import { validate } from '@/lib/validation'
-import { eventIdParamSchema } from '@/lib/schemas'
-import { jsonSuccess, jsonError } from '@/lib/api-response'
+import 'next-logger'
+import { logger } from '@/lib/logger'
+import { z } from 'zod'
+import { createSupabaseClient, getQueryParams, handleApiError, jsonSuccess } from '@/lib/api-utils'
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error("Supabase URL or Service Role Key is missing in environment variables.");
-}
-const supabase = createClient(supabaseUrl, supabaseKey);
+const eventIdSchema = z.object({ eventId: z.string().optional() })
 
 export async function GET(request: Request) {
-  const url = new URL(request.url);
+  logger.info('Received debug/matchups/2ball request', { url: request.url });
   let eventId: string | undefined = undefined;
   try {
-    const params = validate(eventIdParamSchema.extend({ eventId: eventIdParamSchema.shape.eventId.optional() }), {
-      eventId: url.searchParams.get('eventId') ?? undefined,
-    });
-    eventId = params.eventId;
+    const params = getQueryParams(request, eventIdSchema)
+    eventId = params.eventId
   } catch (error) {
+    logger.warn('Invalid query parameters', { error });
     return handleApiError(error);
   }
-  
+
   try {
+    const supabase = createSupabaseClient()
     // Check database content first
     const { data: countData, error: countError } = await supabase
       .from("latest_two_ball_matchups")
-      .select("event_id, event_name, count(*)")
-      .group("event_id, event_name");
-    
-    console.log("Count data:", countData);
-    
+      .select("event_id, event_name, count(*)");
+
+    logger.info("Count data:", countData);
+
     // Test direct API call
     const apiResponse = await fetch(`${process.env.NEXT_PUBLIC_VERCEL_URL || ''}/api/matchups/2ball${eventId ? `?eventId=${eventId}` : ''}`, {
       headers: {
@@ -41,14 +33,14 @@ export async function GET(request: Request) {
     });
     let apiData;
     let apiResponseText;
-    
+
     try {
       apiResponseText = await apiResponse.text();
       apiData = JSON.parse(apiResponseText);
     } catch (error) {
-      console.error("Error parsing API response:", error);
+      logger.error("Error parsing API response:", error);
     }
-    
+
     // Now try direct Supabase query
     let directQuery = supabase.from("latest_two_ball_matchups").select("*");
     if (eventId) {
@@ -57,9 +49,10 @@ export async function GET(request: Request) {
         directQuery = directQuery.eq("event_id", eventIdInt);
       }
     }
-    
+
     const { data: directData, error: directError } = await directQuery;
-    
+
+    logger.info('Returning debug/matchups/2ball response', { eventId });
     return jsonSuccess({
       dbCounts: countData,
       countError: countError?.message,
@@ -77,6 +70,7 @@ export async function GET(request: Request) {
       }
     });
   } catch (error) {
+    logger.error('Error in debug/matchups/2ball endpoint', { error });
     return handleApiError(error)
   }
 }

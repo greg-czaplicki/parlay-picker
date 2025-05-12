@@ -1,82 +1,55 @@
-import { createClient } from "@supabase/supabase-js";
-import { NextResponse } from "next/server";
-import { handleApiError } from '@/lib/utils'
+import { logger } from '@/lib/logger'
+import { createSupabaseClient, handleApiError, jsonSuccess } from '@/lib/api-utils'
 
-// Initialize Supabase client
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error(
-    "Supabase URL or Service Role Key is missing in environment variables.",
-  );
-}
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-// Data Golf API Key
 const dataGolfApiKey = process.env.DATAGOLF_API_KEY || "fb03cadc312c2f0015bc8c5354ea";
-
 const OPP_URL = `https://feeds.datagolf.com/betting-tools/matchups?tour=opp&market=3_balls&odds_format=decimal&file_format=json&key=${dataGolfApiKey}`;
 
 export async function GET() {
   try {
-    console.log("MYRTLE BEACH DEBUG: Starting direct debug of opposite field matchups");
-    
+    logger.info("MYRTLE BEACH DEBUG: Starting direct debug of opposite field matchups");
     // 1. Fetch the opposite field API directly
-    console.log("MYRTLE BEACH DEBUG: Fetching opposite field API data...");
+    logger.info("MYRTLE BEACH DEBUG: Fetching opposite field API data...");
     const oppResponse = await fetch(OPP_URL, { cache: 'no-store' });
-    
     if (!oppResponse.ok) {
-      return handleApiError(`Failed to fetch from Data Golf API: ${oppResponse.status}`, undefined, 500);
+      return handleApiError(`Failed to fetch from Data Golf API: ${oppResponse.status}`);
     }
-    
     const oppData = await oppResponse.json();
-    console.log("MYRTLE BEACH DEBUG: API response received");
-    
+    logger.info("MYRTLE BEACH DEBUG: API response received");
     // 2. Get Myrtle Beach tournament from DB
-    console.log("MYRTLE BEACH DEBUG: Finding Myrtle Beach tournament in database...");
+    logger.info("MYRTLE BEACH DEBUG: Finding Myrtle Beach tournament in database...");
+    const supabase = createSupabaseClient();
     const { data: myrtleTournament, error: tournamentError } = await supabase
       .from("tournaments")
       .select("*")
       .ilike("event_name", "%myrtle%")
       .single();
-    
     if (tournamentError) {
-      return handleApiError(`Failed to find Myrtle Beach tournament: ${tournamentError.message}`, undefined, 500);
+      return handleApiError(`Failed to find Myrtle Beach tournament: ${tournamentError.message}`);
     }
-    
     if (!myrtleTournament) {
-      return handleApiError("No Myrtle Beach tournament found in database", undefined, 404);
+      return handleApiError("No Myrtle Beach tournament found in database");
     }
-    
-    console.log("MYRTLE BEACH DEBUG: Found tournament:", myrtleTournament);
-    
+    logger.info("MYRTLE BEACH DEBUG: Found tournament:", myrtleTournament);
     // 3. Check for existing matchups for this tournament
-    console.log("MYRTLE BEACH DEBUG: Checking for existing matchups...");
+    logger.info("MYRTLE BEACH DEBUG: Checking for existing matchups...");
     const { data: existingMatchups, error: matchupsError } = await supabase
       .from("latest_three_ball_matchups")
       .select("id, event_name, event_id")
       .eq("event_id", myrtleTournament.event_id)
       .limit(1);
-    
     if (matchupsError) {
-      console.log("MYRTLE BEACH DEBUG: Error checking for existing matchups:", matchupsError);
+      logger.warn("MYRTLE BEACH DEBUG: Error checking for existing matchups:", matchupsError);
     }
-    
-    console.log("MYRTLE BEACH DEBUG: Existing matchups check result:", existingMatchups);
-    
+    logger.info("MYRTLE BEACH DEBUG: Existing matchups check result:", existingMatchups);
     // 4. Prepare matchups for insertion
-    console.log("MYRTLE BEACH DEBUG: Preparing matchups for insertion...");
-    
+    logger.info("MYRTLE BEACH DEBUG: Preparing matchups for insertion...");
     if (!Array.isArray(oppData.match_list)) {
       return handleApiError("match_list in API response is not an array");
     }
-    
-    const matchupsToInsert = oppData.match_list.map(matchup => {
+    const matchupsToInsert = oppData.match_list.map((matchup: any) => {
       const fanduelOdds = matchup.odds.fanduel;
       const draftkingsOdds = matchup.odds.draftkings;
       const datagolfOdds = matchup.odds.datagolf;
-      
       return {
         event_id: myrtleTournament.event_id,
         event_name: myrtleTournament.event_name, // Use our DB name, not API name
@@ -100,43 +73,35 @@ export async function GET() {
         datagolf_p3_odds: datagolfOdds?.p3 ?? null,
       };
     });
-    
-    console.log(`MYRTLE BEACH DEBUG: Prepared ${matchupsToInsert.length} matchups for insertion`);
-    
+    logger.info(`MYRTLE BEACH DEBUG: Prepared ${matchupsToInsert.length} matchups for insertion`);
     // 5. Insert into database
-    console.log("MYRTLE BEACH DEBUG: Inserting into historical table...");
+    logger.info("MYRTLE BEACH DEBUG: Inserting into historical table...");
     const { error: insertError } = await supabase
       .from("three_ball_matchups")
       .insert(matchupsToInsert);
-    
     if (insertError) {
-      console.log("MYRTLE BEACH DEBUG: Insert error:", insertError);
-      return handleApiError(`Failed to insert historical matchups: ${insertError.message}`, undefined, 500);
+      logger.error("MYRTLE BEACH DEBUG: Insert error:", insertError);
+      return handleApiError(`Failed to insert historical matchups: ${insertError.message}`);
     }
-    
-    console.log("MYRTLE BEACH DEBUG: Upserting into latest table...");
+    logger.info("MYRTLE BEACH DEBUG: Upserting into latest table...");
     const { error: upsertError } = await supabase
       .from("latest_three_ball_matchups")
       .upsert(matchupsToInsert, {
         onConflict: 'event_id, event_name, round_num, p1_dg_id, p2_dg_id, p3_dg_id',
       });
-    
     if (upsertError) {
-      console.log("MYRTLE BEACH DEBUG: Upsert error:", upsertError);
+      logger.error("MYRTLE BEACH DEBUG: Upsert error:", upsertError);
       return handleApiError(`Failed to upsert latest matchups: ${upsertError.message}`);
     }
-    
-    console.log("MYRTLE BEACH DEBUG: Successfully inserted/upserted matchups");
-    
+    logger.info("MYRTLE BEACH DEBUG: Successfully inserted/upserted matchups");
     // 6. Return success
-    return NextResponse.json({
+    return jsonSuccess({
       success: true,
       message: `Successfully inserted ${matchupsToInsert.length} matchups for ${myrtleTournament.event_name}`,
       tournament: myrtleTournament,
       api_event_name: oppData.event_name,
       matchup_count: matchupsToInsert.length
     });
-    
   } catch (error) {
     return handleApiError(error);
   }
