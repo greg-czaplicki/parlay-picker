@@ -72,7 +72,10 @@ export function useMatchupsQuery(eventId: number | null, matchupType: "2ball" | 
 
       // Extract matchups array
       let matchupsData: MatchupRow[] = [];
-      if (Array.isArray(data.matchups)) {
+      // Handle nested data.data.matchups (actual API response)
+      if (data && data.data && Array.isArray(data.data.matchups)) {
+        matchupsData = data.data.matchups;
+      } else if (Array.isArray(data.matchups)) {
         matchupsData = data.matchups;
       } else if (Array.isArray(data.events)) {
         if (eventId) {

@@ -241,12 +241,12 @@ export default function MatchupsTable({
                               }
                             } else {
                               // For 2-ball matchups
-                              const p1Odds = matchup.fanduel_p1_odds || 0;
-                              const p2Odds = matchup.fanduel_p2_odds || 0;
+                              const fdP1Odds = Number(matchup.fanduel_p1_odds) || 0;
+                              const fdP2Odds = Number(matchup.fanduel_p2_odds) || 0;
                               
-                              if (p1Odds > 1 && p2Odds > 1) {
-                                if ((p1Odds < p2Odds && hasSignificantOddsGap(p1Odds, p2Odds)) || 
-                                    (p2Odds < p1Odds && hasSignificantOddsGap(p2Odds, p1Odds))) {
+                              if (fdP1Odds > 1 && fdP2Odds > 1) {
+                                if ((fdP1Odds < fdP2Odds && hasSignificantOddsGap(fdP1Odds, fdP2Odds)) || 
+                                    (fdP2Odds < fdP1Odds && hasSignificantOddsGap(fdP2Odds, fdP1Odds))) {
                                   count++;
                                 }
                               }
@@ -320,31 +320,18 @@ export default function MatchupsTable({
                     // Generate a stable key - use id if available, otherwise use index and a type identifier
                     const key = matchup.id ? `matchup-${matchup.id}` : `matchup-${index}-${matchup.p1_dg_id}-${matchup.p2_dg_id}`;
                     
-                    // Skip this matchup if it's missing odds
-                    if (is3BallMatchup(matchup)) {
-                      // Check if at least one player has odds from both FanDuel and DataGolf
-                      const hasAnyValidOdds = (
-                        (matchup.fanduel_p1_odds && matchup.fanduel_p1_odds > 1) ||
-                        (matchup.fanduel_p2_odds && matchup.fanduel_p2_odds > 1) ||
-                        (matchup.fanduel_p3_odds && matchup.fanduel_p3_odds > 1)
-                      );
-                      
-                      if (!hasAnyValidOdds) {
-                        return null; // Skip this matchup
-                      }
-                    } else {
-                      // For 2-ball, check if at least one player has odds from FanDuel
-                      const hasAnyValidOdds = (
-                        (matchup.fanduel_p1_odds && matchup.fanduel_p1_odds > 1) ||
-                        (matchup.fanduel_p2_odds && matchup.fanduel_p2_odds > 1)
-                      );
-                      
-                      if (!hasAnyValidOdds) {
-                        return null; // Skip this matchup
-                      }
+                    // Debug: print first 5 2-ball matchups
+                    if (index < 5 && !is3BallMatchup(matchup)) {
+                      console.log('2-ball matchup', index, {
+                        fanduel_p1_odds: matchup.fanduel_p1_odds,
+                        fanduel_p2_odds: matchup.fanduel_p2_odds,
+                        draftkings_p1_odds: matchup.draftkings_p1_odds,
+                        draftkings_p2_odds: matchup.draftkings_p2_odds,
+                        p1: matchup.p1_player_name,
+                        p2: matchup.p2_player_name,
+                      });
                     }
-                    
-                    // Handle 3-ball matchups
+
                     if (is3BallMatchup(matchup)) {
                       const dg_p1_odds = matchup.datagolf_p1_odds ?? matchup.odds?.datagolf?.p1 ?? null;
                       const dg_p2_odds = matchup.datagolf_p2_odds ?? matchup.odds?.datagolf?.p2 ?? null;
@@ -620,70 +607,57 @@ export default function MatchupsTable({
                         </TableRow>
                       );
                     } else {
-                      // Handle 2-ball matchups
-                      // For 2ball, we want to identify when the favorite has a significant gap against the other player
-                      
+                      // For 2-ball, always coerce odds to numbers
+                      const fdP1Odds = Number(matchup.fanduel_p1_odds) || 0;
+                      const fdP2Odds = Number(matchup.fanduel_p2_odds) || 0;
+                      const dkP1Odds = Number(matchup.draftkings_p1_odds) || 0;
+                      const dkP2Odds = Number(matchup.draftkings_p2_odds) || 0;
+
+                      // Check if at least one player has odds from FanDuel
+                      const hasAnyValidOdds = (fdP1Odds > 1) || (fdP2Odds > 1);
+                      if (!hasAnyValidOdds) {
+                        return null; // Skip this matchup
+                      }
+
                       // Initialize gap flags for both FanDuel and DraftKings
                       let p1HasFDGap = false;
                       let p2HasFDGap = false;
                       let p1HasDKGap = false;
                       let p2HasDKGap = false;
-                      
+
                       // Check for FanDuel gaps
-                      const fdP1Odds = matchup.fanduel_p1_odds || 0;
-                      const fdP2Odds = matchup.fanduel_p2_odds || 0;
-                      
                       // Check if player 1 is the favorite with a significant gap in FanDuel
                       if (fdP1Odds > 1 && fdP2Odds > 1 && fdP1Odds < fdP2Odds) {
                         // Convert odds to American and calculate the gap
                         const americanP1 = parseInt(decimalToAmerican(fdP1Odds));
                         const americanP2 = parseInt(decimalToAmerican(fdP2Odds));
                         const gap = Math.abs(americanP1 - americanP2);
-                        
-                        // If gap exceeds threshold, highlight player 1
                         if (gap >= oddsGapThreshold) {
                           p1HasFDGap = true;
                         }
                       }
-                      
                       // Check if player 2 is the favorite with a significant gap in FanDuel
                       if (fdP1Odds > 1 && fdP2Odds > 1 && fdP2Odds < fdP1Odds) {
-                        // Convert odds to American and calculate the gap
                         const americanP1 = parseInt(decimalToAmerican(fdP1Odds));
                         const americanP2 = parseInt(decimalToAmerican(fdP2Odds));
                         const gap = Math.abs(americanP1 - americanP2);
-                        
-                        // If gap exceeds threshold, highlight player 2
                         if (gap >= oddsGapThreshold) {
                           p2HasFDGap = true;
                         }
                       }
-                      
                       // Check for DraftKings gaps
-                      const dkP1Odds = matchup.draftkings_p1_odds || 0;
-                      const dkP2Odds = matchup.draftkings_p2_odds || 0;
-                      
-                      // Check if player 1 is the favorite with a significant gap in DraftKings
                       if (dkP1Odds > 1 && dkP2Odds > 1 && dkP1Odds < dkP2Odds) {
-                        // Convert odds to American and calculate the gap
                         const americanP1 = parseInt(decimalToAmerican(dkP1Odds));
                         const americanP2 = parseInt(decimalToAmerican(dkP2Odds));
                         const gap = Math.abs(americanP1 - americanP2);
-                        
-                        // If gap exceeds threshold, highlight player 1
                         if (gap >= oddsGapThreshold) {
                           p1HasDKGap = true;
                         }
                       }
-                      
-                      // Check if player 2 is the favorite with a significant gap in DraftKings
                       if (dkP1Odds > 1 && dkP2Odds > 1 && dkP2Odds < dkP1Odds) {
-                        // Convert odds to American and calculate the gap
                         const americanP1 = parseInt(decimalToAmerican(dkP1Odds));
                         const americanP2 = parseInt(decimalToAmerican(dkP2Odds));
                         const gap = Math.abs(americanP1 - americanP2);
-                        
-                        // If gap exceeds threshold, highlight player 2
                         if (gap >= oddsGapThreshold) {
                           p2HasDKGap = true;
                         }
