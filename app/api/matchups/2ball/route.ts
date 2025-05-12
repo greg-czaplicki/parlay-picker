@@ -64,8 +64,8 @@ function processMatchups(
   tourCode: string,
   fallbackEventId: number
 ): SupabaseMatchup[] {
-  if (!data || !data.match_list) {
-    logger.info(`No matchups found for ${tourCode} tour`);
+  if (!data || !data.match_list || !Array.isArray(data.match_list)) {
+    logger.warn(`No valid matchups array for ${tourCode} tour. match_list:`, { match_list: data?.match_list });
     return [];
   }
   // Find appropriate event ID based on event name
