@@ -1,8 +1,6 @@
 import 'next-logger'
 import { logger } from '@/lib/logger'
-import { createSupabaseClient, handleApiError, jsonSuccess, jsonError } from '@/lib/api-utils'
-import { validate } from '@/lib/validation'
-import { tourParamSchema } from '@/lib/schemas'
+import { createSupabaseClient, handleApiError, jsonSuccess, getQueryParams } from '@/lib/api-utils'
 import { z } from 'zod'
 
 // Define interfaces for the Data Golf API response
@@ -125,22 +123,17 @@ function mapStatsToInsert(data: DataGolfLiveStatsResponse, timestamp: string): S
   }));
 }
 
+// Replace legacy param validation with Zod and getQueryParams
+const tourParamSchema = z.object({ tour: z.enum(['pga', 'opp', 'euro']) });
+
 export async function GET(request: Request) {
   logger.info('Received live-stats/sync-tour request', { url: request.url });
   try {
-    // Extract the tour parameter from query string with default 'pga'
-    const { searchParams } = new URL(request.url);
-    let tour: string = 'pga';
-    try {
-      const params = tourParamSchema.parse({ tour: searchParams.get('tour') ?? undefined });
-      if (params.tour) tour = params.tour;
-    } catch (error) {
-      return jsonError('Invalid tour parameter', 'VALIDATION_ERROR');
-    }
+    const { tour } = getQueryParams(request, tourParamSchema);
     
     // Validate tour parameter
     if (!['pga', 'opp', 'euro'].includes(tour)) {
-      return jsonError(`Invalid tour parameter: ${tour}. Must be one of: pga, opp, euro.`, 'VALIDATION_ERROR');
+      return handleApiError(`Invalid tour parameter: ${tour}. Must be one of: pga, opp, euro.`);
     }
     
     logger.info(`Starting multi-round live stats sync for ${tour.toUpperCase()} tour...`);
@@ -152,7 +145,7 @@ export async function GET(request: Request) {
 
     // Only fetch Euro tour data if tour is 'euro' and handle appropriately
     if (tour === 'euro') {
-      return jsonError('Euro tour data is not supported by DataGolf API. Only PGA and Opposite Field events are supported.', 'NOT_SUPPORTED');
+      return handleApiError('Euro tour data is not supported by DataGolf API. Only PGA and Opposite Field events are supported.');
     }
 
     for (const round of ROUNDS_TO_FETCH) {
@@ -193,7 +186,7 @@ export async function GET(request: Request) {
       errors,
     }, finalMessage + (errors.length > 0 ? ` Errors: ${errors.join(', ')}` : ''));
   } catch (error) {
-    logger.error('Error in live-stats/sync-tour endpoint', { error });
+    logger.error('Error in live-stats/sync-tour endpoint:', error);
     return handleApiError(error);
   }
 }

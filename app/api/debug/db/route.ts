@@ -1,23 +1,23 @@
 import 'next-logger'
 import { logger } from '@/lib/logger'
 import { z } from 'zod'
-import { createSupabaseClient, getQueryParams, handleApiError, jsonSuccess, jsonError } from '@/lib/api-utils'
+import { createSupabaseClient, getQueryParams, handleApiError, jsonSuccess } from '@/lib/api-utils'
 
-const tableEventSchema = z.object({ table: z.string().optional(), event: z.string().optional() })
+const querySchema = z.object({ table: z.string().min(1), event: z.string().optional() });
 
 export async function GET(request: Request) {
   logger.info('Received debug/db request', { url: request.url });
   let params;
   try {
-    params = getQueryParams(request, tableEventSchema)
+    params = getQueryParams(request, querySchema)
   } catch (error) {
     logger.warn('Invalid query parameters', { error });
-    return jsonError('Invalid query parameters', 'VALIDATION_ERROR');
+    return handleApiError('Invalid query parameters');
   }
   const { table, event } = params;
-  if (!table || typeof table !== 'string') {
-    logger.warn('Missing or invalid table parameter', { table });
-    return jsonError('Missing or invalid table parameter', 'VALIDATION_ERROR');
+  if (!table) {
+    logger.warn('Missing or invalid table parameter');
+    return handleApiError('Missing or invalid table parameter');
   }
   try {
     const supabase = createSupabaseClient()
@@ -27,7 +27,7 @@ export async function GET(request: Request) {
       .select('event_id, event_name');
     if (countError) {
       logger.error('DB error on count', { countError });
-      return jsonError(countError.message, 'DB_ERROR');
+      return handleApiError(countError.message);
     }
     // Now get details if event parameter is provided
     let detailData = null;
@@ -48,7 +48,7 @@ export async function GET(request: Request) {
       detailError: detailError ? detailError.message : null
     });
   } catch (error) {
-    logger.error('Error in debug endpoint', { error });
-    return jsonError(error instanceof Error ? error.message : 'Unknown error', 'INTERNAL_ERROR');
+    logger.error('Error in debug/db endpoint:', error);
+    return handleApiError(error);
   }
 }

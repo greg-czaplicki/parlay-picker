@@ -1,25 +1,18 @@
 import 'next-logger'
 import { logger } from '@/lib/logger'
 import { z } from 'zod'
-import { createSupabaseClient, getQueryParams, handleApiError, jsonSuccess, jsonError } from '@/lib/api-utils'
+import { createSupabaseClient, getQueryParams, handleApiError, jsonSuccess } from '@/lib/api-utils'
 
-const eventIdSchema = z.object({ eventId: z.string().optional() })
+const querySchema = z.object({ eventId: z.string().min(1) });
 
 export async function GET(request: Request) {
   logger.info('Received debug/compare-filters request', { url: request.url });
-  let params;
   try {
-    params = getQueryParams(request, eventIdSchema)
-  } catch (error) {
-    logger.warn('Invalid or missing eventId', { error });
-    return jsonError('Invalid or missing eventId', 'VALIDATION_ERROR');
-  }
-  const { eventId } = params;
-  if (!eventId) {
-    logger.warn('eventId is required');
-    return jsonError('eventId is required', 'VALIDATION_ERROR');
-  }
-  try {
+    const { eventId } = getQueryParams(request, querySchema);
+    if (!eventId) {
+      logger.warn('eventId is required');
+      return handleApiError('eventId is required');
+    }
     const supabase = createSupabaseClient()
     // First get the event name from tournaments
     const { data: tournamentData, error: tournamentError } = await supabase
@@ -28,7 +21,7 @@ export async function GET(request: Request) {
       .eq("event_id", parseInt(eventId, 10))
       .single();
     if (tournamentError) {
-      return jsonError(tournamentError.message, 'DB_ERROR');
+      return handleApiError(tournamentError.message);
     }
     const eventName = tournamentData?.event_name;
     // Test different filtering approaches
@@ -70,7 +63,7 @@ export async function GET(request: Request) {
       eventName
     });
   } catch (error) {
-    logger.error('Error in debug/compare-filters endpoint', { error });
-    return handleApiError(error)
+    logger.error('Error in compare-filters endpoint:', error);
+    return handleApiError(error);
   }
 }

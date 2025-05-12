@@ -1,7 +1,5 @@
 import { logger } from '@/lib/logger'
 import { createSupabaseClient, handleApiError, jsonSuccess } from '@/lib/api-utils'
-import { NextResponse } from "next/server";
-import { jsonError } from '@/lib/api-response'
 
 // Define interfaces for the Data Golf API response
 interface LivePlayerData {
