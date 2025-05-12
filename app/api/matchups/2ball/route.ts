@@ -91,10 +91,10 @@ function processMatchups(
     p2_dg_id: m.p2_dg_id,
     p2_player_name: m.p2_player_name,
     ties_rule: m.ties,
-    fanduel_p1_odds: m.odds?.fanduel?.p1 || null,
-    fanduel_p2_odds: m.odds?.fanduel?.p2 || null,
-    draftkings_p1_odds: m.odds?.draftkings?.p1 || null,
-    draftkings_p2_odds: m.odds?.draftkings?.p2 || null,
+    fanduel_p1_odds: typeof m.odds?.fanduel?.p1 === 'number' ? m.odds.fanduel.p1 : null,
+    fanduel_p2_odds: typeof m.odds?.fanduel?.p2 === 'number' ? m.odds.fanduel.p2 : null,
+    draftkings_p1_odds: typeof m.odds?.draftkings?.p1 === 'number' ? m.odds.draftkings.p1 : null,
+    draftkings_p2_odds: typeof m.odds?.draftkings?.p2 === 'number' ? m.odds.draftkings.p2 : null,
     tour: tourCode.toLowerCase(),
   }));
 }
@@ -183,7 +183,15 @@ export async function GET(request: Request) {
     const oppMatchups = oppData ? processMatchups(oppData, eventMapping, "opp", 553) : [];
     const euroMatchups = euroData ? processMatchups(euroData, eventMapping, "euro", 600) : [];
     // Combine all matchups
-    const allMatchups = [...pgaMatchups, ...oppMatchups, ...euroMatchups];
+    let allMatchups = [...pgaMatchups, ...oppMatchups, ...euroMatchups];
+    // Filter to only include matchups with both FanDuel odds present
+    allMatchups = allMatchups.filter(m => typeof m.fanduel_p1_odds === 'number' && typeof m.fanduel_p2_odds === 'number');
+    logger.info('Sample mapped odds:', {
+      sample: allMatchups.slice(0, 3).map(m => ({
+        p1: m.fanduel_p1_odds,
+        p2: m.fanduel_p2_odds
+      }))
+    });
     logger.info('All matchups:', { allMatchups });
     // Log event mapping and event IDs before filtering
     logger.info('EventId from request:', { eventId });
