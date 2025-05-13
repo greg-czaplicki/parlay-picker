@@ -8,6 +8,8 @@ import { toast } from "@/components/ui/use-toast"
 import { createParlay, addParlayPick } from "@/app/actions/matchups"
 import { useRouter } from "next/navigation"
 import { Send } from "lucide-react"
+import { useCreateParlayMutation } from '@/hooks/use-create-parlay-mutation'
+import { useCreateParlayPickMutation } from '@/hooks/use-create-parlay-pick-mutation'
 
 type ParlayProps = {
   selections: Array<{
@@ -19,59 +21,54 @@ type ParlayProps = {
     roundNum?: number
     matchupType: string
   }>
+  userId?: string // TODO: Replace with real user ID from auth
 }
 
-export default function ParlaySummary({ selections }: ParlayProps) {
+export default function ParlaySummary({ selections, userId = 'demo-user-id' }: ParlayProps) {
   const router = useRouter()
   const [stake, setStake] = useState(10)
   const [totalOdds, setTotalOdds] = useState(0)
   const [payout, setPayout] = useState(0)
   const [submitting, setSubmitting] = useState(false)
+  const createParlayMutation = useCreateParlayMutation(userId)
   
   // Function to submit the parlay to the database
   const submitParlay = async () => {
-    // Don't submit if there are no selections
-    if (selections.length === 0) {
+    if (selections.length < 2) {
       toast({
         title: "Cannot Submit Empty Parlay",
-        description: "Add at least one selection to your parlay.",
+        description: "Add at least 2 selections to your parlay.",
         variant: "destructive"
       })
       return
     }
-    
     setSubmitting(true)
-    
     try {
-      // Create a new parlay
       const parlayName = `${selections[0].matchupType.toUpperCase()} Parlay - $${stake}`
-      const { parlay, error } = await createParlay(parlayName)
-      
-      if (error || !parlay) {
-        throw new Error(error || "Failed to create parlay")
-      }
-      
-      // Add each selection to the parlay
+      // Create the parlay
+      const parlay = await createParlayMutation.mutateAsync({ name: parlayName, user_id: userId })
+      // Add each pick
       for (const selection of selections) {
-        await addParlayPick({
-          parlay_id: parlay.id,
-          picked_player_dg_id: Number(selection.id) || 0,
-          picked_player_name: selection.player,
-          matchup_id: selection.matchupId,
-          event_name: selection.eventName,
-          round_num: selection.roundNum || 2
+        // Use the mutation hook for picks
+        // You may want to batch or parallelize these in the future
+        await fetch('/api/parlay-picks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            parlay_id: parlay.id,
+            picked_player_dg_id: Number(selection.id) || 0,
+            picked_player_name: selection.player,
+            matchup_id: selection.matchupId,
+            event_name: selection.eventName,
+            round_num: selection.roundNum || 2
+          })
         })
       }
-      
-      // Show success message
       toast({
         title: "Parlay Submitted",
         description: `Your parlay has been saved with ${selections.length} selections.`,
       })
-      
-      // Redirect to the parlays page
       router.push('/parlays')
-      
     } catch (err) {
       console.error("Error submitting parlay:", err)
       toast({

@@ -194,6 +194,22 @@ export default function MatchupsTable({
   const is3BallMatchup = (matchup: any): matchup is SupabaseMatchupRow => {
     return 'p3_player_name' in matchup && 'p3_dg_id' in matchup;
   };
+
+  // Filter matchups to only those with valid FanDuel odds for all players
+  const filteredMatchups = (matchups ?? []).filter(matchup => {
+    if (is3BallMatchup(matchup)) {
+      return (
+        Number(matchup.fanduel_p1_odds) > 1 &&
+        Number(matchup.fanduel_p2_odds) > 1 &&
+        Number(matchup.fanduel_p3_odds) > 1
+      );
+    } else {
+      return (
+        Number(matchup.fanduel_p1_odds) > 1 &&
+        Number(matchup.fanduel_p2_odds) > 1
+      );
+    }
+  });
     
   return (
     <TooltipProvider>
@@ -218,8 +234,8 @@ export default function MatchupsTable({
                       }
                       {(() => {
                         // Calculate how many matchups have highlighted odds
-                        if (oddsGapThreshold > 0 && (matchups ?? []).length > 0) {
-                          const highlightedCount = (matchups ?? []).reduce((count, matchup) => {
+                        if (oddsGapThreshold > 0 && (filteredMatchups ?? []).length > 0) {
+                          const highlightedCount = (filteredMatchups ?? []).reduce((count, matchup) => {
                             if (is3BallMatchup(matchup)) {
                               // For 3-ball, calculate gaps using the same logic as in the render
                               const players = [
@@ -302,7 +318,7 @@ export default function MatchupsTable({
               </div>
             </div>
           </div>
-          {matchups && (matchups ?? []).length > 0 ? (
+          {filteredMatchups && filteredMatchups.length > 0 ? (
             <div className="rounded-lg overflow-hidden border border-gray-800">
               <Table>
                 <TableHeader className="bg-[#1e1e23]">
@@ -316,7 +332,7 @@ export default function MatchupsTable({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(matchups ?? []).map((matchup, index) => {
+                  {filteredMatchups.map((matchup, index) => {
                     // Generate a stable key - use id if available, otherwise use index and a type identifier
                     const key = matchup.id ? `matchup-${matchup.id}` : `matchup-${index}-${matchup.p1_dg_id}-${matchup.p2_dg_id}`;
                     

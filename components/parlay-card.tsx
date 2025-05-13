@@ -20,6 +20,9 @@ import { toast } from '@/components/ui/use-toast';
 import { Loader2, Check, X } from 'lucide-react';
 import { LiveTournamentStat } from '@/types/definitions';
 import { Trash2 } from 'lucide-react';
+import { useParlayPicksQuery } from '@/hooks/use-parlay-picks-query';
+import { useCreateParlayPickMutation } from '@/hooks/use-create-parlay-pick-mutation';
+import { useRemoveParlayPickMutation, useDeleteParlayMutation } from '@/hooks/use-parlay-pick-mutations';
 
 // Structure to hold player name, matchup, and live stats
 interface ParlayPlayer {
@@ -51,8 +54,6 @@ const formatScore = (score: number | null | undefined): string => {
 interface ParlayCardProps {
     parlayId: number;
     parlayName: string | null;
-    initialPicks: ParlayPick[];
-    initialPicksWithData?: ParlayPickWithData[];
     selectedRound?: number | null; // Allow the parent to specify which round to display
     onDelete?: (parlayId: number) => void; // Callback to notify parent when parlay is deleted
 }
@@ -60,11 +61,21 @@ interface ParlayCardProps {
 export default function ParlayCard({ 
   parlayId,
   parlayName, 
-  initialPicks,
-  initialPicksWithData = [],
   selectedRound = null,
   onDelete
 }: ParlayCardProps) {
+  // Persistent data via React Query
+  const { data: picks = [], isLoading, isError, error } = useParlayPicksQuery(parlayId);
+  const createPickMutation = useCreateParlayPickMutation(parlayId);
+  const removePickMutation = useRemoveParlayPickMutation();
+  const deleteParlayMutation = useDeleteParlayMutation();
+
+  // Ephemeral UI state
+  const [newPlayerName, setNewPlayerName] = useState('');
+  const [isAdding, setIsAdding] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
+
   // Track component mount state
   const isMounted = useRef(true);
   
@@ -74,46 +85,28 @@ export default function ParlayCard({
   // Delete state
   const [isDeleting, setIsDeleting] = useState(false);
   
+  // Filter picks by selectedRound (if set), otherwise show all
+  const filteredPicks = selectedRound == null
+    ? picks
+    : picks.filter((pick: ParlayPick) => pick.round_num === selectedRound);
+
   // Initialize state from props - use preloaded data if available
   const [players, setPlayers] = useState<ParlayPlayer[]>(() => {
-    return initialPicks.map(pick => {
-      // Check if we have preloaded data for this pick
-      const preloadedData = initialPicksWithData.find(data => data.pick.id === pick.id);
-      
-      if (preloadedData) {
-        // Use preloaded data
-        return {
-          name: pick.picked_player_name,
-          pickId: pick.id,
-          matchup: preloadedData.matchup,
-          liveStats: preloadedData.liveStats,
-          isLoadingMatchup: false,
-          isLoadingStats: false,
-          isPersisted: true,
-          matchupError: preloadedData.matchupError,
-          statsError: preloadedData.statsError,
-        };
-      } else {
-        // No preloaded data, use default values
-        return {
-          name: pick.picked_player_name,
-          pickId: pick.id,
-          matchup: null,
-          liveStats: null,
-          isLoadingMatchup: true, // Start loading
-          isLoadingStats: false,
-          isPersisted: true,
-          matchupError: undefined,
-          statsError: undefined,
-        };
-      }
+    return filteredPicks.map((pick: ParlayPick) => {
+      // No preloadedData, just use pick directly
+      return {
+        name: pick.picked_player_name,
+        pickId: pick.id,
+        matchup: null,
+        liveStats: null,
+        isLoadingMatchup: true, // Start loading
+        isLoadingStats: false,
+        isPersisted: true,
+        matchupError: undefined,
+        statsError: undefined,
+      };
     });
   });
-  const [newPlayerName, setNewPlayerName] = useState('');
-  const [isAdding, setIsAdding] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
-  // Removed isLoadingInitialPicks, as data comes via props now
 
   // useEffect to fetch initial picks REMOVED (handled by initial state)
 
@@ -159,7 +152,6 @@ export default function ParlayCard({
     }
   };
   
-  // Function to load stats for a player's matchup
   // Function to load stats by player name when we don't have a matchup
   const loadStatsByPlayerName = async (player: ParlayPlayer, index: number) => {
     if (!isMounted.current) return;
@@ -344,7 +336,7 @@ export default function ParlayCard({
     if (players.length === 0) return;
     
     // Set last refreshed time if we have preloaded data
-    if (initialPicksWithData.length > 0) {
+    if (picks.length > 0) {
       setLastRefreshed(new Date());
     }
     
@@ -477,79 +469,54 @@ export default function ParlayCard({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty dependency array - set up once on mount
 
-  // --- Add Player Handler ---
+  // Add player handler
   const addPlayer = async () => {
     const trimmedName = newPlayerName.trim();
-    if (!trimmedName || players.some(p => p.name.toLowerCase() === trimmedName.toLowerCase())) {
-        toast({
-            title: "Invalid Input",
-            description: trimmedName ? "Player already added." : "Please enter a player name.",
-            variant: "destructive",
-        });
+    if (!trimmedName || picks.some((p: ParlayPick) => p.picked_player_name.toLowerCase() === trimmedName.toLowerCase())) {
+      toast({
+        title: 'Invalid Input',
+        description: trimmedName ? 'Player already added.' : 'Please enter a player name.',
+        variant: 'destructive',
+      });
       return;
     }
-
     setIsAdding(true);
     setNewPlayerName('');
-
     try {
-      // 1. Find the matchup first
+      // TODO: Replace with React Query hook for matchup lookup if available
+      // For now, keep legacy findPlayerMatchup logic
       const { matchup, error: matchupError } = await findPlayerMatchup(trimmedName);
-
       if (matchupError) throw new Error(matchupError);
       if (!matchup) {
-          toast({
-              title: "Matchup Not Found",
-              description: `No 3-ball matchup found for ${trimmedName}.`,
-              variant: "default",
-          });
-          setIsAdding(false);
-          return;
+        toast({ title: 'Matchup Not Found', description: `No 3-ball matchup found for ${trimmedName}.`, variant: 'default' });
+        setIsAdding(false);
+        return;
       }
-
-      // Fix type for pickedPlayerId
       let pickedPlayerId: number | null | undefined;
       if (formatPlayerNameDisplay(matchup.p1_player_name).toLowerCase() === trimmedName.toLowerCase()) pickedPlayerId = matchup.p1_dg_id;
       else if (formatPlayerNameDisplay(matchup.p2_player_name).toLowerCase() === trimmedName.toLowerCase()) pickedPlayerId = matchup.p2_dg_id;
       else if (formatPlayerNameDisplay(matchup.p3_player_name).toLowerCase() === trimmedName.toLowerCase()) pickedPlayerId = matchup.p3_dg_id;
-
-      if (!pickedPlayerId) { // Checks for null or undefined
-          throw new Error("Could not identify picked player ID within the found matchup.");
-      }
-
-      // 2. Add to DB (use parlayId from props)
-      const { pick, error: addPickError } = await addParlayPick({
-          parlay_id: parlayId, // Use prop
-          picked_player_dg_id: pickedPlayerId,
-          picked_player_name: trimmedName,
-          matchup_id: matchup.id,
-          event_name: matchup.event_name,
-          round_num: matchup.round_num,
+      if (!pickedPlayerId) throw new Error('Could not identify picked player ID within the found matchup.');
+      createPickMutation.mutate({
+        parlay_id: parlayId,
+        picked_player_dg_id: pickedPlayerId,
+        picked_player_name: trimmedName,
+        matchup_id: matchup.id,
+        event_name: matchup.event_name,
+        round_num: matchup.round_num,
+      }, {
+        onSuccess: () => {
+          toast({ title: 'Player Added', description: `${trimmedName} added to your parlay.` });
+        },
+        onError: (err: any) => {
+          toast({ title: 'Error Adding Player', description: err?.message || 'Failed to add player.', variant: 'destructive' });
+        },
+        onSettled: () => setIsAdding(false),
       });
-
-      if (addPickError) throw new Error(addPickError);
-      if (!pick) throw new Error("Failed to save pick to database.");
-
-      // 3. Add to local state
-      const newPlayerEntry: ParlayPlayer = {
-        name: trimmedName,
-        pickId: pick.id,
-        matchup: matchup,
-        liveStats: null,
-        isLoadingMatchup: false,
-        isLoadingStats: false, // Stats fetch triggered by useEffect
-        isPersisted: true,
-        matchupError: undefined,
-        statsError: undefined,
-      };
-      setPlayers(prev => [...prev, newPlayerEntry]);
-
     } catch (e) {
-        console.error("Failed to add player:", e);
-        const errorMessage = e instanceof Error ? e.message : "An unexpected error occurred.";
-        toast({ title: "Error Adding Player", description: errorMessage, variant: "destructive" });
-    } finally {
-        setIsAdding(false);
+      setIsAdding(false);
+      const errorMessage = e instanceof Error ? e.message : 'An unexpected error occurred.';
+      toast({ title: 'Error Adding Player', description: errorMessage, variant: 'destructive' });
     }
   };
 
@@ -563,20 +530,16 @@ export default function ParlayCard({
     }
   };
 
-  const removePlayer = async (pickIdToRemove?: number, nameToRemove?: string) => {
-    // Prefer removing by DB id if available
-    if (pickIdToRemove) {
-        const { success, error } = await removeParlayPick(pickIdToRemove);
-        if (success) {
-            setPlayers(prev => prev.filter(p => p.pickId !== pickIdToRemove));
-        } else {
-            toast({ title: "Error Removing Pick", description: error || "Failed to remove pick from database.", variant: "destructive" });
-        }
-    } else if (nameToRemove) {
-        setPlayers(prev => prev.filter(p => p.name !== nameToRemove));
-    } else {
-        console.error("Remove player called without identifier.");
-    }
+  const removePlayer = async (pickIdToRemove?: number) => {
+    if (!pickIdToRemove) return;
+    removePickMutation.mutate(pickIdToRemove, {
+      onSuccess: () => {
+        toast({ title: 'Pick Removed', description: 'Player removed from parlay.' });
+      },
+      onError: (err: any) => {
+        toast({ title: 'Error Removing Pick', description: err?.message || 'Failed to remove pick.', variant: 'destructive' });
+      },
+    });
   };
 
   // Updated render helper to accept optional status style/icon
@@ -596,7 +559,7 @@ export default function ParlayCard({
     
     // Use round 2 scores if this card is showing a round 2 parlay
     const isRound2 = pickRoundNum === 2 || (!pickRoundNum && selectedRound === 2);
-    const displayScore = (liveStat?.today !== undefined) ? formatScore(liveStat?.today) : "-";
+    const displayScore = (liveStat?.today ?? undefined) !== undefined ? formatScore(liveStat?.today ?? undefined) : "-";
 
     // Status information
     let displayThru = ""; // Default to empty
@@ -752,13 +715,15 @@ export default function ParlayCard({
     
     setIsDeleting(true);
     try {
-      const { success, error } = await deleteParlay(parlayId);
-      if (success) {
-        toast({ title: "Parlay Deleted", description: "Parlay has been successfully deleted." });
-        onDelete?.(parlayId); // Notify parent page
-      } else {
-        toast({ title: "Error Deleting Parlay", description: error, variant: "destructive" });
-      }
+      deleteParlayMutation.mutate(parlayId, {
+        onSuccess: () => {
+          toast({ title: 'Parlay Deleted', description: 'Parlay has been deleted.' });
+          if (onDelete) onDelete(parlayId);
+        },
+        onError: (err: any) => {
+          toast({ title: 'Error Deleting Parlay', description: err?.message || 'Failed to delete parlay.', variant: 'destructive' });
+        },
+      });
     } catch (err) {
       console.error("Error deleting parlay:", err);
       toast({ title: "Error Deleting Parlay", description: "An unexpected error occurred.", variant: "destructive" });
@@ -839,7 +804,7 @@ export default function ParlayCard({
                        <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => removePlayer(player.pickId, player.name)}
+                            onClick={() => removePlayer(player.pickId)}
                             className="absolute top-0 right-0 h-5 w-5 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
                             aria-label="Remove pick"
                         >
@@ -890,15 +855,24 @@ export default function ParlayCard({
                                             {stat.position}
                                           </span>
                                         }
-                                        {stat.today !== undefined && 
-                                          <span className={`px-1.5 py-0.5 text-xs rounded ml-1 ${
-                                            stat.today < 0 ? "bg-green-500/20 text-green-300" : 
-                                            stat.today > 0 ? "bg-red-500/20 text-red-300" : 
-                                            "bg-gray-500/20"
-                                          }`}>
-                                            {stat.today === 0 ? "E" : stat.today > 0 ? `+${stat.today}` : stat.today}
-                                          </span>
-                                        }
+                                        {(() => {
+                                          let todayBadge: React.ReactNode = null;
+                                          if (stat) {
+                                            const today = stat.today ?? undefined;
+                                            if (today !== undefined) {
+                                              todayBadge = (
+                                                <span className={`px-1.5 py-0.5 text-xs rounded ml-1 ${
+                                                  today < 0 ? "bg-green-500/20 text-green-300" : 
+                                                  today > 0 ? "bg-red-500/20 text-red-300" : 
+                                                  "bg-gray-500/20"
+                                                }`}>
+                                                  {today === 0 ? "E" : today > 0 ? `+${today}` : today}
+                                                </span>
+                                              );
+                                            }
+                                          }
+                                          return todayBadge;
+                                        })()}
                                       </div>
                                     </div>
                                   ))}

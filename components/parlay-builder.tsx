@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Trash2, Plus, Calculator } from "lucide-react"
-import { useParlay } from "@/context/ParlayContext"
+import { useParlayContext } from "@/context/ParlayContext"
 import ParlaySummary from "./parlay-summary"
 
 export default function ParlayBuilder({ matchupType }: { matchupType: string }) {
@@ -15,16 +15,11 @@ export default function ParlayBuilder({ matchupType }: { matchupType: string }) 
     addSelection,
     removeSelection,
     updateSelection,
-    calculateParlay,
     totalOdds,
     stake: contextStake,
     setStake,
     potentialPayout,
-    avgValueRating,
-    avgConfidenceScore,
-    parlayConfidence,
-    confidencePercent
-  } = useParlay()
+  } = useParlayContext()
   
   // Local state for stake input
   const [localStake, setLocalStake] = useState(contextStake)

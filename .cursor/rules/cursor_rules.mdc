@@ -81,4 +81,23 @@ alwaysApply: true
     queryKey: ['playerData', 'season', dataSource]
     ```
   - Update all hooks and components to follow this pattern
-  - Reference: [lib/query-keys.ts](mdc:lib/query-keys.ts) 
+  - Reference: [lib/query-keys.ts](mdc:lib/query-keys.ts)
+
+- **Use Supabase MCP tools for all DB work**
+  - All schema changes, migrations, and queries must be performed using the Supabase MCP tools (see dev_workflow and taskmaster rules)
+  - Do not use manual SQL, the Supabase dashboard, or other migration tools
+  - Ensures auditability, repeatability, and team visibility
+  - Example:
+    - ✅ DO: Use MCP tool to create/drop tables, add columns, or run migrations
+    - ❌ DON'T: Edit schema directly in the dashboard or run raw SQL outside MCP
+  - Reference: [dev_workflow.mdc](mdc:.cursor/rules/dev_workflow.mdc), [taskmaster.mdc](mdc:.cursor/rules/taskmaster.mdc)
+
+- **Task Master task/subtask workflow**
+  - Always check the current Task Master task/subtask before starting any work
+  - Mark the current subtask as 'in-progress' when you begin
+  - When you believe a task/subtask is complete, provide a clear notification for user review and confirmation before marking as 'done'
+  - Ensures traceability, review, and alignment with project priorities
+  - Example:
+    - ✅ DO: Check and update subtask status in MCP before/after coding
+    - ❌ DON'T: Work on code without referencing or updating the task/subtask status
+  - Reference: [dev_workflow.mdc](mdc:.cursor/rules/dev_workflow.mdc) 

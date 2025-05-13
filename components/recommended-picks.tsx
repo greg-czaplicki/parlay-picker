@@ -8,7 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Plus, AlertCircle } from "lucide-react"
 import { getMatchups, Matchup } from "@/app/actions/matchups"
 import { toast } from "@/components/ui/use-toast"
-import { useParlay, ParlaySelection } from "@/context/ParlayContext"
+import { useParlayContext, ParlaySelection } from "@/context/ParlayContext"
 import { useRecommendedPicksQuery, Player } from "@/hooks/use-recommended-picks-query"
 
 interface RecommendedPicksProps {
@@ -62,7 +62,7 @@ export default function RecommendedPicks({
   eventId, // Selected event ID to filter by
 }: RecommendedPicksProps) {
   // Get the parlay context
-  const { addSelection, removeSelection, selections } = useParlay()
+  const { addSelection, removeSelection, selections } = useParlayContext()
   // Track which players have been added to the parlay
   const [addedPlayers, setAddedPlayers] = useState<Record<string, boolean>>({})
 
