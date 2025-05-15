@@ -5,6 +5,8 @@ import { ParlayCard, ParlayCardProps, ParlayPickDisplay, ParlayPlayerDisplay } f
 import { toast } from '@/components/ui/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useParlaysQuery } from '@/hooks/use-parlays-query';
+import { useQuery } from '@tanstack/react-query';
+import { createBrowserClient } from '@/lib/supabase';
 
 export default function ParlaysClient({ currentRound }: { currentRound: number | null }) {
   // Use the seeded test user until real auth is implemented
@@ -14,44 +16,45 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
   const { data, isLoading, isError, error } = useParlaysQuery(userId);
   const parlays = Array.isArray(data) ? data : [];
 
-  // Derive unique rounds from parlays data
-  const uniqueRounds: number[] = Array.from(
-    new Set(
-      parlays.flatMap((parlay: any) => parlay.round_num).filter((round: number | null) => round !== null)
-    )
-  ).sort((a, b) => Number(a) - Number(b));
+  // --- NEW: Fetch available rounds from matchups (tournament state) ---
+  const { data: availableRounds = [], isLoading: roundsLoading } = useQuery<number[], Error>({
+    queryKey: ['availableRounds'],
+    queryFn: async () => {
+      const supabase = createBrowserClient();
+      const { data, error } = await supabase
+        .from('matchups')
+        .select('round_num')
+        .neq('round_num', null);
+      if (error) throw error;
+      const rounds = Array.from(new Set((data || []).map((row: any) => row.round_num))).sort((a, b) => a - b);
+      return rounds;
+    },
+    staleTime: 60_000,
+  });
 
   // Ephemeral UI state
   const [selectedRound, setSelectedRound] = useState<string>(() => {
-    if (currentRound && uniqueRounds.includes(currentRound)) return String(currentRound);
-    if (uniqueRounds.length > 1) return 'all';
-    if (uniqueRounds.length === 1) return String(uniqueRounds[0]);
+    if (currentRound && availableRounds.includes(currentRound)) return String(currentRound);
+    if (availableRounds.length > 0) return String(availableRounds[0]);
     return '';
   });
 
+  // Keep selectedRound in sync with availableRounds/currentRound
   useEffect(() => {
     if (
-      uniqueRounds.length > 0 &&
-      (!selectedRound || !uniqueRounds.includes(Number(selectedRound)))
+      availableRounds.length > 0 &&
+      (!selectedRound || !availableRounds.includes(Number(selectedRound)))
     ) {
-      if (currentRound && uniqueRounds.includes(currentRound)) {
+      if (currentRound && availableRounds.includes(currentRound)) {
         setSelectedRound(String(currentRound));
-      } else if (uniqueRounds.length > 1) {
-        setSelectedRound('all');
-      } else if (uniqueRounds.length === 1) {
-        setSelectedRound(String(uniqueRounds[0]));
+      } else {
+        setSelectedRound(String(availableRounds[0]));
       }
     }
-  }, [uniqueRounds, currentRound]);
-
-  if (currentRound !== null && !uniqueRounds.includes(currentRound)) {
-    uniqueRounds.push(currentRound);
-    uniqueRounds.sort((a, b) => Number(a) - Number(b));
-  }
+  }, [availableRounds, currentRound]);
 
   // Filter parlays based on selected round
   const filteredParlays = parlays.filter((parlay: any) => {
-    if (selectedRound === 'all') return true;
     if (selectedRound) return String(parlay.round_num) === selectedRound;
     return false;
   });
@@ -87,21 +90,23 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
     userPick: ParlayPlayerDisplay,
     others: ParlayPlayerDisplay[]
   ): 'likely' | 'unlikely' | 'close' {
-    // Find the minimum holes played among all players (to compare fairly)
-    const minHoles = Math.min(userPick.holesPlayed, ...others.map(p => p.holesPlayed));
-    // Get scores for all players at minHoles
-    // (Assume totalScore is up-to-date for the current holes played)
-    const userScore = userPick.totalScore;
-    const bestOtherScore = Math.min(...others.map(p => p.totalScore));
-    const holesLeft = 18 - userPick.holesPlayed;
+    const userScore = userPick.roundScore;
+    const bestOtherScore = Math.min(...others.map(p => p.roundScore));
+    const userHoles = userPick.holesPlayed;
+    const maxOtherHoles = Math.max(...others.map(p => p.holesPlayed));
+    const minOtherHoles = Math.min(...others.map(p => p.holesPlayed));
 
     // If user is behind at this point, it's unlikely
     if (userScore > bestOtherScore) return 'unlikely';
 
+    // If user is finished but any opponent is not, and user is not ahead, it's close
+    if (userHoles === 18 && others.some(p => p.holesPlayed < 18)) {
+      if (userScore < bestOtherScore) return 'likely';
+      return 'close';
+    }
+
     // If user is ahead and has played the same or fewer holes, it's likely
-    if (userScore < bestOtherScore && userPick.holesPlayed <= Math.max(...others.map(p => p.holesPlayed))) {
-      // If lead is 2+ and only a few holes left, very likely
-      if ((bestOtherScore - userScore) >= 2 && holesLeft <= 4) return 'likely';
+    if (userScore < bestOtherScore && userHoles <= minOtherHoles) {
       return 'likely';
     }
 
@@ -117,11 +122,40 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
     // All players must have finished (18 holes)
     const allDone = [userPick, ...others].every(p => p.holesPlayed === 18);
     if (!allDone) return null;
-    const userScore = userPick.totalScore;
-    const bestOtherScore = Math.min(...others.map(p => p.totalScore));
+    const userScore = userPick.roundScore;
+    const bestOtherScore = Math.min(...others.map(p => p.roundScore));
     if (userScore < bestOtherScore) return 'won';
     if (userScore > bestOtherScore) return 'lost';
     return 'tied';
+  }
+
+  // Helper to determine overall parlay status (won/lost/tied/null) for the active round
+  function getParlayFinalStatus(cardProps: ParlayCardProps, activeRound: number | null): 'won' | 'lost' | 'tied' | null {
+    // Only consider picks for the active round
+    const picksForRound = cardProps.picks.filter(
+      pick => cardProps.round === activeRound
+    );
+    if (picksForRound.length === 0) return null;
+
+    const allMatchupsFinal = picksForRound.every(
+      pick => pick.players && pick.players.length > 0 && pick.players.every(p => p.holesPlayed === 18)
+    );
+    if (!allMatchupsFinal) return null;
+
+    let hasLost = false;
+    let hasTied = false;
+    for (const pick of picksForRound) {
+      const userPick = pick.players?.find(p => p.isUserPick);
+      const others = pick.players?.filter(p => !p.isUserPick) ?? [];
+      if (!userPick || others.length === 0) continue;
+      const userScore = userPick.roundScore;
+      const bestOtherScore = Math.min(...others.map(p => p.roundScore));
+      if (userScore > bestOtherScore) hasLost = true;
+      else if (userScore === bestOtherScore) hasTied = true;
+    }
+    if (hasLost) return 'lost';
+    if (hasTied) return 'tied';
+    return 'won';
   }
 
   return (
@@ -129,45 +163,52 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-2xl font-bold">My Active Parlays</h1>
       </div>
-      <div className="flex items-center gap-3">
-        <span className="text-sm text-muted-foreground">Round:</span>
-        <Select value={selectedRound} onValueChange={setSelectedRound}>
-          <SelectTrigger className="w-32">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {uniqueRounds.length === 0 ? (
-              <SelectItem value="none" disabled>No rounds available</SelectItem>
-            ) : uniqueRounds.length > 1 ? (
-              <>
-                <SelectItem value="all">All Rounds</SelectItem>
-                {uniqueRounds.map((round: number) => (
+      {/* Only show round selector if there are any parlays */}
+      {parlays.length > 0 && (
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-muted-foreground">Round:</span>
+          <Select value={selectedRound} onValueChange={setSelectedRound} disabled={roundsLoading || availableRounds.length === 0}>
+            <SelectTrigger className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {availableRounds.length === 0 ? (
+                <SelectItem value="none" disabled>No rounds available</SelectItem>
+              ) : (
+                availableRounds.map((round: number) => (
                   <SelectItem key={String(round)} value={String(round)}>
                     {`Round ${round}`}
                   </SelectItem>
-                ))}
-              </>
-            ) : (
-              uniqueRounds.map((round: number) => (
-                <SelectItem key={String(round)} value={String(round)}>
-                  {`Round ${round}`}
-                </SelectItem>
-              ))
-            )}
-          </SelectContent>
-        </Select>
-      </div>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
       {filteredParlays.length > 0 ? (
         <div className="space-y-8">
           {filteredParlays.map((parlay: any, idx: number) => {
             const cardProps = mapParlayToCardProps(parlay);
             if (!cardProps) return null;
+            const activeRound = selectedRound === 'all' ? null : Number(selectedRound);
+            const parlayStatus = getParlayFinalStatus(cardProps, activeRound);
+            const parlayCardBg =
+              parlayStatus === 'won'
+                ? 'bg-green-800/10 border-green-500'
+                : parlayStatus === 'lost'
+                ? 'bg-red-800/10 border-red-500'
+                : parlayStatus === 'tied'
+                ? 'bg-yellow-800/10 border-yellow-500'
+                : 'bg-[#1e1e23] border-border';
+            // Only show picks for the active round
+            const picksForRound = activeRound === null
+              ? cardProps.picks
+              : cardProps.picks.filter(pick => cardProps.round === activeRound);
             return (
               <div
-                key={parlay.id}
-                className="relative shadow-sm bg-[#1e1e23] p-6 mb-8"
+              key={parlay.id}
+                className={`relative shadow-sm p-6 mb-8 border ${parlayCardBg}`}
               >
-                <div className="absolute left-0 top-0 h-full w-1 bg-primary" />
                 <div className="ml-3">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-2">
                     <div className="text-lg font-bold tracking-tight">
@@ -177,7 +218,7 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
                       Round {cardProps.round} &bull; <span className="font-semibold">${cardProps.amount}</span> to win <span className="font-semibold">${cardProps.payout}</span> &bull; Odds: <span className="font-mono">+{cardProps.odds}</span>
                     </div>
                   </div>
-                  {cardProps.picks.map((pick, mIdx) => {
+                  {picksForRound.map((pick, mIdx) => {
                     if (!pick.players) return null;
                     const userPick = pick.players.find((p: ParlayPlayerDisplay) => p.isUserPick);
                     const others = pick.players.filter((p: ParlayPlayerDisplay) => !p.isUserPick);
@@ -249,7 +290,7 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
                                   <td className="py-2 px-3 font-mono">E</td>
                                   <td className="py-2 px-3 font-mono">{player.holesPlayed}</td>
                                 </tr>
-                              ))}
+          ))}
                             </tbody>
                           </table>
                         </div>
