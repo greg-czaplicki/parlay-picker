@@ -447,7 +447,7 @@ export type PlayerMatchupData = LatestThreeBallMatchupRow | null;
  * @param playerName - The name of the player to search for (ideally "Firstname Lastname").
  * @returns The matchup row if found, otherwise null. Includes an error string if applicable.
  */
-export async function findPlayerMatchup(playerName: string): Promise<{ matchup: PlayerMatchupData; error?: string }> {
+export async function findPlayerMatchup(playerName: string): Promise<{ matchup: PlayerMatchupData & { opponents?: string[] }; error?: string }> {
     logger.info(`[findPlayerMatchup] Searching for player: '${playerName}'`);
     
     let patterns = [];
@@ -493,7 +493,7 @@ export async function findPlayerMatchup(playerName: string): Promise<{ matchup: 
         // If we found a round 2 matchup, return it
         if (round2Matchup && !round2MatchupError) {
             logger.info(`[findPlayerMatchup] Found round 2 matchup for ${playerName}`);
-            return { matchup: round2Matchup };
+            return { matchup: addOpponentsField(round2Matchup, playerName) };
         }
         
         // If not round 2, try looking for the player in any 3-ball matchup
@@ -519,7 +519,7 @@ export async function findPlayerMatchup(playerName: string): Promise<{ matchup: 
                 
             if (historicalMatchup && !historicalError) {
                 logger.info(`[findPlayerMatchup] Found historical 3-ball matchup for ${playerName}`);
-                return { matchup: historicalMatchup };
+                return { matchup: addOpponentsField(historicalMatchup, playerName) };
             }
         }
 
@@ -544,7 +544,7 @@ export async function findPlayerMatchup(playerName: string): Promise<{ matchup: 
                     draftkings_p3_odds: null
                 };
                 logger.info(`[findPlayerMatchup] Found 2-ball matchup for ${playerName}`);
-                return { matchup: converted };
+                return { matchup: addOpponentsField(converted, playerName) };
             }
             
             // Try the historical two ball matchups as a last resort
@@ -566,7 +566,7 @@ export async function findPlayerMatchup(playerName: string): Promise<{ matchup: 
                     draftkings_p3_odds: null
                 };
                 logger.info(`[findPlayerMatchup] Found historical 2-ball matchup for ${playerName}`);
-                return { matchup: converted };
+                return { matchup: addOpponentsField(converted, playerName) };
             }
         }
 
@@ -577,75 +577,90 @@ export async function findPlayerMatchup(playerName: string): Promise<{ matchup: 
 
         if (!matchup) {
             logger.info(`[findPlayerMatchup] No 3-ball or 2-ball matchup found for ${playerName}`);
-            return { matchup: null };
+            return { matchup: null as unknown as PlayerMatchupData & { opponents?: string[] }, error: "No matchup found for the given player" };
         } else {
             logger.info(`[findPlayerMatchup] Found matchup for ${playerName}`);
         }
-        return { matchup };
+        return { matchup: addOpponentsField(matchup, playerName) };
     } catch (error) {
         logger.error(`[findPlayerMatchup] Error during execution for ${playerName}:`, error); // KEEP
-        return { matchup: null, error: error instanceof Error ? error.message : "Unknown error finding player matchup" };
+        return { matchup: null as unknown as PlayerMatchupData & { opponents?: string[] }, error: error instanceof Error ? error.message : "Unknown error finding player matchup" };
     }
+}
+
+// After finding a matchup (round2Matchup, matchup, historicalMatchup, twoBallMatchup, historicalTwoBall),
+// compute opponents and add to the returned object
+function addOpponentsField(matchup: any, playerName: string): any {
+    if (!matchup) return matchup;
+    const allNames = [matchup.p1_player_name, matchup.p2_player_name, matchup.p3_player_name].filter(Boolean);
+    const opponents = allNames.filter((n: string) => n && n.toLowerCase() !== playerName.toLowerCase());
+    return { ...matchup, opponents };
 }
 
 // --- Server Action: getLiveStatsForPlayers ---
 
 /**
- * Fetches the latest live tournament stats for a given list of player IDs.
+ * Fetches the latest live tournament stats for a given list of player IDs and optional round number.
  * @param playerIds - An array of player dg_id values.
+ * @param roundNum - Optional round number to filter stats by.
  * @returns An object containing an array of stats or an error message.
  */
 export async function getLiveStatsForPlayers(
-    playerIds: number[]
+    playerIds: number[],
+    roundNum?: number | null
 ): Promise<{ stats: LiveTournamentStat[]; error?: string }> {
     if (!playerIds || playerIds.length === 0) {
         return { stats: [] };
     }
-    logger.info(`[getLiveStatsForPlayers] Fetching live stats for ${playerIds.length} player IDs:`, playerIds);
+    logger.info(`[getLiveStatsForPlayers] Fetching live stats for ${playerIds.length} player IDs:`, playerIds, roundNum ? `roundNum=${roundNum}` : '');
     const supabase = createServerClient();
 
     try {
-        // Try to get specifically round 2 stats for the current tournament (no event_name filter)
-        const { data: round2Stats, error: round2Error } = await supabase
+        if (roundNum) {
+            // Try to get stats for the requested round
+            const { data: roundStats, error: roundError } = await supabase
+                .from('live_tournament_stats')
+                .select('*')
+                .in('dg_id', playerIds)
+                .eq('round_num', String(roundNum))
+                .returns<LiveTournamentStat[]>();
+            if (roundStats && roundStats.length > 0) {
+                return { stats: roundStats };
+            }
+        }
+        // Fallback: Try round 2, then round 1, then any stats
+        const { data: round2Stats } = await supabase
             .from('live_tournament_stats')
             .select('*')
             .in('dg_id', playerIds)
-            .eq('round_num', '2') // Explicitly fetch Round 2 stats
+            .eq('round_num', '2')
             .returns<LiveTournamentStat[]>();
-        
         if (round2Stats && round2Stats.length > 0) {
             return { stats: round2Stats };
         }
-        
-        // Try to get Round 1 stats (no event_name filter)
-        const { data: round1Stats, error: round1Error } = await supabase
+        const { data: round1Stats } = await supabase
             .from('live_tournament_stats')
             .select('*')
             .in('dg_id', playerIds)
-            .eq('round_num', '1') // Try Round 1 stats
+            .eq('round_num', '1')
             .returns<LiveTournamentStat[]>();
-        
         if (round1Stats && round1Stats.length > 0) {
             return { stats: round1Stats };
         }
-        
         // If we don't find stats for the current round, get any stats for these players
         const { data, error } = await supabase
             .from('live_tournament_stats')
             .select('*')
             .in('dg_id', playerIds)
-            .order('data_golf_updated_at', { ascending: false }) // Get most recent stats first
+            .order('data_golf_updated_at', { ascending: false })
             .returns<LiveTournamentStat[]>();
-
         if (error) {
-            logger.error(`[getLiveStatsForPlayers] Supabase error fetching live stats for IDs [${playerIds.join(', ')}]:`, error); // KEEP
+            logger.error(`[getLiveStatsForPlayers] Supabase error fetching live stats for IDs [${playerIds.join(', ')}]:`, error);
             throw new Error(`Database error fetching live stats: ${error.message}`);
         }
-
         return { stats: data || [] };
-
     } catch (error) {
-        logger.error(`[getLiveStatsForPlayers] Error during execution for IDs [${playerIds.join(', ')}]:`, error); // KEEP
+        logger.error(`[getLiveStatsForPlayers] Error during execution for IDs [${playerIds.join(', ')}]:`, error);
         return { stats: [], error: error instanceof Error ? error.message : "Unknown error fetching live stats" };
     }
 }
@@ -842,7 +857,8 @@ export type ParlayPickWithData = {
 };
 
 export async function batchLoadParlayPicksData(
-    picks: ParlayPick[]
+    picks: ParlayPick[],
+    roundNum?: number | null
 ): Promise<{ picksWithData: ParlayPickWithData[]; error?: string }> {
     logger.info(`[batchLoadParlayPicksData] Loading data for ${picks.length} picks`);
     
@@ -875,26 +891,22 @@ export async function batchLoadParlayPicksData(
                 ].filter((id): id is number => id !== null);
                 
                 if (playerIds.length > 0) {
-                    const { stats, error: statsError } = await getLiveStatsForPlayers(playerIds);
-                    
+                    const { stats, error: statsError } = await getLiveStatsForPlayers(playerIds, roundNum);
                     // Convert stats array to map for easy lookup
                     // Group stats by player ID - prioritize round 2 stats
                     const statsMap: Record<number, LiveTournamentStat> = {};
-                    
                     // First look for round 2 stats for each player
                     (stats || []).forEach(stat => {
-                        if (stat.dg_id && String(stat.round_num) === '2') {
+                        if (stat.dg_id && String(stat.round_num) === String(roundNum ?? '2')) {
                             statsMap[stat.dg_id] = stat;
                         }
                     });
-                    
                     // Fill in any players without round 2 stats
                     (stats || []).forEach(stat => {
                         if (stat.dg_id && !statsMap[stat.dg_id]) {
                             statsMap[stat.dg_id] = stat;
                         }
                     });
-                    
                     pickResult.liveStats = statsMap;
                     pickResult.statsError = statsError;
                 }
