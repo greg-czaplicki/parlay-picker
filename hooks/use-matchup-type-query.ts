@@ -16,17 +16,19 @@ export function useMatchupTypeQuery(eventId: number | null) {
       const supabase = createBrowserClient();
       // Check for 3-ball matchups
       const { data: threeBall, error: err3 } = await supabase
-        .from('latest_three_ball_matchups')
+        .from('matchups')
         .select('id')
         .eq('event_id', eventId)
+        .eq('type', '3ball')
         .limit(1);
       if (err3) throw err3;
       if (threeBall && threeBall.length > 0) return '3ball';
       // Check for 2-ball matchups
       const { data: twoBall, error: err2 } = await supabase
-        .from('latest_two_ball_matchups')
+        .from('matchups')
         .select('id')
         .eq('event_id', eventId)
+        .eq('type', '2ball')
         .limit(1);
       if (err2) throw err2;
       if (twoBall && twoBall.length > 0) return '2ball';

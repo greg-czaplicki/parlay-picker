@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
   }
   // Fetch matchups and players for all picks
   const matchupIds = picks.map((pick: any) => pick.matchup_id).filter(Boolean)
-  const playerIds = picks.map((pick: any) => pick.picked_player_id).filter(Boolean)
+  const playerDgIds = picks.map((pick: any) => pick.picked_player_id).filter(Boolean)
   let matchups = []
   let players = []
   if (matchupIds.length > 0) {
@@ -80,11 +80,11 @@ export async function GET(req: NextRequest) {
     if (matchupsError) return NextResponse.json({ error: matchupsError.message }, { status: 400 })
     matchups = matchupsData
   }
-  if (playerIds.length > 0) {
+  if (playerDgIds.length > 0) {
     const { data: playersData, error: playersError } = await supabase
       .from('players')
       .select('*')
-      .in('id', playerIds)
+      .in('dg_id', playerDgIds)
     if (playersError) return NextResponse.json({ error: playersError.message }, { status: 400 })
     players = playersData
   }

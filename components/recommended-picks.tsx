@@ -5,11 +5,13 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Plus, AlertCircle } from "lucide-react"
+import { Plus, AlertCircle, Info } from "lucide-react"
 import { getMatchups, Matchup } from "@/app/actions/matchups"
 import { toast } from "@/components/ui/use-toast"
 import { useParlayContext, ParlaySelection } from "@/context/ParlayContext"
 import { useRecommendedPicksQuery, Player } from "@/hooks/use-recommended-picks-query"
+import { useParlaysQuery } from '@/hooks/use-parlays-query'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 interface RecommendedPicksProps {
   matchupType: string
@@ -68,6 +70,13 @@ export default function RecommendedPicks({
 
   // Use React Query for recommendations
   const { data: recommendations, isLoading, isError, error } = useRecommendedPicksQuery(eventId ?? null, matchupType as "2ball" | "3ball", bookmaker, oddsGapPercentage, limit)
+
+  // All user parlays for indicator logic
+  const userId = '00000000-0000-0000-0000-000000000001';
+  const { data: allParlays = [] } = useParlaysQuery(userId);
+  const allParlayPicks = (allParlays ?? []).flatMap((parlay: any) => parlay.picks || []);
+  const isPlayerInAnyParlay = (playerName: string) =>
+    allParlayPicks.some((pick: any) => (pick.picked_player_name || '').toLowerCase() === playerName.toLowerCase());
 
   // Function to add a player to the parlay
   const addToParlay = (selection: ParlaySelection, playerId: number) => {
@@ -218,52 +227,62 @@ export default function RecommendedPicks({
                   </div>
                 </div>
                 {(() => {
-                  // Check if this player is already in the parlay
-                  const { inParlay, selectionId } = isPlayerInParlay(player.id, player.name)
-                  
-                  return inParlay ? (
-                    <Button
-                      size="sm"
-                      variant="default"
-                      className="w-full mt-2 bg-primary border-none hover:bg-primary/90 text-white"
-                      onClick={() => {
-                        if (!player.id || !player.name || !selectionId) return;
-                        removeFromParlay(selectionId, player.id, player.name);
-                      }}
-                    >
-                      ✓ Added to Parlay
-                    </Button>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="w-full mt-2 bg-[#2a2a35] border-none hover:bg-[#34343f] text-white"
-                      onClick={() => {
-                        if (!player.id || !player.name) return;
-                        
-                        // Convert decimal odds to American odds if needed
-                        const americanOdds = convertToAmericanOdds(player.odds);
-                        
-                        // Add player to parlay context
-                        addToParlay({
-                          id: Date.now().toString(),
-                          matchupType: matchupType,
-                          group: player.eventName || 'Unknown Event',
-                          player: player.name,
-                          odds: americanOdds,
-                          valueRating: player.valueRating || 7.5,
-                          confidenceScore: player.confidenceScore || 75,
-                          matchupId: player.matchupId,
-                          eventName: player.eventName,
-                          roundNum: player.roundNum || 2
-                        }, player.id);
-                      }}
-                    >
-                      <Plus size={16} className="mr-1" /> Add to Parlay
-                    </Button>
+                  const { inParlay, selectionId } = isPlayerInParlay(player.id, player.name);
+                  return (
+                    <div className="flex items-center gap-2 mt-2">
+                      {inParlay ? (
+                        <Button
+                          size="sm"
+                          variant="default"
+                          className="w-full bg-primary border-none hover:bg-primary/90 text-white"
+                          onClick={() => {
+                            if (!player.id || !player.name || !selectionId) return;
+                            removeFromParlay(selectionId, player.id, player.name);
+                          }}
+                        >
+                          ✓ Added to Parlay
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full bg-[#2a2a35] border-none hover:bg-[#34343f] text-white"
+                          onClick={() => {
+                            if (!player.id || !player.name) return;
+                            // Convert decimal odds to American odds if needed
+                            const americanOdds = convertToAmericanOdds(player.odds);
+                            // Add player to parlay context
+                            addToParlay({
+                              id: Date.now().toString(),
+                              matchupType: matchupType,
+                              group: player.eventName || 'Unknown Event',
+                              player: player.name,
+                              odds: americanOdds,
+                              valueRating: player.valueRating || 7.5,
+                              confidenceScore: player.confidenceScore || 75,
+                              matchupId: player.matchupId,
+                              eventName: player.eventName,
+                              roundNum: player.roundNum || 2
+                            }, player.id);
+                          }}
+                        >
+                          <Plus size={16} className="mr-1" /> Add to Parlay
+                        </Button>
+                      )}
+                      {/* Indicator for player used in any other parlay */}
+                      {!inParlay && isPlayerInAnyParlay(player.name) && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="text-blue-400 inline-block align-middle" size={16} />
+                            </TooltipTrigger>
+                            <TooltipContent>Already used in another parlay</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                    </div>
                   );
                 })()}
-                
               </div>
             ))}
           </div>

@@ -5,15 +5,13 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { toast } from "@/components/ui/use-toast"
-import { createParlay, addParlayPick } from "@/app/actions/matchups"
 import { useRouter } from "next/navigation"
 import { Send } from "lucide-react"
 import { useCreateParlayMutation } from '@/hooks/use-create-parlay-mutation'
-import { useCreateParlayPickMutation } from '@/hooks/use-create-parlay-pick-mutation'
 
 type ParlayProps = {
   selections: Array<{
-    id: string
+    id: number // dg_id
     odds: number
     player: string
     matchupId?: number
@@ -24,13 +22,30 @@ type ParlayProps = {
   userId?: string // TODO: Replace with real user ID from auth
 }
 
-export default function ParlaySummary({ selections, userId = 'demo-user-id' }: ParlayProps) {
+export default function ParlaySummary({ selections, userId = '00000000-0000-0000-0000-000000000001' }: ParlayProps) {
   const router = useRouter()
   const [stake, setStake] = useState(10)
   const [totalOdds, setTotalOdds] = useState(0)
   const [payout, setPayout] = useState(0)
   const [submitting, setSubmitting] = useState(false)
   const createParlayMutation = useCreateParlayMutation(userId)
+  
+  // Add these helpers at the top of the component:
+  const toDecimalOdds = (odds: number) => {
+    // If odds look like decimal (e.g., 1.8, 2.05), just return
+    if (odds > 1 && odds < 20) return odds;
+    // Otherwise, treat as American
+    return odds > 0 ? (odds / 100) + 1 : (100 / Math.abs(odds)) + 1;
+  };
+  
+  // Add a helper function at the top of the component:
+  const formatAmericanOdds = (odds: number) => {
+    if (isNaN(odds)) return '—';
+    if (odds >= 2) return `+${Math.round((odds - 1) * 100)}`;
+    if (odds > 1) return `${Math.round(-100 / (odds - 1))}`;
+    // If already American odds, just show as is
+    return odds > 0 ? `+${odds}` : odds.toString();
+  };
   
   // Function to submit the parlay to the database
   const submitParlay = async () => {
@@ -45,25 +60,22 @@ export default function ParlaySummary({ selections, userId = 'demo-user-id' }: P
     setSubmitting(true)
     try {
       const parlayName = `${selections[0].matchupType.toUpperCase()} Parlay - $${stake}`
-      // Create the parlay
-      const parlay = await createParlayMutation.mutateAsync({ name: parlayName, user_id: userId })
-      // Add each pick
-      for (const selection of selections) {
-        // Use the mutation hook for picks
-        // You may want to batch or parallelize these in the future
-        await fetch('/api/parlay-picks', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            parlay_id: parlay.id,
-            picked_player_dg_id: Number(selection.id) || 0,
-            picked_player_name: selection.player,
-            matchup_id: selection.matchupId,
-            event_name: selection.eventName,
-            round_num: selection.roundNum || 2
-          })
-        })
-      }
+      // Prepare picks array for API
+      const picks = selections.map(s => ({
+        matchup_id: s.matchupId,
+        picked_player_id: s.id,
+        picked_player_name: s.player,
+      }))
+      // Create the parlay with all required fields
+      await createParlayMutation.mutateAsync({
+        name: parlayName,
+        user_id: userId,
+        amount: stake,
+        odds: totalOdds,
+        payout,
+        round_num: selections[0]?.roundNum || null,
+        picks,
+      })
       toast({
         title: "Parlay Submitted",
         description: `Your parlay has been saved with ${selections.length} selections.`,
@@ -90,10 +102,7 @@ export default function ParlaySummary({ selections, userId = 'demo-user-id' }: P
     }
     
     // Convert American odds to decimal
-    const decimalOdds = selections.map(selection => {
-      const odds = Number(selection.odds)
-      return odds > 0 ? (odds / 100) + 1 : (100 / Math.abs(odds)) + 1
-    })
+    const decimalOdds = selections.map(selection => toDecimalOdds(Number(selection.odds)))
     
     // Multiply to get total odds
     const totalDecimal = decimalOdds.reduce((acc, curr) => acc * curr, 1)
@@ -121,7 +130,7 @@ export default function ParlaySummary({ selections, userId = 'demo-user-id' }: P
             <div className="text-sm">
               {selections.map((s, i) => (
                 <div key={s.id} className="py-1">
-                  {s.player} <span className="float-right text-primary">{s.odds > 0 ? `+${s.odds}` : s.odds}</span>
+                  {s.player} <span className="float-right text-primary">{formatAmericanOdds(s.odds)}</span>
                 </div>
               ))}
               {selections.length === 0 && <div className="text-gray-400">No selections yet</div>}

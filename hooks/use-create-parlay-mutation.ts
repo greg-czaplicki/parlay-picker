@@ -4,6 +4,15 @@ import { queryKeys } from '@/lib/query-keys'
 interface CreateParlayInput {
   name: string
   user_id: string
+  amount: number
+  odds: number
+  payout: number
+  round_num: number | null
+  picks: Array<{
+    matchup_id?: number
+    picked_player_id: number
+    picked_player_name: string
+  }>
 }
 
 export function useCreateParlayMutation(userId: string) {

@@ -14,7 +14,7 @@ export interface Player {
   valueRating: number;
   confidenceScore: number;
   isRecommended: boolean;
-  matchupId?: number;
+  matchupId: number;
   eventName?: string;
   roundNum?: number;
 }
@@ -29,7 +29,7 @@ interface UseRecommendedPicksQueryResult {
 export function useRecommendedPicksQuery(
   eventId: number | null,
   matchupType: "2ball" | "3ball",
-  bookmaker?: string,
+  bookmaker: string = "fanduel",
   oddsGapPercentage: number = 40,
   limit: number = 10
 ): UseRecommendedPicksQueryResult {
@@ -38,24 +38,25 @@ export function useRecommendedPicksQuery(
     enabled: !!eventId,
     queryFn: async () => {
       const endpoint = eventId
-        ? `/api/matchups/${matchupType}?eventId=${eventId}`
-        : `/api/matchups/${matchupType}`;
+        ? `/api/matchups?type=${matchupType}&event_id=${eventId}`
+        : `/api/matchups?type=${matchupType}`;
       const response = await fetch(endpoint);
       if (!response.ok) throw new Error(await response.text());
       const data = await response.json();
-      if (!data.success) throw new Error(data.error || 'API returned success: false');
-      const matchupsFromApi = data.matchups || [];
-      // Transform API response into Player[]
-      const players: Player[] = [];
-      for (const apiMatchup of matchupsFromApi) {
+      let matchupsData: any[] = [];
+      if (data && data.matchups && Array.isArray(data.matchups)) {
+        matchupsData = data.matchups;
+      }
+      let players: Player[] = [];
+      for (const apiMatchup of matchupsData) {
         if (!apiMatchup || typeof apiMatchup !== 'object') continue;
         if (matchupType === "3ball") {
-          if (!apiMatchup.p1_player_name || !apiMatchup.p2_player_name || !apiMatchup.p3_player_name) continue;
+          if (!apiMatchup.player1_name || !apiMatchup.player2_name || !apiMatchup.player3_name) continue;
           players.push(
             {
-              id: apiMatchup.p1_dg_id || 0,
-              name: apiMatchup.p1_player_name,
-              odds: bookmaker === "fanduel" ? apiMatchup.fanduel_p1_odds : apiMatchup.draftkings_p1_odds,
+              id: apiMatchup.player1_id || 0,
+              name: apiMatchup.player1_name,
+              odds: apiMatchup.odds1,
               sgTotal: 0,
               valueRating: 0,
               confidenceScore: 0,
@@ -65,9 +66,9 @@ export function useRecommendedPicksQuery(
               roundNum: apiMatchup.round_num
             },
             {
-              id: apiMatchup.p2_dg_id || 0,
-              name: apiMatchup.p2_player_name,
-              odds: bookmaker === "fanduel" ? apiMatchup.fanduel_p2_odds : apiMatchup.draftkings_p2_odds,
+              id: apiMatchup.player2_id || 0,
+              name: apiMatchup.player2_name,
+              odds: apiMatchup.odds2,
               sgTotal: 0,
               valueRating: 0,
               confidenceScore: 0,
@@ -77,9 +78,9 @@ export function useRecommendedPicksQuery(
               roundNum: apiMatchup.round_num
             },
             {
-              id: apiMatchup.p3_dg_id || 0,
-              name: apiMatchup.p3_player_name,
-              odds: bookmaker === "fanduel" ? apiMatchup.fanduel_p3_odds : apiMatchup.draftkings_p3_odds,
+              id: apiMatchup.player3_id || 0,
+              name: apiMatchup.player3_name,
+              odds: apiMatchup.odds3,
               sgTotal: 0,
               valueRating: 0,
               confidenceScore: 0,
@@ -91,12 +92,12 @@ export function useRecommendedPicksQuery(
           );
         } else {
           // 2ball
-          if (!apiMatchup.p1_player_name || !apiMatchup.p2_player_name) continue;
+          if (!apiMatchup.player1_name || !apiMatchup.player2_name) continue;
           players.push(
             {
-              id: apiMatchup.p1_dg_id || 0,
-              name: apiMatchup.p1_player_name,
-              odds: bookmaker === "fanduel" ? apiMatchup.fanduel_p1_odds : apiMatchup.draftkings_p1_odds,
+              id: apiMatchup.player1_id || 0,
+              name: apiMatchup.player1_name,
+              odds: apiMatchup.odds1,
               sgTotal: 0,
               valueRating: 0,
               confidenceScore: 0,
@@ -106,9 +107,9 @@ export function useRecommendedPicksQuery(
               roundNum: apiMatchup.round_num
             },
             {
-              id: apiMatchup.p2_dg_id || 0,
-              name: apiMatchup.p2_player_name,
-              odds: bookmaker === "fanduel" ? apiMatchup.fanduel_p2_odds : apiMatchup.draftkings_p2_odds,
+              id: apiMatchup.player2_id || 0,
+              name: apiMatchup.player2_name,
+              odds: apiMatchup.odds2,
               sgTotal: 0,
               valueRating: 0,
               confidenceScore: 0,

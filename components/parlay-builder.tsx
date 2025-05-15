@@ -58,6 +58,13 @@ export default function ParlayBuilder({ matchupType }: { matchupType: string }) 
     })
   }
 
+  const formatAmericanOdds = (odds: number) => {
+    if (isNaN(odds)) return '-';
+    if (odds >= 2) return `+${Math.round((odds - 1) * 100)}`;
+    if (odds > 1) return `${Math.round(-100 / (odds - 1))}`;
+    // If already American odds, just show as is
+    return odds > 0 ? `+${odds}` : odds.toString();
+  };
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -98,7 +105,7 @@ export default function ParlayBuilder({ matchupType }: { matchupType: string }) 
                   <div>
                     <label className="text-sm text-gray-400 mb-1 block">Odds</label>
                     <div className="bg-[#2a2a35] px-3 py-2 rounded text-sm">
-                      {selection.odds > 0 ? `+${selection.odds}` : selection.odds}
+                      {formatAmericanOdds(selection.odds)}
                     </div>
                   </div>
                 </div>

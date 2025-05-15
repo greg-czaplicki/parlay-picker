@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Loader2, AlertTriangle, DollarSign, Sliders, Trophy } from "lucide-react"
+import { Loader2, AlertTriangle, DollarSign, Sliders, Trophy, CheckCircle, Info, PlusCircle } from "lucide-react"
 import { createBrowserClient } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import {
@@ -32,48 +32,50 @@ import {
 import { detect3BallDivergence } from "@/lib/utils"
 import { useMatchupsQuery } from "@/hooks/use-matchups-query"
 import { usePlayerStatsQuery, PlayerStat } from "@/hooks/use-player-stats-query"
+import { useParlayContext } from '@/context/ParlayContext'
+import { useParlaysQuery } from '@/hooks/use-parlays-query'
 
 // Only 3-ball matchups
 interface SupabaseMatchupRow {
   id: number;
-  event_name: string;
+  event_id: number;
+  event_name?: string;
   round_num: number;
-  data_golf_update_time: string;
-  p1_dg_id: number;
-  p1_player_name: string;
-  p2_dg_id: number;
-  p2_player_name: string;
-  p3_dg_id: number;
-  p3_player_name: string;
-  ties_rule: string;
-  fanduel_p1_odds: number | null;
-  fanduel_p2_odds: number | null;
-  fanduel_p3_odds: number | null;
-  draftkings_p1_odds: number | null;
-  draftkings_p2_odds: number | null;
-  draftkings_p3_odds: number | null;
-  datagolf_p1_odds?: number | null;
-  datagolf_p2_odds?: number | null;
-  datagolf_p3_odds?: number | null;
-  odds?: any;
+  created_at: string;
+  player1_id: number;
+  player1_name: string;
+  player2_id: number;
+  player2_name: string;
+  player3_id?: number | null;
+  player3_name?: string | null;
+  odds1?: number | null;
+  odds2?: number | null;
+  odds3?: number | null;
+  draftkings_p1_odds?: number | null;
+  draftkings_p2_odds?: number | null;
+  draftkings_p3_odds?: number | null;
+  dg_odds1?: number | null;
+  dg_odds2?: number | null;
+  dg_odds3?: number | null;
 }
 
 // Interface for 2-ball matchups
 interface SupabaseMatchupRow2Ball {
   id: number;
   event_id: number;
-  event_name: string;
+  event_name?: string;
   round_num: number;
-  data_golf_update_time: string;
-  p1_dg_id: number;
-  p1_player_name: string;
-  p2_dg_id: number;
-  p2_player_name: string;
-  ties_rule: string;
-  fanduel_p1_odds: number | null;
-  fanduel_p2_odds: number | null;
-  draftkings_p1_odds: number | null;
-  draftkings_p2_odds: number | null;
+  created_at: string;
+  player1_id: number;
+  player1_name: string;
+  player2_id: number;
+  player2_name: string;
+  odds1?: number | null;
+  odds2?: number | null;
+  draftkings_p1_odds?: number | null;
+  draftkings_p2_odds?: number | null;
+  dg_odds1?: number | null;
+  dg_odds2?: number | null;
 }
 
 // Interface for live tournament stats
@@ -91,6 +93,16 @@ interface LiveTournamentStat {
 // Combined type for both matchup types
 type MatchupRow = SupabaseMatchupRow | SupabaseMatchupRow2Ball;
 
+// Helper type guard for SupabaseMatchupRow
+function isSupabaseMatchupRow(matchup: MatchupRow): matchup is SupabaseMatchupRow {
+  return 'player3_id' in matchup;
+}
+
+// Helper type guard for SupabaseMatchupRow2Ball
+function isSupabaseMatchupRow2Ball(matchup: MatchupRow): matchup is SupabaseMatchupRow2Ball {
+  return !('player3_id' in matchup);
+}
+
 export default function MatchupsTable({ 
   eventId, 
   matchupType = "3ball" 
@@ -106,15 +118,24 @@ export default function MatchupsTable({
   // Use React Query for matchups
   const { data: matchups, isLoading, isError, error, lastUpdateTime } = useMatchupsQuery(eventId, matchupType);
 
-  // Extract all unique player IDs from matchups for stats
+  // Use type guards before accessing fields
   const playerIds = (matchups ?? []).flatMap(m => {
-    const ids = [m.p1_dg_id, m.p2_dg_id];
-    if ('p3_dg_id' in m && m.p3_dg_id) ids.push(m.p3_dg_id);
-    return ids;
+    if (isSupabaseMatchupRow(m)) {
+      const ids = [m.player1_id ?? 0, m.player2_id ?? 0];
+      if (m.player3_id != null) ids.push(m.player3_id);
+      return ids.filter((id): id is number => typeof id === 'number' && id > 0);
+    } else if (isSupabaseMatchupRow2Ball(m)) {
+      const ids = [m.player1_id ?? 0, m.player2_id ?? 0];
+      return ids.filter((id): id is number => typeof id === 'number' && id > 0);
+    }
+    return [];
   });
 
   // Use React Query for player stats (assume roundNum = 1 for now, or extract from matchups if needed)
-  const roundNum = (matchups ?? []).length > 0 ? (matchups ?? [])[0].round_num : 1;
+  const roundNum = (matchups && matchups.length > 0 && 
+    (isSupabaseMatchupRow(matchups[0]) || isSupabaseMatchupRow2Ball(matchups[0]))) 
+    ? matchups[0].round_num : 1;
+  
   const { data: playerStats, isLoading: loadingStats, isError: isErrorStats, error: errorStats } = usePlayerStatsQuery(eventId, roundNum, playerIds);
 
   // After fetching playerStats (which is PlayerStat[] | undefined), create a lookup object:
@@ -135,7 +156,7 @@ export default function MatchupsTable({
   };
 
   const formatPlayerName = (name: string): string => {
-    return name.includes(",") ? name.split(",").reverse().join(" ").trim() : name;
+    return name.includes(",") ? name.split(",").reverse().join(" ").trim() : name ?? "";
   };
 
   // Calculate if the odds gap exceeds the threshold
@@ -156,6 +177,19 @@ export default function MatchupsTable({
     // where the player's odds are notably different from the second-best player
     return diff >= oddsGapThreshold;
   };
+
+  // Parlay context and all user parlays for indicator logic
+  const userId = '00000000-0000-0000-0000-000000000001';
+  const { selections, addSelection, removeSelection } = useParlayContext();
+  const { data: allParlays = [] } = useParlaysQuery(userId);
+  // Flatten all picks from all parlays
+  const allParlayPicks = (allParlays ?? []).flatMap((parlay: any) => parlay.picks || []);
+  // Helper to check if a player is in the current parlay
+  const isPlayerInCurrentParlay = (playerName: string) =>
+    selections.some(s => s.player.toLowerCase() === playerName.toLowerCase());
+  // Helper to check if a player is in any other parlay
+  const isPlayerInAnyParlay = (playerName: string) =>
+    allParlayPicks.some((pick: any) => (pick.picked_player_name || '').toLowerCase() === playerName.toLowerCase());
 
   if (isLoading) {
     return (
@@ -183,25 +217,24 @@ export default function MatchupsTable({
     );
   }
 
-  // Detect if a matchup is a 3-ball matchup
-  const is3BallMatchup = (matchup: any): matchup is SupabaseMatchupRow => {
-    return 'p3_player_name' in matchup && 'p3_dg_id' in matchup;
-  };
+  // This function is redundant since we already have isSupabaseMatchupRow
+  // Using the existing type guard throughout the code instead
 
   // Filter matchups to only those with valid FanDuel odds for all players
   const filteredMatchups = (matchups ?? []).filter(matchup => {
-    if (is3BallMatchup(matchup)) {
+    if (isSupabaseMatchupRow(matchup)) {
       return (
-        Number(matchup.fanduel_p1_odds) > 1 &&
-        Number(matchup.fanduel_p2_odds) > 1 &&
-        Number(matchup.fanduel_p3_odds) > 1
+        Number(matchup.odds1 ?? 0) > 1 &&
+        Number(matchup.odds2 ?? 0) > 1 &&
+        Number(matchup.odds3 ?? 0) > 1
       );
-    } else {
+    } else if (isSupabaseMatchupRow2Ball(matchup)) {
       return (
-        Number(matchup.fanduel_p1_odds) > 1 &&
-        Number(matchup.fanduel_p2_odds) > 1
+        Number(matchup.odds1 ?? 0) > 1 &&
+        Number(matchup.odds2 ?? 0) > 1
       );
     }
+    return false;
   });
     
   return (
@@ -212,7 +245,11 @@ export default function MatchupsTable({
             <div className="flex justify-between items-center">
               <div>
                 <h2 className="text-xl font-bold">{matchupType === "3ball" ? "3-Ball" : "2-Ball"} Matchups</h2>
-                {matchups && matchups.length > 0 && <p className="text-sm text-gray-400">Event: {matchups[0].event_name}</p>}
+                {matchups && matchups.length > 0 && (
+                  <p className="text-sm text-gray-400">
+                    Event: {isSupabaseMatchupRow(matchups[0]) || isSupabaseMatchupRow2Ball(matchups[0]) ? matchups[0].event_name : ""}
+                  </p>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <Dialog open={showFiltersDialog} onOpenChange={setShowFiltersDialog}>
@@ -229,12 +266,11 @@ export default function MatchupsTable({
                         // Calculate how many matchups have highlighted odds
                         if (oddsGapThreshold > 0 && (filteredMatchups ?? []).length > 0) {
                           const highlightedCount = (filteredMatchups ?? []).reduce((count, matchup) => {
-                            if (is3BallMatchup(matchup)) {
-                              // For 3-ball, calculate gaps using the same logic as in the render
+                            if (isSupabaseMatchupRow(matchup)) {
                               const players = [
-                                { id: 'p1', odds: matchup.fanduel_p1_odds },
-                                { id: 'p2', odds: matchup.fanduel_p2_odds },
-                                { id: 'p3', odds: matchup.fanduel_p3_odds }
+                                { id: 'p1', odds: matchup.odds1 },
+                                { id: 'p2', odds: matchup.odds2 },
+                                { id: 'p3', odds: matchup.odds3 }
                               ].filter(p => p.odds && p.odds > 1);
                               
                               if (players.length >= 3) {
@@ -243,15 +279,14 @@ export default function MatchupsTable({
                                 const otherPlayers = players.slice(1);
                                 
                                 const hasGapAgainstAll = otherPlayers.every(other => 
-                                  hasSignificantOddsGap(favorite.odds, other.odds)
+                                  hasSignificantOddsGap(favorite.odds ?? null, other.odds ?? null)
                                 );
                                 
                                 if (hasGapAgainstAll) count++;
                               }
-                            } else {
-                              // For 2-ball matchups
-                              const fdP1Odds = Number(matchup.fanduel_p1_odds) || 0;
-                              const fdP2Odds = Number(matchup.fanduel_p2_odds) || 0;
+                            } else if (isSupabaseMatchupRow2Ball(matchup)) {
+                              const fdP1Odds = Number(matchup.odds1 ?? 0);
+                              const fdP2Odds = Number(matchup.odds2 ?? 0);
                               
                               if (fdP1Odds > 1 && fdP2Odds > 1) {
                                 if ((fdP1Odds < fdP2Odds && hasSignificantOddsGap(fdP1Odds, fdP2Odds)) || 
@@ -326,33 +361,20 @@ export default function MatchupsTable({
                 </TableHeader>
                 <TableBody>
                   {filteredMatchups.map((matchup, index) => {
-                    // Generate a stable key - use id if available, otherwise use index and a type identifier
-                    const key = matchup.id ? `matchup-${matchup.id}` : `matchup-${index}-${matchup.p1_dg_id}-${matchup.p2_dg_id}`;
-                    
-                    // Debug: print first 5 2-ball matchups
-                    // if (index < 5 && !is3BallMatchup(matchup)) {
-                    //   console.log('2-ball matchup', index, {
-                    //     fanduel_p1_odds: matchup.fanduel_p1_odds,
-                    //     fanduel_p2_odds: matchup.fanduel_p2_odds,
-                    //     draftkings_p1_odds: matchup.draftkings_p1_odds,
-                    //     draftkings_p2_odds: matchup.draftkings_p2_odds,
-                    //     p1: matchup.p1_player_name,
-                    //     p2: matchup.p2_player_name,
-                    //   });
-                    // }
-
-                    if (is3BallMatchup(matchup)) {
-                      const dg_p1_odds = matchup.datagolf_p1_odds ?? matchup.odds?.datagolf?.p1 ?? null;
-                      const dg_p2_odds = matchup.datagolf_p2_odds ?? matchup.odds?.datagolf?.p2 ?? null;
-                      const dg_p3_odds = matchup.datagolf_p3_odds ?? matchup.odds?.datagolf?.p3 ?? null;
+                    if (isSupabaseMatchupRow(matchup)) {
+                      // DataGolf odds are only available in the SupabaseMatchupRow type
+                      const dg_p1_odds = isSupabaseMatchupRow(matchup) ? matchup.dg_odds1 ?? null : null;
+                      const dg_p2_odds = isSupabaseMatchupRow(matchup) ? matchup.dg_odds2 ?? null : null;
+                      const dg_p3_odds = isSupabaseMatchupRow(matchup) ? matchup.dg_odds3 ?? null : null;
                       
                       // Check both for divergence and significant odds gaps
+                      // We're inside the isSupabaseMatchupRow branch so these props exist
                       const divergence = detect3BallDivergence({
                         odds: {
                           fanduel: {
-                            p1: matchup.fanduel_p1_odds,
-                            p2: matchup.fanduel_p2_odds,
-                            p3: matchup.fanduel_p3_odds,
+                            p1: matchup.odds1,
+                            p2: matchup.odds2,
+                            p3: matchup.odds3,
                           },
                           datagolf: {
                             p1: dg_p1_odds,
@@ -376,11 +398,11 @@ export default function MatchupsTable({
                       let gapFDDetails = "";
                       let gapDGDetails = "";
                       
-                      // Calculate FanDuel gaps
+                      // For odds arrays - we're already inside isSupabaseMatchupRow guard branch
                       const fdPlayers = [
-                        { id: 'p1', odds: matchup.fanduel_p1_odds, name: matchup.p1_player_name },
-                        { id: 'p2', odds: matchup.fanduel_p2_odds, name: matchup.p2_player_name },
-                        { id: 'p3', odds: matchup.fanduel_p3_odds, name: matchup.p3_player_name }
+                        { id: 'p1', odds: matchup.odds1, name: matchup.player1_name },
+                        { id: 'p2', odds: matchup.odds2, name: matchup.player2_name },
+                        { id: 'p3', odds: matchup.odds3, name: matchup.player3_name ?? '' }
                       ].filter(p => p.odds && p.odds > 1);
                       
                       // Only highlight if we have at least 3 valid odds to compare
@@ -424,9 +446,9 @@ export default function MatchupsTable({
                       
                       // Calculate DataGolf gaps
                       const dgPlayers = [
-                        { id: 'p1', odds: dg_p1_odds, name: matchup.p1_player_name },
-                        { id: 'p2', odds: dg_p2_odds, name: matchup.p2_player_name },
-                        { id: 'p3', odds: dg_p3_odds, name: matchup.p3_player_name }
+                        { id: 'p1', odds: dg_p1_odds, name: matchup.player1_name ?? '' },
+                        { id: 'p2', odds: dg_p2_odds, name: matchup.player2_name ?? '' },
+                        { id: 'p3', odds: dg_p3_odds, name: matchup.player3_name ?? '' }
                       ].filter(p => p.odds && p.odds > 1);
                       
                       // Only highlight if we have at least 3 valid odds to compare
@@ -469,10 +491,11 @@ export default function MatchupsTable({
                       }
                       
                       // Sort players by their FanDuel odds (lowest first = favorite)
+                      // Only do this inside the type guard branch where we know these properties exist
                       const sortedPlayers = [
-                        { id: 'p1', odds: matchup.fanduel_p1_odds, name: matchup.p1_player_name, dgOdds: dg_p1_odds, hasGap: p1HasFDGap, hasDGGap: p1HasDGGap, dgFavorite: divergence?.datagolfFavorite === 'p1' },
-                        { id: 'p2', odds: matchup.fanduel_p2_odds, name: matchup.p2_player_name, dgOdds: dg_p2_odds, hasGap: p2HasFDGap, hasDGGap: p2HasDGGap, dgFavorite: divergence?.datagolfFavorite === 'p2' },
-                        { id: 'p3', odds: matchup.fanduel_p3_odds, name: matchup.p3_player_name, dgOdds: dg_p3_odds, hasGap: p3HasFDGap, hasDGGap: p3HasDGGap, dgFavorite: divergence?.datagolfFavorite === 'p3' }
+                        { id: 'p1', odds: matchup.odds1, name: matchup.player1_name, dgOdds: dg_p1_odds, hasGap: p1HasFDGap, hasDGGap: p1HasDGGap, dgFavorite: divergence?.datagolfFavorite === 'p1' },
+                        { id: 'p2', odds: matchup.odds2, name: matchup.player2_name, dgOdds: dg_p2_odds, hasGap: p2HasFDGap, hasDGGap: p2HasDGGap, dgFavorite: divergence?.datagolfFavorite === 'p2' },
+                        { id: 'p3', odds: matchup.odds3, name: matchup.player3_name ?? '', dgOdds: dg_p3_odds, hasGap: p3HasFDGap, hasDGGap: p3HasDGGap, dgFavorite: divergence?.datagolfFavorite === 'p3' }
                       ].sort((a, b) => {
                         // Handle null/undefined odds by placing them at the end
                         if (!a.odds || a.odds <= 1) return 1;
@@ -499,19 +522,55 @@ export default function MatchupsTable({
                       };
                       
                       return (
-                        <TableRow key={`3ball-${key}`}>
+                        <TableRow key={`3ball-${matchup.id}`}>
                           <TableCell>
                             {sortedPlayers.map((player, idx) => (
-                              <div key={`player-${idx}`} className="py-1 h-8 flex items-center">{formatPlayerName(player.name)}</div>
+                              <div key={`player-${idx}`} className="py-1 h-8 flex items-center">
+                                {(() => {
+                                  const inCurrent = isPlayerInCurrentParlay(formatPlayerName(player.name));
+                                  const inAny = isPlayerInAnyParlay(formatPlayerName(player.name));
+                                  return (
+                                    <span className="mr-2 flex items-center gap-1">
+                                      {inCurrent ? (
+                                        <Button size="icon" variant="secondary" disabled className="h-6 w-6 p-0"><CheckCircle className="text-green-400" size={16} /></Button>
+                                      ) : (
+                                        <Button size="icon" variant="outline" className="h-6 w-6 p-0" onClick={() => {
+                                          addSelection({
+                                            id: Date.now().toString(),
+                                            matchupType,
+                                            player: formatPlayerName(player.name),
+                                            odds: Number(player.odds) || 0,
+                                            matchupId: matchup.id,
+                                            eventName: matchup.event_name,
+                                            roundNum: matchup.round_num
+                                          });
+                                        }}><PlusCircle className="text-primary" size={16} /></Button>
+                                      )}
+                                      {inAny && !inCurrent && (
+                                        <Tooltip><TooltipTrigger asChild><Info className="text-blue-400" size={16} /></TooltipTrigger><TooltipContent>Already used in another parlay</TooltipContent></Tooltip>
+                                      )}
+                                    </span>
+                                  );
+                                })()}
+                                {formatPlayerName(player.name)}
+                              </div>
                             ))}
                           </TableCell>
                           
                           {/* New Position column */}
                           <TableCell className="text-center">
                             {sortedPlayers.map((player, idx) => {
-                              const playerId = player.id === 'p1' ? matchup.p1_dg_id : 
-                                             player.id === 'p2' ? matchup.p2_dg_id : 
-                                             player.id === 'p3' ? matchup.p3_dg_id : 0;
+                              let playerId = 0;
+                              
+                              if (isSupabaseMatchupRow(matchup)) {
+                                if (player.id === 'p1') {
+                                  playerId = matchup.player1_id ?? 0;
+                                } else if (player.id === 'p2') {
+                                  playerId = matchup.player2_id ?? 0;
+                                } else if (player.id === 'p3' && matchup.player3_id != null) {
+                                  playerId = matchup.player3_id;
+                                }
+                              }
                               
                               const positionData = formatPlayerPosition(playerId);
                               
@@ -594,9 +653,9 @@ export default function MatchupsTable({
                                     <TooltipContent className="z-50">
                                       <span>
                                         Divergence: FanDuel favorite: <b>{
-                                          divergence.fanduelFavorite === 'p1' ? formatPlayerName(matchup.p1_player_name) :
-                                          divergence.fanduelFavorite === 'p2' ? formatPlayerName(matchup.p2_player_name) :
-                                          divergence.fanduelFavorite === 'p3' ? formatPlayerName(matchup.p3_player_name) :
+                                          divergence.fanduelFavorite === 'p1' ? formatPlayerName(matchup.player1_name ?? '') :
+                                          divergence.fanduelFavorite === 'p2' ? formatPlayerName(matchup.player2_name ?? '') :
+                                          divergence.fanduelFavorite === 'p3' ? formatPlayerName(matchup.player3_name ?? '') :
                                           'N/A'
                                         }</b>, DG favorite: <b>{formatPlayerName(player.name)}</b>.
                                       </span>
@@ -609,18 +668,17 @@ export default function MatchupsTable({
                           <TableCell className="text-center">
                             {sortedPlayers.map((player, idx) => (
                               <div key={`dg-odds-${idx}`} className={`${player.hasDGGap ? "font-bold text-green-400" : ""} py-1 h-8 flex items-center justify-center`}>
-                                {formatOdds(player.dgOdds)}
+                                {formatOdds(player.dgOdds ?? null)}
                               </div>
                             ))}
                           </TableCell>
                         </TableRow>
                       );
-                    } else {
-                      // For 2-ball, always coerce odds to numbers
-                      const fdP1Odds = Number(matchup.fanduel_p1_odds) || 0;
-                      const fdP2Odds = Number(matchup.fanduel_p2_odds) || 0;
-                      const dkP1Odds = Number(matchup.draftkings_p1_odds) || 0;
-                      const dkP2Odds = Number(matchup.draftkings_p2_odds) || 0;
+                    } else if (isSupabaseMatchupRow2Ball(matchup)) {
+                      const fdP1Odds = Number(matchup.odds1 ?? 0);
+                      const fdP2Odds = Number(matchup.odds2 ?? 0);
+                      const dkP1Odds = Number(matchup.draftkings_p1_odds ?? 0);
+                      const dkP2Odds = Number(matchup.draftkings_p2_odds ?? 0);
 
                       // Check if at least one player has odds from FanDuel
                       const hasAnyValidOdds = (fdP1Odds > 1) || (fdP2Odds > 1);
@@ -673,9 +731,10 @@ export default function MatchupsTable({
                       }
                       
                       // Sort players by their FanDuel odds (lowest first = favorite)
+                      // Inside 2Ball type guard branch so we know these properties exist
                       const sortedPlayers = [
-                        { id: 'p1', odds: matchup.fanduel_p1_odds, name: matchup.p1_player_name, dkOdds: matchup.draftkings_p1_odds, hasGap: p1HasFDGap, hasDKGap: p1HasDKGap },
-                        { id: 'p2', odds: matchup.fanduel_p2_odds, name: matchup.p2_player_name, dkOdds: matchup.draftkings_p2_odds, hasGap: p2HasFDGap, hasDKGap: p2HasDKGap }
+                        { id: 'p1', odds: matchup.odds1, name: matchup.player1_name, dkOdds: matchup.draftkings_p1_odds, hasGap: p1HasFDGap, hasDKGap: p1HasDKGap },
+                        { id: 'p2', odds: matchup.odds2, name: matchup.player2_name, dkOdds: matchup.draftkings_p2_odds, hasGap: p2HasFDGap, hasDKGap: p2HasDKGap }
                       ].sort((a, b) => {
                         // Handle null/undefined odds by placing them at the end
                         if (!a.odds || a.odds <= 1) return 1;
@@ -702,18 +761,53 @@ export default function MatchupsTable({
                       };
                       
                       return (
-                        <TableRow key={`2ball-${key}`}>
+                        <TableRow key={`2ball-${matchup.id}`}>
                           <TableCell>
                             {sortedPlayers.map((player, idx) => (
-                              <div key={`player-${idx}`} className="py-1 h-8 flex items-center">{formatPlayerName(player.name)}</div>
+                              <div key={`player-${idx}`} className="py-1 h-8 flex items-center">
+                                {(() => {
+                                  const inCurrent = isPlayerInCurrentParlay(formatPlayerName(player.name));
+                                  const inAny = isPlayerInAnyParlay(formatPlayerName(player.name));
+                                  return (
+                                    <span className="mr-2 flex items-center gap-1">
+                                      {inCurrent ? (
+                                        <Button size="icon" variant="secondary" disabled className="h-6 w-6 p-0"><CheckCircle className="text-green-400" size={16} /></Button>
+                                      ) : (
+                                        <Button size="icon" variant="outline" className="h-6 w-6 p-0" onClick={() => {
+                                          addSelection({
+                                            id: Date.now().toString(),
+                                            matchupType,
+                                            player: formatPlayerName(player.name),
+                                            odds: Number(player.odds) || 0,
+                                            matchupId: matchup.id,
+                                            eventName: matchup.event_name,
+                                            roundNum: matchup.round_num
+                                          });
+                                        }}><PlusCircle className="text-primary" size={16} /></Button>
+                                      )}
+                                      {inAny && !inCurrent && (
+                                        <Tooltip><TooltipTrigger asChild><Info className="text-blue-400" size={16} /></TooltipTrigger><TooltipContent>Already used in another parlay</TooltipContent></Tooltip>
+                                      )}
+                                    </span>
+                                  );
+                                })()}
+                                {formatPlayerName(player.name)}
+                              </div>
                             ))}
                           </TableCell>
                           
                           {/* Position column for 2-ball */}
                           <TableCell className="text-center">
                             {sortedPlayers.map((player, idx) => {
-                              const playerId = player.id === 'p1' ? matchup.p1_dg_id : 
-                                            player.id === 'p2' ? matchup.p2_dg_id : 0;
+                              let playerId = 0;
+
+                              if (isSupabaseMatchupRow2Ball(matchup)) {
+                                if (player.id === 'p1') {
+                                  playerId = matchup.player1_id ?? 0;
+                                } else if (player.id === 'p2') {
+                                  playerId = matchup.player2_id ?? 0;
+                                }
+                              }
                               
                               const positionData = formatPlayerPosition(playerId);
                               
@@ -792,12 +886,14 @@ export default function MatchupsTable({
                           <TableCell className="text-center">
                             {sortedPlayers.map((player, idx) => (
                               <div key={`dk-odds-${idx}`} className={`py-1 h-8 flex items-center justify-center ${player.hasDKGap ? "font-bold text-green-400" : ""}`}>
-                                {formatOdds(player.dkOdds)}
+                                {formatOdds(player.dkOdds ?? null)}
                               </div>
                             ))}
                           </TableCell>
                         </TableRow>
                       );
+                    } else {
+                      return null;
                     }
                   })}
                 </TableBody>

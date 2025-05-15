@@ -1,6 +1,6 @@
 "use client"
 
-import React, { createContext, useContext, useState, ReactNode } from "react"
+import React, { createContext, useContext, useState, ReactNode, useEffect } from "react"
 
 export type ParlaySelection = {
   id: string
@@ -46,6 +46,23 @@ export function ParlayProvider({ children }: { children: ReactNode }) {
   const [potentialPayout, setPotentialPayout] = useState(0)
   const [selectedParlayId, setSelectedParlayId] = useState<number | null>(null)
   const [isParlayModalOpen, setParlayModalOpen] = useState(false)
+
+  // Load from localStorage on mount
+  useEffect(() => {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('parlaySelections') : null;
+    if (saved) {
+      try {
+        setSelections(JSON.parse(saved));
+      } catch {}
+    }
+  }, []);
+
+  // Save to localStorage on change
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('parlaySelections', JSON.stringify(selections));
+    }
+  }, [selections]);
 
   // Add selection to parlay
   const addSelection = (newSelection: Partial<ParlaySelection>) => {
