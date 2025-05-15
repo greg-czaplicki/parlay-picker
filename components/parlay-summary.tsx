@@ -8,17 +8,10 @@ import { toast } from "@/components/ui/use-toast"
 import { useRouter } from "next/navigation"
 import { Send } from "lucide-react"
 import { useCreateParlayMutation } from '@/hooks/use-create-parlay-mutation'
+import { useParlayContext, ParlaySelection } from "@/context/ParlayContext"
 
 type ParlayProps = {
-  selections: Array<{
-    id: number // dg_id
-    odds: number
-    player: string
-    matchupId?: number
-    eventName?: string
-    roundNum?: number
-    matchupType: string
-  }>
+  selections: ParlaySelection[]
   userId?: string // TODO: Replace with real user ID from auth
 }
 
@@ -66,6 +59,7 @@ export default function ParlaySummary({ selections, userId = '00000000-0000-0000
         picked_player_id: s.id,
         picked_player_name: s.player,
       }))
+      console.log('Submitting picks:', picks)
       // Create the parlay with all required fields
       await createParlayMutation.mutateAsync({
         name: parlayName,

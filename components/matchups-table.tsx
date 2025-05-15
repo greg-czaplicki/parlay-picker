@@ -495,19 +495,44 @@ export default function MatchupsTable({ eventId, matchupType = "3ball" }: Matchu
                         }
                       }
                       
-                      // Sort players by their FanDuel odds (lowest first = favorite)
-                      // Only do this inside the type guard branch where we know these properties exist
+                      // For 3-ball matchups
                       const sortedPlayers = [
-                        { id: 'p1', odds: (matchup as SupabaseMatchupRow).odds1, name: (matchup as SupabaseMatchupRow).player1_name, dgOdds: dg_p1_odds, hasGap: p1HasFDGap, hasDGGap: p1HasDGGap, dgFavorite: divergence?.datagolfFavorite === 'p1' },
-                        { id: 'p2', odds: (matchup as SupabaseMatchupRow).odds2, name: (matchup as SupabaseMatchupRow).player2_name, dgOdds: dg_p2_odds, hasGap: p2HasFDGap, hasDGGap: p2HasDGGap, dgFavorite: divergence?.datagolfFavorite === 'p2' },
-                        { id: 'p3', odds: (matchup as SupabaseMatchupRow).odds3, name: (matchup as SupabaseMatchupRow).player3_name ?? '', dgOdds: dg_p3_odds, hasGap: p3HasFDGap, hasDGGap: p3HasDGGap, dgFavorite: divergence?.datagolfFavorite === 'p3' }
-                      ].sort((a, b) => {
-                        // Handle null/undefined odds by placing them at the end
-                        if (!a.odds || a.odds <= 1) return 1;
-                        if (!b.odds || b.odds <= 1) return -1;
-                        // Lower decimal odds = favorite (better odds)
-                        return a.odds - b.odds;
-                      });
+                        {
+                          id: 'p1',
+                          dg_id: (matchup as SupabaseMatchupRow).player1_id,
+                          odds: (matchup as SupabaseMatchupRow).odds1,
+                          name: (matchup as SupabaseMatchupRow).player1_name,
+                          dgOdds: dg_p1_odds,
+                          hasGap: p1HasFDGap,
+                          hasDGGap: p1HasDGGap,
+                          dgFavorite: divergence?.datagolfFavorite === 'p1',
+                        },
+                        {
+                          id: 'p2',
+                          dg_id: (matchup as SupabaseMatchupRow).player2_id,
+                          odds: (matchup as SupabaseMatchupRow).odds2,
+                          name: (matchup as SupabaseMatchupRow).player2_name,
+                          dgOdds: dg_p2_odds,
+                          hasGap: p2HasFDGap,
+                          hasDGGap: p2HasDGGap,
+                          dgFavorite: divergence?.datagolfFavorite === 'p2',
+                        },
+                        {
+                          id: 'p3',
+                          dg_id: (matchup as SupabaseMatchupRow).player3_id ?? undefined,
+                          odds: (matchup as SupabaseMatchupRow).odds3,
+                          name: (matchup as SupabaseMatchupRow).player3_name ?? '',
+                          dgOdds: dg_p3_odds,
+                          hasGap: p3HasFDGap,
+                          hasDGGap: p3HasDGGap,
+                          dgFavorite: divergence?.datagolfFavorite === 'p3',
+                        },
+                      ].filter(p => typeof p.dg_id === 'number' && p.dg_id > 0)
+                       .sort((a, b) => {
+                          if (!a.odds || a.odds <= 1) return 1;
+                          if (!b.odds || b.odds <= 1) return -1;
+                          return (a.odds || 0) - (b.odds || 0);
+                        });
 
                       // Format the player's tournament position and score
                       const formatPlayerPosition = (playerId: number) => {
@@ -540,8 +565,9 @@ export default function MatchupsTable({ eventId, matchupType = "3ball" }: Matchu
                                         <Button size="icon" variant="secondary" disabled className="h-6 w-6 p-0"><CheckCircle className="text-green-400" size={16} /></Button>
                                       ) : (
                                         <Button size="icon" variant="outline" className="h-6 w-6 p-0" onClick={() => {
+                                          if (player.dg_id == null || typeof player.dg_id !== 'number' || isNaN(player.dg_id)) return;
                                           addSelection({
-                                            id: Date.now().toString(),
+                                            id: player.dg_id,
                                             matchupType,
                                             player: formatPlayerName(player.name),
                                             odds: Number(player.odds) || 0,
@@ -736,18 +762,32 @@ export default function MatchupsTable({ eventId, matchupType = "3ball" }: Matchu
                         }
                       }
                       
-                      // Sort players by their FanDuel odds (lowest first = favorite)
-                      // Inside 2Ball type guard branch so we know these properties exist
+                      // For 2-ball matchups (inside isSupabaseMatchupRow2Ball branch)
                       const sortedPlayers = [
-                        { id: 'p1', odds: m2.odds1, name: m2.player1_name, dkOdds: m2.draftkings_p1_odds, hasGap: p1HasFDGap, hasDKGap: p1HasDKGap },
-                        { id: 'p2', odds: m2.odds2, name: m2.player2_name, dkOdds: m2.draftkings_p2_odds, hasGap: p2HasFDGap, hasDKGap: p2HasDKGap }
-                      ].sort((a, b) => {
-                        // Handle null/undefined odds by placing them at the end
-                        if (!a.odds || a.odds <= 1) return 1;
-                        if (!b.odds || b.odds <= 1) return -1;
-                        // Lower decimal odds = favorite (better odds)
-                        return a.odds - b.odds;
-                      });
+                        {
+                          id: 'p1',
+                          dg_id: m2.player1_id,
+                          odds: m2.odds1,
+                          name: m2.player1_name,
+                          dkOdds: dkP1Odds,
+                          hasGap: p1HasFDGap,
+                          hasDKGap: p1HasDKGap,
+                        },
+                        {
+                          id: 'p2',
+                          dg_id: m2.player2_id,
+                          odds: m2.odds2,
+                          name: m2.player2_name,
+                          dkOdds: dkP2Odds,
+                          hasGap: p2HasFDGap,
+                          hasDKGap: p2HasDKGap,
+                        },
+                      ].filter(p => typeof p.dg_id === 'number' && p.dg_id > 0)
+                       .sort((a, b) => {
+                          if (!a.odds || a.odds <= 1) return 1;
+                          if (!b.odds || b.odds <= 1) return -1;
+                          return (a.odds || 0) - (b.odds || 0);
+                        });
 
                       // Format the player's tournament position and score
                       const formatPlayerPosition = (playerId: number) => {
@@ -780,14 +820,15 @@ export default function MatchupsTable({ eventId, matchupType = "3ball" }: Matchu
                                         <Button size="icon" variant="secondary" disabled className="h-6 w-6 p-0"><CheckCircle className="text-green-400" size={16} /></Button>
                                       ) : (
                                         <Button size="icon" variant="outline" className="h-6 w-6 p-0" onClick={() => {
+                                          if (player.dg_id == null || typeof player.dg_id !== 'number' || isNaN(player.dg_id)) return;
                                           addSelection({
-                                            id: Date.now().toString(),
+                                            id: player.dg_id,
                                             matchupType,
                                             player: formatPlayerName(player.name),
                                             odds: Number(player.odds) || 0,
                                             matchupId: m2.id,
                                             eventName: m2.event_name,
-                                            roundNum: m2.round_num
+                                            roundNum: m2.round_num ?? 0
                                           });
                                         }}><PlusCircle className="text-primary" size={16} /></Button>
                                       )}

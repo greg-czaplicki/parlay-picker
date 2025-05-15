@@ -103,7 +103,7 @@ export async function GET(req: NextRequest) {
   if (allPlayerNames.size > 0 && allRoundNums.size > 0) {
     const { data: statsData, error: statsError } = await supabase
       .from('live_tournament_stats')
-      .select('player_name,round_num,total,thru,today')
+      .select('player_name,round_num,position,total,thru,today')
       .in('player_name', Array.from(allPlayerNames))
       .in('round_num', Array.from(allRoundNums).map(String));
     if (!statsError && statsData) liveStats = statsData;
@@ -133,9 +133,9 @@ export async function GET(req: NextRequest) {
             id: matchup.player1_id,
             name: matchup.player1_name,
             isUserPick: pick.picked_player_id === matchup.player1_id,
-            currentPosition: '-',
-            totalScore: typeof stats.total === 'number' ? stats.total : 0,
-            roundScore: typeof stats.today === 'number' ? stats.today : 0,
+            currentPosition: typeof stats.position === 'string' ? stats.position : '-',
+            totalScore: typeof stats.total === 'number' ? stats.total : Number(stats.total) || 0,
+            roundScore: typeof stats.today === 'number' ? stats.today : Number(stats.today) || 0,
             holesPlayed: typeof stats.thru === 'number' ? stats.thru : 0,
             totalHoles: 18,
           });
@@ -146,9 +146,9 @@ export async function GET(req: NextRequest) {
             id: matchup.player2_id,
             name: matchup.player2_name,
             isUserPick: pick.picked_player_id === matchup.player2_id,
-            currentPosition: '-',
-            totalScore: typeof stats.total === 'number' ? stats.total : 0,
-            roundScore: typeof stats.today === 'number' ? stats.today : 0,
+            currentPosition: typeof stats.position === 'string' ? stats.position : '-',
+            totalScore: typeof stats.total === 'number' ? stats.total : Number(stats.total) || 0,
+            roundScore: typeof stats.today === 'number' ? stats.today : Number(stats.today) || 0,
             holesPlayed: typeof stats.thru === 'number' ? stats.thru : 0,
             totalHoles: 18,
           });
@@ -159,9 +159,9 @@ export async function GET(req: NextRequest) {
             id: matchup.player3_id,
             name: matchup.player3_name,
             isUserPick: pick.picked_player_id === matchup.player3_id,
-            currentPosition: '-',
-            totalScore: typeof stats.total === 'number' ? stats.total : 0,
-            roundScore: typeof stats.today === 'number' ? stats.today : 0,
+            currentPosition: typeof stats.position === 'string' ? stats.position : '-',
+            totalScore: typeof stats.total === 'number' ? stats.total : Number(stats.total) || 0,
+            roundScore: typeof stats.today === 'number' ? stats.today : Number(stats.today) || 0,
             holesPlayed: typeof stats.thru === 'number' ? stats.thru : 0,
             totalHoles: 18,
           });
@@ -180,5 +180,6 @@ export async function GET(req: NextRequest) {
       picks: Array.isArray(picksWithDetails) ? picksWithDetails : [],
     }
   })
+  console.log('API response:', JSON.stringify(parlaysWithDetails, null, 2));
   return NextResponse.json({ parlays: parlaysWithDetails })
 } 

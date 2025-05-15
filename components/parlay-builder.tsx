@@ -2,12 +2,12 @@
 
 import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Trash2, Plus, Calculator } from "lucide-react"
 import { useParlayContext } from "@/context/ParlayContext"
 import ParlaySummary from "./parlay-summary"
+import { Button } from "@/components/ui/button"
 
 export default function ParlayBuilder({ matchupType }: { matchupType: string }) {
   const {
@@ -28,35 +28,6 @@ export default function ParlayBuilder({ matchupType }: { matchupType: string }) 
   useEffect(() => {
     setLocalStake(contextStake)
   }, [contextStake])
-
-  // Handle adding a new selection - prompt for player name and odds
-  const handleAddSelection = () => {
-    const playerName = prompt("Enter player name:")
-    if (!playerName) return
-    
-    const oddsStr = prompt("Enter odds (e.g. +250 or -110):")
-    if (!oddsStr) return
-    
-    // Parse odds
-    let odds = 0
-    if (oddsStr.startsWith('+')) {
-      odds = parseInt(oddsStr.substring(1))
-    } else if (oddsStr.startsWith('-')) {
-      odds = parseInt(oddsStr)
-    } else {
-      odds = parseInt(oddsStr)
-    }
-    
-    // Add the player
-    addSelection({
-      id: Date.now().toString(),
-      matchupType: matchupType,
-      player: playerName,
-      odds: odds,
-      valueRating: 7.5,
-      confidenceScore: 75,
-    })
-  }
 
   const formatAmericanOdds = (odds: number) => {
     if (isNaN(odds)) return '-';

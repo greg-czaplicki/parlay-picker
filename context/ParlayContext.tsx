@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from "react"
 
 export type ParlaySelection = {
-  id: string
+  id: number
   matchupType: string
   group: string
   player: string
@@ -19,8 +19,8 @@ interface ParlayContextType {
   // UI state for building a new parlay
   selections: ParlaySelection[]
   addSelection: (selection: Partial<ParlaySelection>) => void
-  removeSelection: (id: string) => void
-  updateSelection: (id: string, field: keyof ParlaySelection, value: string | number) => void
+  removeSelection: (id: number) => void
+  updateSelection: (id: number, field: keyof ParlaySelection, value: string | number) => void
   clearSelections: () => void
 
   // UI state for stake and payout preview
@@ -52,7 +52,8 @@ export function ParlayProvider({ children }: { children: ReactNode }) {
     const saved = typeof window !== 'undefined' ? localStorage.getItem('parlaySelections') : null;
     if (saved) {
       try {
-        setSelections(JSON.parse(saved));
+        const parsed = JSON.parse(saved).map((s: any) => ({ ...s, id: Number(s.id) }));
+        setSelections(parsed);
       } catch {}
     }
   }, []);
@@ -66,13 +67,16 @@ export function ParlayProvider({ children }: { children: ReactNode }) {
 
   // Add selection to parlay
   const addSelection = (newSelection: Partial<ParlaySelection>) => {
-    const id = newSelection.id || Date.now().toString()
+    if (typeof newSelection.id !== 'number' || isNaN(newSelection.id)) {
+      // Only allow adding selections with a valid dg_id as id
+      return;
+    }
     if (newSelection.player && newSelection.player.trim() !== "" &&
         selections.some(s => s.player.toLowerCase() === newSelection.player?.toLowerCase())) {
       return
     }
     const updatedSelections = [...selections, {
-      id,
+      id: newSelection.id,
       matchupType: newSelection.matchupType || "3ball",
       group: newSelection.group || "",
       player: newSelection.player || "",
@@ -88,14 +92,14 @@ export function ParlayProvider({ children }: { children: ReactNode }) {
   }
 
   // Remove selection from parlay
-  const removeSelection = (id: string) => {
+  const removeSelection = (id: number) => {
     const updatedSelections = selections.filter((selection) => selection.id !== id)
     setSelections(updatedSelections)
     recalculate(updatedSelections, stake)
   }
 
   // Update a selection field
-  const updateSelection = (id: string, field: keyof ParlaySelection, value: string | number) => {
+  const updateSelection = (id: number, field: keyof ParlaySelection, value: string | number) => {
     const updatedSelections = selections.map((selection) =>
       (selection.id === id ? { ...selection, [field]: value } : selection)
     )

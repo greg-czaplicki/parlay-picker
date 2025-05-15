@@ -63,30 +63,28 @@ export function ParlayCard({
         <div className={clsx('w-3 h-3 rounded-full', statusColors[status])} title={status} />
       </CardHeader>
       <CardContent className="flex-grow overflow-y-auto p-4 space-y-4">
-        <ul className="space-y-4">
-          {picks.map((pick, i) => (
-            <li key={i} className="border rounded-lg p-3 bg-muted/40">
-              <div className="font-medium mb-2">Matchup {i + 1} ({pick.players?.length}-ball)</div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                {pick.players?.map((player, idx) => (
-                  <div
-                    key={player.name}
-                    className={clsx(
-                      'rounded p-2 border flex flex-col items-center',
-                      player.isUserPick ? 'border-primary bg-primary/10 font-bold' : 'border-border bg-background'
-                    )}
-                  >
-                    <div className="text-base">{player.name}</div>
-                    <div className="text-xs text-muted-foreground">Pos: {player.currentPosition}</div>
-                    <div className="text-xs">Total: {player.totalScore > 0 ? `+${player.totalScore}` : player.totalScore === 0 ? 'E' : player.totalScore}</div>
-                    <div className="text-xs">Rnd: {player.roundScore > 0 ? `+${player.roundScore}` : player.roundScore === 0 ? 'E' : player.roundScore}</div>
-                    <div className="text-xs">Holes: {player.holesPlayed}/{player.totalHoles}</div>
-                  </div>
-                ))}
-              </div>
-            </li>
-          ))}
-        </ul>
+        <table className="w-full">
+          <thead>
+            <tr>
+              <th className="py-2 px-3 text-left font-semibold">Player</th>
+              <th className="py-2 px-3 text-left font-semibold">Pos</th>
+              <th className="py-2 px-3 text-left font-semibold">Total</th>
+              <th className="py-2 px-3 text-left font-semibold">Today</th>
+              <th className="py-2 px-3 text-left font-semibold">Holes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {picks.map((pick, i) => (
+              <tr key={i}>
+                <td className="py-2 px-3 font-mono">{pick.players?.map((player) => player.name).join(', ')}</td>
+                <td className="py-2 px-3 font-mono">{pick.players?.map((player) => player.currentPosition).join(', ')}</td>
+                <td className="py-2 px-3 font-mono">{pick.players?.map((player) => player.totalScore).join(', ')}</td>
+                <td className="py-2 px-3 font-mono">{pick.players?.map((player) => player.roundScore).join(', ')}</td>
+                <td className="py-2 px-3 font-mono">{pick.players?.map((player) => player.holesPlayed).join('/') + '/' + pick.players?.map((player) => player.totalHoles).join('/')}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </CardContent>
     </Card>
   );

@@ -66,7 +66,7 @@ export default function RecommendedPicks({
   // Get the parlay context
   const { addSelection, removeSelection, selections } = useParlayContext()
   // Track which players have been added to the parlay
-  const [addedPlayers, setAddedPlayers] = useState<Record<string, boolean>>({})
+  const [addedPlayers, setAddedPlayers] = useState<Record<number, boolean>>({})
 
   // Use React Query for recommendations
   const { data: recommendations, isLoading, isError, error } = useRecommendedPicksQuery(eventId, matchupType as "2ball" | "3ball", bookmaker, oddsGapPercentage, limit)
@@ -101,7 +101,7 @@ export default function RecommendedPicks({
   }
   
   // Function to remove a player from the parlay
-  const removeFromParlay = (selectionId: string, playerId: number, playerName: string) => {
+  const removeFromParlay = (selectionId: number, playerId: number, playerName: string) => {
     removeSelection(selectionId)
     
     // Mark player as removed in local state
@@ -122,7 +122,7 @@ export default function RecommendedPicks({
   }
   
   // Check if a player is already in the parlay
-  const isPlayerInParlay = (playerId: number, playerName: string): { inParlay: boolean, selectionId?: string } => {
+  const isPlayerInParlay = (playerId: number, playerName: string): { inParlay: boolean, selectionId?: number } => {
     // First check our local tracking state
     if (addedPlayers[playerId]) {
       // Find the selection ID
@@ -153,7 +153,7 @@ export default function RecommendedPicks({
   // Sync addedPlayers state with selections from context
   useEffect(() => {
     // Find players that are currently in recommendations and also in selections
-    const newAddedPlayers: Record<string, boolean> = {...addedPlayers};
+    const newAddedPlayers: Record<number, boolean> = {...addedPlayers};
     (recommendations ?? []).forEach((player: Player) => {
       let formattedPlayerName = player.name
       if (formattedPlayerName.includes(",")) {
@@ -253,7 +253,7 @@ export default function RecommendedPicks({
                             const americanOdds = convertToAmericanOdds(player.odds);
                             // Add player to parlay context
                             addToParlay({
-                              id: Date.now().toString(),
+                              id: player.id,
                               matchupType: matchupType,
                               group: player.eventName || 'Unknown Event',
                               player: player.name,
