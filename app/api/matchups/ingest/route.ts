@@ -69,15 +69,23 @@ export async function POST(req: NextRequest) {
       fetchDG(DG_2BALL_URL),
       fetchDG(DG_MODEL_URL),
     ])
-    // You may want to map event_name to event_id from your tournaments table
-    // For now, use a fallback event_id (e.g., 1) and round_num from DG
-    const event_id = 1 // TODO: Map this properly
-    const round_num_3 = dg3.round_num
-    const round_num_2 = dg2.round_num
-    const created_at_3 = new Date(dg3.last_updated.replace(' UTC', 'Z')).toISOString()
-    const created_at_2 = new Date(dg2.last_updated.replace(' UTC', 'Z')).toISOString()
-    const matchups3 = transformMatchups(dg3.match_list, dgModel.pairings, '3ball', event_id, round_num_3, created_at_3)
-    const matchups2 = transformMatchups(dg2.match_list, dgModel.pairings, '2ball', event_id, round_num_2, created_at_2)
+    // Dynamically map event_name to event_id
+    const eventName = dg3.event_name;
+    const { data: eventRows, error: eventError } = await supabase
+      .from('tournaments')
+      .select('event_id')
+      .eq('event_name', eventName)
+      .limit(1);
+    if (eventError || !eventRows || eventRows.length === 0) {
+      throw new Error(`Could not find event_id for event_name: ${eventName}`);
+    }
+    const event_id = eventRows[0].event_id;
+    const round_num_3 = dg3.round_num;
+    const round_num_2 = dg2.round_num;
+    const created_at_3 = new Date(dg3.last_updated.replace(' UTC', 'Z')).toISOString();
+    const created_at_2 = new Date(dg2.last_updated.replace(' UTC', 'Z')).toISOString();
+    const matchups3 = transformMatchups(dg3.match_list, dgModel.pairings, '3ball', event_id, round_num_3, created_at_3);
+    const matchups2 = transformMatchups(dg2.match_list, dgModel.pairings, '2ball', event_id, round_num_2, created_at_2);
     // Insert into matchups table
     const allMatchups = [...matchups3, ...matchups2]
     if (allMatchups.length === 0) {

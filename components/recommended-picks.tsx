@@ -14,11 +14,11 @@ import { useParlaysQuery } from '@/hooks/use-parlays-query'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 interface RecommendedPicksProps {
-  matchupType: string
-  bookmaker?: string
-  limit?: number // Optional limit for how many recommendations to show
-  oddsGapPercentage?: number // Minimum percentage gap between player's implied probability and average of others
-  eventId?: number | null // Selected event ID to filter by
+  eventId: number | null;
+  matchupType: "2ball" | "3ball";
+  limit?: number;
+  oddsGapPercentage?: number;
+  bookmaker?: string;
 }
 
 // Helper to format Decimal odds into American odds string
@@ -57,11 +57,11 @@ const convertToAmericanOdds = (decimalOdds: number | null | undefined): number =
 };
 
 export default function RecommendedPicks({
-  matchupType = "3ball",
-  bookmaker,
-  limit = 10, // Default limit
-  oddsGapPercentage = 40, // Default minimum 40 point American odds gap
-  eventId, // Selected event ID to filter by
+  eventId,
+  matchupType,
+  limit = 10,
+  oddsGapPercentage = 40,
+  bookmaker = "fanduel",
 }: RecommendedPicksProps) {
   // Get the parlay context
   const { addSelection, removeSelection, selections } = useParlayContext()
@@ -69,7 +69,7 @@ export default function RecommendedPicks({
   const [addedPlayers, setAddedPlayers] = useState<Record<string, boolean>>({})
 
   // Use React Query for recommendations
-  const { data: recommendations, isLoading, isError, error } = useRecommendedPicksQuery(eventId ?? null, matchupType as "2ball" | "3ball", bookmaker, oddsGapPercentage, limit)
+  const { data: recommendations, isLoading, isError, error } = useRecommendedPicksQuery(eventId, matchupType as "2ball" | "3ball", bookmaker, oddsGapPercentage, limit)
 
   // All user parlays for indicator logic
   const userId = '00000000-0000-0000-0000-000000000001';

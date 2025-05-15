@@ -191,17 +191,17 @@ export default function Dashboard({
 
           {/* Row 2: Main Matchups Table (Left) */}
           <div className="md:col-span-3">
-            <MatchupsTable eventId={1} matchupType={matchupType} />
+            <MatchupsTable eventId={selectedEventId} matchupType={matchupType} />
           </div>
 
           {/* Row 2: Recommended Picks (Right) */}
           <div className="md:col-span-1">
             <RecommendedPicks 
+              eventId={selectedEventId}
               matchupType={matchupType} 
               limit={10} 
               oddsGapPercentage={40} // 40 point American odds gap
               bookmaker="fanduel" // Use same bookmaker as matchups table default
-              eventId={1} // Force eventId=1
             />
           </div>
         </div>
