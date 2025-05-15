@@ -172,11 +172,13 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
                       <span className="ml-2 px-2 py-0.5 rounded bg-green-100 text-green-700 text-xs font-semibold">Settled</span>
                     )}
                   </div>
-                  <div className="text-sm text-muted-foreground flex flex-col sm:flex-row gap-1 sm:gap-4">
+                  <div className="text-sm text-neutral-200 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-6">
                     <span>Round {cardProps.round}</span>
+                    <span className="hidden sm:inline text-base text-neutral-500">•</span>
                     <span>
-                      <span className="font-semibold">${cardProps.amount}</span> to win <span className="font-semibold">${cardProps.payout}</span>
+                      <span className="font-semibold">${cardProps.amount.toLocaleString()}</span> to win <span className="font-semibold">${cardProps.payout.toLocaleString()}</span>
                     </span>
+                    <span className="hidden sm:inline text-base text-neutral-500">•</span>
                     <span>Odds: <span className="font-mono">+{cardProps.odds}</span></span>
                   </div>
                 </div>
