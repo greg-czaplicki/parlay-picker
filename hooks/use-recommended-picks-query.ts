@@ -24,6 +24,10 @@ export interface Player {
   total?: number | null;
   today?: number | null;
   thru?: number | null;
+  // Heavy favorites filter only:
+  oddsGapToNext?: number;
+  nextBestPlayer?: string;
+  nextBestOdds?: number;
 }
 
 interface UseRecommendedPicksQueryResult {

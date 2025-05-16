@@ -247,6 +247,14 @@ export default function RecommendedPicks({
                 <div className="flex justify-between items-start">
                   <div>
                     <div className="font-medium text-lg">{player.name}</div>
+                    {typeof player.oddsGapToNext === 'number' && (
+                      <span className="inline-block text-xs text-blue-400 bg-blue-900/20 rounded px-2 py-0.5 mt-1 ml-0">
+                        {(() => {
+                          const americanGap = convertToAmericanOdds(player.oddsGapToNext + 1); // oddsGapToNext is decimal difference, so add 1 to get decimal odds
+                          return americanGap > 0 ? `+${americanGap}` : americanGap;
+                        })()}
+                      </span>
+                    )}
                     {typeof player.sgTotal === 'number' && !isNaN(player.sgTotal) && (
                       <div className="text-xs text-gray-400">
                         SG Total: <span className={getSGColorClass(player.sgTotal)}>{player.sgTotal.toFixed(2)}</span>

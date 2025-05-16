@@ -34,12 +34,58 @@ export function createHeavyFavoritesFilter(): Filter<any> {
         const [fav, next] = withOdds;
         const gap = next.odds - fav.odds;
         if (gap >= oddsGap) {
-          heavyFavorites.push({ ...fav, oddsGap: gap });
+          heavyFavorites.push({
+            ...fav,
+            oddsGap: gap, // legacy, used for scoring
+            oddsGapToNext: gap, // explicit for display
+            nextBestPlayer: next.name || next.playerName || undefined, // optional: show who the next best is
+            nextBestOdds: next.odds
+          });
         }
       });
 
-      // Sort heavy favorites by oddsGap descending
-      heavyFavorites.sort((a, b) => b.oddsGap - a.oddsGap);
+      // Sort heavy favorites by oddsGap descending, then SG Total descending, then seasonAvg ascending
+      heavyFavorites.sort((a, b) => {
+        // 1. Odds gap (desc)
+        if (b.oddsGap !== a.oddsGap) return b.oddsGap - a.oddsGap;
+        // 2. SG Total (desc, fallback to 0 if missing)
+        const sgA = typeof a.sgTotal === 'number' ? a.sgTotal : 0;
+        const sgB = typeof b.sgTotal === 'number' ? b.sgTotal : 0;
+        if (sgB !== sgA) return sgB - sgA;
+        // 3. Season scoring average (asc, fallback to Infinity if missing)
+        const avgA = typeof a.seasonAvg === 'number' ? a.seasonAvg : Infinity;
+        const avgB = typeof b.seasonAvg === 'number' ? b.seasonAvg : Infinity;
+        return avgA - avgB;
+      });
+
+      // Weighted scoring: 70% odds gap, 20% SG Total (Tourney), 10% seasonAvg
+      // 1. Gather min/max for normalization
+      const oddsGaps = heavyFavorites.map(p => p.oddsGap);
+      const sgTotals = heavyFavorites.map(p => typeof p.sgTotal === 'number' ? p.sgTotal : 0);
+      const seasonAvgs = heavyFavorites.map(p => typeof p.seasonAvg === 'number' ? p.seasonAvg : Infinity);
+      const minOddsGap = Math.min(...oddsGaps);
+      const maxOddsGap = Math.max(...oddsGaps);
+      const minSG = Math.min(...sgTotals);
+      const maxSG = Math.max(...sgTotals);
+      const minAvg = Math.min(...seasonAvgs);
+      const maxAvg = Math.max(...seasonAvgs);
+
+      // 2. Compute composite score for each player
+      heavyFavorites.forEach(p => {
+        // Odds Gap normalization (0-1, higher is better)
+        const oddsGapNorm = (maxOddsGap - minOddsGap) > 0 ? (p.oddsGap - minOddsGap) / (maxOddsGap - minOddsGap) : 1;
+        // SG Total normalization (0-1, higher is better)
+        const sg = typeof p.sgTotal === 'number' ? p.sgTotal : 0;
+        const sgNorm = (maxSG - minSG) > 0 ? (sg - minSG) / (maxSG - minSG) : 1;
+        // Season Avg normalization (0-1, higher is better, no inversion)
+        const avg = typeof p.seasonAvg === 'number' ? p.seasonAvg : maxAvg;
+        const avgNorm = (maxAvg - minAvg) > 0 ? (avg - minAvg) / (maxAvg - minAvg) : 1;
+        // Weighted score
+        p.compositeScore = 0.7 * oddsGapNorm + 0.2 * sgNorm + 0.1 * avgNorm;
+      });
+
+      // 3. Sort by composite score descending
+      heavyFavorites.sort((a, b) => b.compositeScore - a.compositeScore);
 
       return { filtered: heavyFavorites };
     },

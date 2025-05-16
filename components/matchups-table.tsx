@@ -146,14 +146,9 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
   const safeRoundNum = typeof roundNum === 'number' && !isNaN(roundNum) && roundNum > 0 ? roundNum : 1;
   const { data: playerStats, isLoading: loadingStats, isError: isErrorStats, error: errorStats } = usePlayerStatsQuery(eventId, safeRoundNum, playerIds);
 
-  // Filter playerStats if filterId is provided
-  const filteredPlayerStats = filterId && playerStats
-    ? FilterService.getInstance().getFilterById(filterId)?.applyFilter(playerStats).filtered ?? playerStats
-    : playerStats;
-
-  // After fetching playerStats (which is PlayerStat[] | undefined), create a lookup object:
-  const playerStatsMap: Record<number, PlayerStat> = (filteredPlayerStats ?? []).reduce((acc, stat) => {
-    if (stat.dg_id != null) acc[stat.dg_id] = stat;
+  // Always use the original playerStats for the table and lookups
+  const playerStatsMap: Record<number, PlayerStat> = (playerStats ?? []).reduce((acc, stat) => {
+    if (stat.player_id != null) acc[stat.player_id] = stat;
     return acc;
   }, {} as Record<number, PlayerStat>);
 
