@@ -2,13 +2,14 @@ import { Filter, FilterCategory, FilterOptions, FilterResult } from '../types';
 
 /**
  * SG Heavy Filter
- * Filters for players with a large SG gap vs. their group, weighted by in-tournament and season stats, with minor odds gap influence.
+ * For each 3-ball or 2-ball group, returns the player with the highest weighted SG (in-tournament: 0.6*sgTotal+0.4*seasonSgTotal, pre-tournament: seasonSgTotal),
+ * and attaches the odds gap to the next lowest odds in the group (decimal odds, for UI to convert to American odds).
  */
 export function createSGHeavyFilter(): Filter<any> {
   return {
     id: 'sg-heavy',
     name: 'SG Heavy',
-    description: 'Filters for players with a large Strokes Gained (SG) gap vs. their group, weighted by in-tournament and season stats, with minor odds gap influence.',
+    description: 'For each group, returns the top SG player and the odds gap to the next lowest odds in the group.',
     category: FilterCategory.PLAYER,
     applyFilter: (data, options?: FilterOptions): FilterResult<any> => {
       const sgGapThreshold = typeof options?.sgGapThreshold === 'number' ? options.sgGapThreshold : 0.5;
@@ -37,47 +38,30 @@ export function createSGHeavyFilter(): Filter<any> {
         });
         // Sort by weighted SG descending
         withSG.sort((a: any, b: any) => b.sgTotalWeighted - a.sgTotalWeighted);
-        if (withSG.length < 2) return;
-        const [best, next] = withSG;
-        const sgGap = best.sgTotalWeighted - next.sgTotalWeighted;
-        if (sgGap >= sgGapThreshold) {
-          // Odds gap (decimal odds, lower is better, so gap is next.odds - best.odds)
-          let oddsGap = 0;
-          if (typeof best.odds === 'number' && typeof next.odds === 'number') {
-            oddsGap = next.odds - best.odds;
-          }
+        const best = withSG[0];
+        // Odds gap logic: always use the two lowest odds in the group
+        const withOdds = group.filter((p: any) => typeof p.odds === 'number');
+        if (withOdds.length < 2) return;
+        withOdds.sort((a: any, b: any) => a.odds - b.odds);
+        const [fav, next] = withOdds;
+        const oddsGap = next.odds - fav.odds;
+        // Always attach the odds gap to the top SG player, regardless of their odds
+        if (best) {
           sgHeavy.push({
             ...best,
-            sgGapToNext: sgGap,
             oddsGapToNext: oddsGap,
             nextBestPlayer: next.name || next.playerName || undefined,
-            nextBestSG: next.sgTotalWeighted,
           });
         }
       });
-      // Normalize sgGapToNext and oddsGapToNext for composite score
-      const sgGaps = sgHeavy.map(p => p.sgGapToNext);
-      const oddsGaps = sgHeavy.map(p => typeof p.oddsGapToNext === 'number' ? p.oddsGapToNext : 0);
-      const minSG = Math.min(...sgGaps);
-      const maxSG = Math.max(...sgGaps);
-      const minOdds = Math.min(...oddsGaps);
-      const maxOdds = Math.max(...oddsGaps);
-      sgHeavy.forEach(p => {
-        const sgNorm = (maxSG - minSG) > 0 ? (p.sgGapToNext - minSG) / (maxSG - minSG) : 1;
-        const oddsNorm = (maxOdds - minOdds) > 0 ? (p.oddsGapToNext - minOdds) / (maxOdds - minOdds) : 1;
-        p.compositeScore = 0.9 * sgNorm + 0.1 * oddsNorm;
-      });
-      // Sort by composite score descending
-      sgHeavy.sort((a, b) => b.compositeScore - a.compositeScore);
-      // Only return the top golfer from each group
-      const topByGroup: Record<string, any> = {};
-      sgHeavy.forEach(player => {
-        const groupId = player.matchupId ?? 'ungrouped';
-        if (!topByGroup[groupId] || player.compositeScore > topByGroup[groupId].compositeScore) {
-          topByGroup[groupId] = player;
-        }
-      });
-      return { filtered: Object.values(topByGroup) };
+      return { filtered: sgHeavy };
     },
   };
+}
+
+// Helper to convert decimal odds to American odds
+function decimalToAmerican(decimalOdds: number): number {
+  if (decimalOdds >= 2.0) return Math.round((decimalOdds - 1) * 100);
+  else if (decimalOdds > 1.0) return Math.round(-100 / (decimalOdds - 1));
+  else return 0;
 } 

@@ -299,10 +299,7 @@ export default function RecommendedPicks({
                     <div className="font-medium text-lg">{player.name}</div>
                     {typeof player.oddsGapToNext === 'number' && (
                       <span className="inline-block text-xs text-blue-400 bg-blue-900/20 rounded px-2 py-0.5 mt-1 ml-0">
-                        {(() => {
-                          const americanGap = convertToAmericanOdds(player.oddsGapToNext + 1); // oddsGapToNext is decimal difference, so add 1 to get decimal odds
-                          return americanGap > 0 ? `+${americanGap}` : americanGap;
-                        })()}
+                        {`+${Math.round(player.oddsGapToNext * 100)}`}
                       </span>
                     )}
                     {typeof player.sgTotal === 'number' && !isNaN(player.sgTotal) && (
