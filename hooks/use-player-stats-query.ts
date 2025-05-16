@@ -7,18 +7,25 @@ import { useQuery } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/query-keys'
 
 export interface PlayerStat {
-  player_id: number;
-  event_id: number;
-  round_num: number;
-  stat_name: string;
-  stat_value: number;
-  // Add other fields as needed
+  player_id: number; // dg_id from API
+  player_name?: string;
+  event_name?: string;
+  round_num?: number | string | null;
   position?: string | null;
   total?: number | null;
   today?: number | null;
   thru?: number | null;
-  player_name?: string;
-  event_name?: string;
+  sg_total?: number | null;
+  sg_ott?: number | null;
+  sg_app?: number | null;
+  sg_arg?: number | null;
+  sg_putt?: number | null;
+  // Season stats
+  season_sg_total?: number | null;
+  season_sg_ott?: number | null;
+  season_sg_app?: number | null;
+  season_sg_arg?: number | null;
+  season_sg_putt?: number | null;
 }
 
 interface UsePlayerStatsQueryResult {

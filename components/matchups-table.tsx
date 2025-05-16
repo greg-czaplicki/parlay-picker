@@ -126,11 +126,17 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
   // Use type guards before accessing fields
   const playerIds = (matchups ?? []).flatMap(m => {
     if (isSupabaseMatchupRow(m)) {
-      const ids = [(m as SupabaseMatchupRow).player1_id ?? 0, (m as SupabaseMatchupRow).player2_id ?? 0];
-      if ((m as SupabaseMatchupRow).player3_id != null) ids.push((m as SupabaseMatchupRow).player3_id);
+      const ids = [
+        (m as SupabaseMatchupRow).player1_id ?? 0,
+        (m as SupabaseMatchupRow).player2_id ?? 0
+      ];
+      if ((m as SupabaseMatchupRow).player3_id != null) ids.push((m as SupabaseMatchupRow).player3_id ?? 0);
       return ids.filter((id): id is number => typeof id === 'number' && id > 0);
     } else if (isSupabaseMatchupRow2Ball(m)) {
-      const ids = [(m as SupabaseMatchupRow2Ball).player1_id ?? 0, (m as SupabaseMatchupRow2Ball).player2_id ?? 0];
+      const ids = [
+        (m as SupabaseMatchupRow2Ball).player1_id ?? 0,
+        (m as SupabaseMatchupRow2Ball).player2_id ?? 0
+      ];
       return ids.filter((id): id is number => typeof id === 'number' && id > 0);
     }
     return [];
@@ -147,7 +153,7 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
 
   // After fetching playerStats (which is PlayerStat[] | undefined), create a lookup object:
   const playerStatsMap: Record<number, PlayerStat> = (filteredPlayerStats ?? []).reduce((acc, stat) => {
-    if (stat.player_id != null) acc[stat.player_id] = stat;
+    if (stat.dg_id != null) acc[stat.dg_id] = stat;
     return acc;
   }, {} as Record<number, PlayerStat>);
 
@@ -603,7 +609,7 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
                                 } else if (player.id === 'p2') {
                                   playerId = (matchup as SupabaseMatchupRow).player2_id ?? 0;
                                 } else if (player.id === 'p3' && (matchup as SupabaseMatchupRow).player3_id != null) {
-                                  playerId = (matchup as SupabaseMatchupRow).player3_id;
+                                  playerId = (matchup as SupabaseMatchupRow).player3_id ?? 0;
                                 }
                               }
                               

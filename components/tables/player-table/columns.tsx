@@ -181,7 +181,6 @@ export function useColumns<T>({ dataView, getHeatmapColor }: UseColumnsProps<T>)
               </button>
             ),
             cell: ({ row }: { row: Row<T> }) => {
-              // @ts-expect-error: dynamic property access
               const value = (row.original as any).sg_ott
               const colorClass = getHeatmapColor(value, 'sg_ott')
               return <StatCell value={value} colorClass={colorClass} precision={2} />
@@ -199,7 +198,6 @@ export function useColumns<T>({ dataView, getHeatmapColor }: UseColumnsProps<T>)
               </button>
             ),
             cell: ({ row }: { row: Row<T> }) => {
-              // @ts-expect-error: dynamic property access
               const value = (row.original as any).sg_app
               const colorClass = getHeatmapColor(value, 'sg_app')
               return <StatCell value={value} colorClass={colorClass} precision={2} />
@@ -217,7 +215,6 @@ export function useColumns<T>({ dataView, getHeatmapColor }: UseColumnsProps<T>)
               </button>
             ),
             cell: ({ row }: { row: Row<T> }) => {
-              // @ts-expect-error: dynamic property access
               const value = (row.original as any).sg_arg
               const colorClass = getHeatmapColor(value, 'sg_arg')
               return <StatCell value={value} colorClass={colorClass} precision={2} />
@@ -235,7 +232,6 @@ export function useColumns<T>({ dataView, getHeatmapColor }: UseColumnsProps<T>)
               </button>
             ),
             cell: ({ row }: { row: Row<T> }) => {
-              // @ts-expect-error: dynamic property access
               const value = (row.original as any).sg_putt
               const colorClass = getHeatmapColor(value, 'sg_putt')
               return <StatCell value={value} colorClass={colorClass} precision={2} />
@@ -253,7 +249,6 @@ export function useColumns<T>({ dataView, getHeatmapColor }: UseColumnsProps<T>)
               </button>
             ),
             cell: ({ row }: { row: Row<T> }) => {
-              // @ts-expect-error: dynamic property access
               const value = (row.original as any).sg_t2g
               const colorClass = getHeatmapColor(value, 'sg_t2g')
               return <StatCell value={value} colorClass={colorClass} precision={2} />
@@ -271,10 +266,19 @@ export function useColumns<T>({ dataView, getHeatmapColor }: UseColumnsProps<T>)
               </button>
             ),
             cell: ({ row }: { row: Row<T> }) => {
-              // @ts-expect-error: dynamic property access
               const value = (row.original as any).sg_total
+              const seasonValue = (row.original as any).season_sg_total
               const colorClass = getHeatmapColor(value, 'sg_total')
-              return <StatCell value={value} colorClass={colorClass} precision={2} />
+              return (
+                <div className="flex flex-col items-center justify-center">
+                  <StatCell value={value} colorClass={colorClass} precision={2} />
+                  {typeof seasonValue === 'number' && (
+                    <span className="text-xs text-muted-foreground mt-0.5" title="Season SG Total">
+                      Season: {seasonValue.toFixed(2)}
+                    </span>
+                  )}
+                </div>
+              )
             },
             meta: { headerClassName: 'text-center', cellClassName: 'text-center sg-total-cell' },
           },

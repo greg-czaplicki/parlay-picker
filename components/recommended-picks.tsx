@@ -59,6 +59,17 @@ const convertToAmericanOdds = (decimalOdds: number | null | undefined): number =
   }
 };
 
+// Helper to color code SG values
+function getSGColorClass(sg: number | null | undefined) {
+  if (sg == null || isNaN(sg)) return "text-gray-400";
+  if (sg >= 2) return "text-green-700 font-bold";
+  if (sg >= 1) return "text-green-500 font-semibold";
+  if (sg >= 0) return "text-green-300";
+  if (sg >= -1) return "text-red-400";
+  if (sg >= -2) return "text-red-600 font-semibold";
+  return "text-red-800 font-bold";
+}
+
 export default function RecommendedPicks({
   eventId,
   matchupType,
@@ -83,6 +94,14 @@ export default function RecommendedPicks({
     }
     return recommendations;
   }, [filterId, recommendations]);
+
+  // Debug: Log raw and filtered recommendations
+  useEffect(() => {
+    console.log('Recommended picks (raw):', recommendations);
+  }, [recommendations]);
+  useEffect(() => {
+    console.log('Filtered recommendations:', filteredRecommendations);
+  }, [filteredRecommendations]);
 
   // All user parlays for indicator logic
   const userId = '00000000-0000-0000-0000-000000000001';
@@ -181,7 +200,7 @@ export default function RecommendedPicks({
         }
         return selectionPlayerName.toLowerCase() === formattedPlayerName.toLowerCase()
       })
-      newAddedPlayers[player.id] = isInParlay
+      newAddedPlayers[player.dg_id] = isInParlay
     })
     // Only update state if changed
     const isChanged =
@@ -224,11 +243,20 @@ export default function RecommendedPicks({
         {!isLoading && !isError && (filteredRecommendations ?? []).length > 0 && (
           <div className="space-y-3">
             {(filteredRecommendations ?? []).map((player: Player) => (
-              <div key={`${player.id}-${player.matchupId || Math.random().toString(36).substring(7)}`} className="p-4 bg-[#1e1e23] rounded-lg flex flex-col gap-2">
+              <div key={`${player.dg_id}-${player.matchupId || Math.random().toString(36).substring(7)}`} className="p-4 bg-[#1e1e23] rounded-lg flex flex-col gap-2">
                 <div className="flex justify-between items-start">
                   <div>
                     <div className="font-medium text-lg">{player.name}</div>
-                    <div className="text-xs text-gray-400">SG Total: {player.sgTotal?.toFixed(2) || "N/A"}</div>
+                    {typeof player.sgTotal === 'number' && !isNaN(player.sgTotal) && (
+                      <div className="text-xs text-gray-400">
+                        SG Total: <span className={getSGColorClass(player.sgTotal)}>{player.sgTotal.toFixed(2)}</span>
+                        {typeof player.seasonSgTotal === 'number' && !isNaN(player.seasonSgTotal) && (
+                          <span className="block text-xs text-muted-foreground mt-0.5" title="Season SG Total">
+                            Season: <span className={getSGColorClass(player.seasonSgTotal)}>{player.seasonSgTotal.toFixed(2)}</span>
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="text-right flex flex-col items-end">
                      <span
@@ -248,7 +276,7 @@ export default function RecommendedPicks({
                   </div>
                 </div>
                 {(() => {
-                  const { inParlay, selectionId } = isPlayerInParlay(player.id, player.name);
+                  const { inParlay, selectionId } = isPlayerInParlay(player.dg_id, player.name);
                   return (
                     <div className="flex items-center gap-2 mt-2">
                       {inParlay ? (
@@ -257,8 +285,8 @@ export default function RecommendedPicks({
                           variant="default"
                           className="w-full bg-primary border-none hover:bg-primary/90 text-white"
                           onClick={() => {
-                            if (!player.id || !player.name || !selectionId) return;
-                            removeFromParlay(selectionId, player.id, player.name);
+                            if (!player.dg_id || !player.name || !selectionId) return;
+                            removeFromParlay(selectionId, player.dg_id, player.name);
                           }}
                         >
                           ✓ Added to Parlay
@@ -269,12 +297,12 @@ export default function RecommendedPicks({
                           variant="outline"
                           className="w-full bg-[#2a2a35] border-none hover:bg-[#34343f] text-white"
                           onClick={() => {
-                            if (!player.id || !player.name) return;
+                            if (!player.dg_id || !player.name) return;
                             // Convert decimal odds to American odds if needed
                             const americanOdds = convertToAmericanOdds(player.odds);
                             // Add player to parlay context
                             addToParlay({
-                              id: player.id,
+                              id: player.dg_id,
                               matchupType: matchupType,
                               group: player.eventName || 'Unknown Event',
                               player: player.name,
@@ -284,7 +312,7 @@ export default function RecommendedPicks({
                               matchupId: player.matchupId,
                               eventName: player.eventName,
                               roundNum: player.roundNum || 2
-                            }, player.id);
+                            }, player.dg_id);
                           }}
                         >
                           <Plus size={16} className="mr-1" /> Add to Parlay

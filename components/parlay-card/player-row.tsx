@@ -35,7 +35,9 @@ export const PlayerRow: React.FC<PlayerRowProps> = ({ player, selectedRound, rem
   // Helper to get stat for a player
   const getStat = (name: string) => {
     const dgId = nameToDgId[name];
-    return dgId && player.liveStats ? player.liveStats[dgId] : undefined;
+    if (!dgId || !player.liveStats) return undefined;
+    // Try player_id first, fallback to dg_id
+    return player.liveStats[dgId]?.player_id ? player.liveStats[dgId] : player.liveStats[dgId] || player.liveStats[player.liveStats[dgId]?.player_id];
   };
 
   console.log('liveStats for', player.name, player.liveStats);

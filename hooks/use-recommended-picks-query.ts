@@ -6,13 +6,14 @@
 import { useQuery } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/query-keys'
 import { usePlayerStatsQuery } from './use-player-stats-query'
-import { useMemo } from 'react'
+import { useMemo, useEffect } from 'react'
 
 export interface Player {
-  id: number;
+  dg_id: number; // canonical player identifier
   name: string;
   odds: number;
   sgTotal: number;
+  seasonSgTotal?: number | null;
   valueRating: number;
   confidenceScore: number;
   isRecommended: boolean;
@@ -69,7 +70,7 @@ export function useRecommendedPicksQuery(
         if (!apiMatchup.player1_name || !apiMatchup.player2_name || !apiMatchup.player3_name) continue;
         result.push(
           {
-            id: apiMatchup.player1_id || 0,
+            dg_id: apiMatchup.player1_id || 0,
             name: apiMatchup.player1_name,
             odds: apiMatchup.odds1,
             sgTotal: 0,
@@ -81,7 +82,7 @@ export function useRecommendedPicksQuery(
             roundNum: apiMatchup.round_num
           },
           {
-            id: apiMatchup.player2_id || 0,
+            dg_id: apiMatchup.player2_id || 0,
             name: apiMatchup.player2_name,
             odds: apiMatchup.odds2,
             sgTotal: 0,
@@ -93,7 +94,7 @@ export function useRecommendedPicksQuery(
             roundNum: apiMatchup.round_num
           },
           {
-            id: apiMatchup.player3_id || 0,
+            dg_id: apiMatchup.player3_id || 0,
             name: apiMatchup.player3_name,
             odds: apiMatchup.odds3,
             sgTotal: 0,
@@ -110,7 +111,7 @@ export function useRecommendedPicksQuery(
         if (!apiMatchup.player1_name || !apiMatchup.player2_name) continue;
         result.push(
           {
-            id: apiMatchup.player1_id || 0,
+            dg_id: apiMatchup.player1_id || 0,
             name: apiMatchup.player1_name,
             odds: apiMatchup.odds1,
             sgTotal: 0,
@@ -122,7 +123,7 @@ export function useRecommendedPicksQuery(
             roundNum: apiMatchup.round_num
           },
           {
-            id: apiMatchup.player2_id || 0,
+            dg_id: apiMatchup.player2_id || 0,
             name: apiMatchup.player2_name,
             odds: apiMatchup.odds2,
             sgTotal: 0,
@@ -140,32 +141,40 @@ export function useRecommendedPicksQuery(
   }, [matchupsQuery.data, matchupType]);
 
   // Extract player IDs for stats
-  const playerIds = useMemo(() => players.map(p => p.id).filter(Boolean), [players]);
+  const playerIds = useMemo(() => players.map(p => p.dg_id).filter(Boolean), [players]);
 
   // Fetch player stats
   const statsQuery = usePlayerStatsQuery(eventId, roundNum ?? 1, playerIds);
 
+  // Debug: Log raw stats data
+  useEffect(() => {
+    if (statsQuery.data) {
+      console.log('API stats response:', statsQuery.data);
+    }
+  }, [statsQuery.data]);
+
   // Merge stats into players
   const mergedPlayers = useMemo(() => {
     if (!statsQuery.data) return players;
-    // Build a map of player_id -> all stats for that player
+    // Build a map of dg_id -> all stats for that player
     const statsMap: Record<number, any> = {};
     for (const stat of statsQuery.data) {
       if (!statsMap[stat.player_id]) statsMap[stat.player_id] = {};
-      statsMap[stat.player_id][stat.stat_name] = stat.stat_value;
-      // Also copy over position, total, today, thru if present
-      if (stat.position !== undefined) statsMap[stat.player_id].position = stat.position;
-      if (stat.total !== undefined) statsMap[stat.player_id].total = stat.total;
-      if (stat.today !== undefined) statsMap[stat.player_id].today = stat.today;
-      if (stat.thru !== undefined) statsMap[stat.player_id].thru = stat.thru;
+      statsMap[stat.player_id].sgTotal = stat.sg_total;
+      // Add season SG Total
+      statsMap[stat.player_id].seasonSgTotal = stat.season_sg_total;
+      // Copy other fields as before
+      statsMap[stat.player_id].position = stat.position;
+      statsMap[stat.player_id].total = stat.total;
+      statsMap[stat.player_id].today = stat.today;
+      statsMap[stat.player_id].thru = stat.thru;
     }
     return players.map(player => {
-      const stat = statsMap[player.id] || {};
+      const stat = statsMap[player.dg_id] || {};
       return {
         ...player,
         sgTotal: stat.sgTotal ?? player.sgTotal,
-        valueRating: stat.valueRating ?? player.valueRating,
-        confidenceScore: stat.confidenceScore ?? player.confidenceScore,
+        seasonSgTotal: stat.seasonSgTotal ?? null,
         position: stat.position ?? player.position,
         total: stat.total ?? player.total,
         today: stat.today ?? player.today,

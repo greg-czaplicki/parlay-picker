@@ -18,6 +18,7 @@ import { useMatchupTypeQuery } from "@/hooks/use-matchup-type-query"
 import RecommendedPicks from "./recommended-picks"
 import { FilterService } from "@/filters/filter-service"
 import { registerCoreFilters } from "@/filters/initFilters"
+import { useCurrentRoundForEvent } from '@/hooks/use-current-round-for-event'
 
 // Register filters once at module load
 registerCoreFilters()
@@ -43,6 +44,16 @@ export default function Dashboard({
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null)
   const [matchupType, setMatchupType] = useState<"2ball" | "3ball">("3ball")
   const [currentRound, setCurrentRound] = useState<number>(2)
+
+  // Fetch the current round for the selected event
+  const { data: latestRound, isLoading: isLoadingRound } = useCurrentRoundForEvent(selectedEventId)
+
+  // When selectedEventId or latestRound changes, update currentRound
+  useEffect(() => {
+    if (typeof latestRound === 'number' && !isNaN(latestRound)) {
+      setCurrentRound(latestRound)
+    }
+  }, [latestRound])
 
   useEffect(() => {
     if (!currentEvents || currentEvents.length === 0) return;
@@ -138,6 +149,10 @@ export default function Dashboard({
                           <SelectItem value="2ball">2-Ball</SelectItem>
                         </SelectContent>
                       </Select>
+                      {isLoadingRound && <span className="ml-4 text-xs text-gray-400">Loading round...</span>}
+                      {!isLoadingRound && latestRound && (
+                        <span className="ml-4 text-xs text-green-400">Current Round: {latestRound}</span>
+                      )}
                     </div>
                   )}
                 </div>
