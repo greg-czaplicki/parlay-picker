@@ -1,48 +1,32 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import {
-  Filter,
-  GlobeIcon as GolfBall,
-  TrendingUp,
-  BarChart3,
-  DollarSign,
-  Settings,
-  Search,
-  Bell,
-} from "lucide-react"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { toast } from "@/components/ui/use-toast"
 import PlayerTable from "./player-table"
 import ParlayBuilder from "./parlay-builder"
 import MatchupsTable from "./matchups-table"
 import TopNavigation from "./top-navigation"
 import Sidebar from "./sidebar"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { toast } from "@/components/ui/use-toast"
-import { PlayerSkillRating, LiveTournamentStat, PgaTourPlayerStats } from "@/types/definitions"
-import RecommendedPicks from "./recommended-picks"
-import { createBrowserClient } from "@/lib/supabase"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
 import { ParlayProvider } from "@/context/ParlayContext"
 import { useCurrentWeekEventsQuery, Event as TournamentEvent } from "@/hooks/use-current-week-events-query"
 import { useMatchupTypeQuery } from "@/hooks/use-matchup-type-query"
+import RecommendedPicks from "./recommended-picks"
+import { FilterService } from "@/filters/filter-service"
+import { registerCoreFilters } from "@/filters/initFilters"
 
-const filters = [
-  { name: "Balanced", icon: <Filter className="w-4 h-4" /> },
-  { name: "SG Heavy", icon: <GolfBall className="w-4 h-4" /> },
-  { name: "Heavy Favorites", icon: <TrendingUp className="w-4 h-4" /> },
-  { name: "Score Heavy", icon: <BarChart3 className="w-4 h-4" /> },
-  { name: "SG Value", icon: <DollarSign className="w-4 h-4" /> },
-  { name: "Custom", icon: <Settings className="w-4 h-4" /> },
-]
+// Register filters once at module load
+registerCoreFilters()
 
 // Define props for Dashboard
 interface DashboardProps {
-  initialSeasonSkills: PlayerSkillRating[];
-  initialLiveStats: LiveTournamentStat[];
-  initialPgaTourStats?: PgaTourPlayerStats[];
+  initialSeasonSkills: any[];
+  initialLiveStats: any[];
+  initialPgaTourStats?: any[];
   defaultTab?: "matchups" | "players" | "parlay";
 }
 
@@ -52,27 +36,35 @@ export default function Dashboard({
   initialPgaTourStats = [],
   defaultTab = "matchups"
 }: DashboardProps) {
-  const [activeFilter, setActiveFilter] = useState("Balanced")
+  const [activeFilter, setActiveFilter] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState(defaultTab)
   const [showCustom, setShowCustom] = useState(false)
-  const { data: currentEvents, isLoading: isLoadingEvents, isError: isErrorEvents, error: eventsError } = useCurrentWeekEventsQuery()
+  const { data: currentEvents, isLoading: isLoadingEvents } = useCurrentWeekEventsQuery()
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null)
   const [matchupType, setMatchupType] = useState<"2ball" | "3ball">("3ball")
-  const [currentRound, setCurrentRound] = useState<number>(2); // TODO: fetch from event/matchup data
+  const [currentRound, setCurrentRound] = useState<number>(2)
 
   useEffect(() => {
     if (!currentEvents || currentEvents.length === 0) return;
     setSelectedEventId(currentEvents[0].event_id);
   }, [currentEvents]);
 
-  const handleFilterChange = (filterName: string) => {
-    setActiveFilter(filterName)
-    setShowCustom(filterName === "Custom")
+  // Get all filters from FilterService
+  const filters = useMemo(() => {
+    return FilterService.getInstance().getFilters();
+  }, [])
+
+  const handleFilterChange = (filterId: string) => {
+    setActiveFilter(filterId)
+    setShowCustom(filterId === "custom")
   }
 
   const handleEventChange = (value: string) => {
     setSelectedEventId(Number(value));
   }
+
+  // Example: pass activeFilter and options to children (RecommendedPicks, MatchupsTable)
+  // For now, just pass the filter id; later, pass options as well
 
   return (
     <ParlayProvider>
@@ -81,12 +73,8 @@ export default function Dashboard({
           <h1 className="text-3xl font-bold">Golf Parlay Picker</h1>
           <div className="flex items-center gap-4">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
               <Input placeholder="Search players..." className="pl-10 w-64 bg-[#1e1e23] border-none rounded-xl" />
             </div>
-            <Button variant="outline" size="icon" className="rounded-full bg-[#1e1e23] border-none">
-              <Bell size={18} />
-            </Button>
             <Avatar>
               <AvatarImage src="/placeholder.svg" />
               <AvatarFallback>JD</AvatarFallback>
@@ -156,12 +144,11 @@ export default function Dashboard({
                 <div className="flex flex-wrap gap-2">
                   {filters.map((filter) => (
                     <Button
-                      key={filter.name}
-                      variant={activeFilter === filter.name ? "default" : "outline"}
-                      onClick={() => handleFilterChange(filter.name)}
-                      className={activeFilter === filter.name ? "filter-button-active" : "filter-button"}
+                      key={filter.id}
+                      variant={activeFilter === filter.id ? "default" : "outline"}
+                      onClick={() => handleFilterChange(filter.id)}
+                      className={activeFilter === filter.id ? "filter-button-active" : "filter-button"}
                     >
-                      {filter.icon}
                       {filter.name}
                     </Button>
                   ))}
@@ -192,7 +179,7 @@ export default function Dashboard({
 
           {/* Row 2: Main Matchups Table (Left) */}
           <div className="md:col-span-3">
-            <MatchupsTable eventId={selectedEventId} matchupType={matchupType} roundNum={currentRound} />
+            <MatchupsTable eventId={selectedEventId} matchupType={matchupType} roundNum={currentRound} filterId={activeFilter} />
           </div>
 
           {/* Row 2: Recommended Picks (Right) */}
@@ -201,15 +188,15 @@ export default function Dashboard({
               eventId={selectedEventId}
               matchupType={matchupType} 
               limit={10} 
-              oddsGapPercentage={40} // 40 point American odds gap
-              bookmaker="fanduel" // Use same bookmaker as matchups table default
+              oddsGapPercentage={40}
+              bookmaker="fanduel"
               roundNum={currentRound}
+              filterId={activeFilter}
             />
           </div>
         </div>
       )}
 
-      {/* Players tab removed and moved to its own page */}
       {activeTab === "parlay" && <ParlayBuilder matchupType={matchupType} roundNum={currentRound} />}
       </div>
     </ParlayProvider>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -12,6 +12,7 @@ import { useParlayContext, ParlaySelection } from "@/context/ParlayContext"
 import { useRecommendedPicksQuery, Player } from "@/hooks/use-recommended-picks-query"
 import { useParlaysQuery } from '@/hooks/use-parlays-query'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { FilterService } from "@/filters/filter-service"
 
 interface RecommendedPicksProps {
   eventId: number | null;
@@ -20,6 +21,7 @@ interface RecommendedPicksProps {
   oddsGapPercentage?: number;
   bookmaker?: string;
   roundNum?: number | null;
+  filterId?: string | null;
 }
 
 // Helper to format Decimal odds into American odds string
@@ -64,6 +66,7 @@ export default function RecommendedPicks({
   oddsGapPercentage = 40,
   bookmaker = "fanduel",
   roundNum,
+  filterId,
 }: RecommendedPicksProps) {
   // Get the parlay context
   const { addSelection, removeSelection, selections } = useParlayContext()
@@ -72,6 +75,14 @@ export default function RecommendedPicks({
 
   // Use React Query for recommendations
   const { data: recommendations, isLoading, isError, error } = useRecommendedPicksQuery(eventId, matchupType as "2ball" | "3ball", bookmaker, oddsGapPercentage, limit, roundNum)
+
+  // Filter recommendations if filterId is provided
+  const filteredRecommendations = useMemo(() => {
+    if (filterId && recommendations) {
+      return FilterService.getInstance().getFilterById(filterId)?.applyFilter(recommendations).filtered ?? recommendations;
+    }
+    return recommendations;
+  }, [filterId, recommendations]);
 
   // All user parlays for indicator logic
   const userId = '00000000-0000-0000-0000-000000000001';
@@ -155,8 +166,8 @@ export default function RecommendedPicks({
   // Sync addedPlayers state with selections from context
   useEffect(() => {
     // Find players that are currently in recommendations and also in selections
-    const newAddedPlayers: Record<number, boolean> = {...addedPlayers};
-    (recommendations ?? []).forEach((player: Player) => {
+    const newAddedPlayers: Record<number, boolean> = {};
+    (filteredRecommendations ?? []).forEach((player: Player) => {
       let formattedPlayerName = player.name
       if (formattedPlayerName.includes(",")) {
         const [lastName, firstName] = formattedPlayerName.split(",").map(part => part.trim())
@@ -172,8 +183,16 @@ export default function RecommendedPicks({
       })
       newAddedPlayers[player.id] = isInParlay
     })
-    setAddedPlayers(newAddedPlayers)
-  }, [selections, recommendations]);
+    // Only update state if changed
+    const isChanged =
+      Object.keys(newAddedPlayers).length !== Object.keys(addedPlayers).length ||
+      Object.keys(newAddedPlayers).some(
+        key => newAddedPlayers[Number(key)] !== addedPlayers[Number(key)]
+      );
+    if (isChanged) {
+      setAddedPlayers(newAddedPlayers)
+    }
+  }, [selections, filteredRecommendations]);
 
   return (
     <Card className="glass-card highlight-card">
@@ -198,13 +217,13 @@ export default function RecommendedPicks({
           </Alert>
         )}
 
-        {!isLoading && !isError && (recommendations ?? []).length === 0 && (
+        {!isLoading && !isError && (filteredRecommendations ?? []).length === 0 && (
           <p className="text-gray-400 text-center py-4">No recommendations available based on current data and filters.</p>
         )}
 
-        {!isLoading && !isError && (recommendations ?? []).length > 0 && (
+        {!isLoading && !isError && (filteredRecommendations ?? []).length > 0 && (
           <div className="space-y-3">
-            {(recommendations ?? []).map((player: Player) => (
+            {(filteredRecommendations ?? []).map((player: Player) => (
               <div key={`${player.id}-${player.matchupId || Math.random().toString(36).substring(7)}`} className="p-4 bg-[#1e1e23] rounded-lg flex flex-col gap-2">
                 <div className="flex justify-between items-start">
                   <div>

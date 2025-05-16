@@ -10,8 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Loader2, AlertTriangle, DollarSign, Sliders, Trophy, CheckCircle, Info, PlusCircle } from "lucide-react"
-import { createBrowserClient } from "@/lib/supabase"
+import { Loader2, DollarSign, Sliders, CheckCircle, Info, PlusCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Tooltip,
@@ -34,6 +33,7 @@ import { useMatchupsQuery } from "@/hooks/use-matchups-query"
 import { usePlayerStatsQuery, PlayerStat } from "@/hooks/use-player-stats-query"
 import { useParlayContext } from '@/context/ParlayContext'
 import { useParlaysQuery } from '@/hooks/use-parlays-query'
+import { FilterService } from "@/filters/filter-service"
 
 // Only 3-ball matchups
 interface SupabaseMatchupRow {
@@ -111,9 +111,10 @@ interface MatchupsTableProps {
   eventId: number | null;
   matchupType?: "2ball" | "3ball";
   roundNum?: number | null;
+  filterId?: string | null;
 }
 
-export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum }: MatchupsTableProps) {
+export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum, filterId }: MatchupsTableProps) {
   const [selectedBookmaker, setSelectedBookmaker] = useState<"fanduel">("fanduel");
   // Odds gap filter state
   const [oddsGapThreshold, setOddsGapThreshold] = useState(40); // Default 40 points in American odds
@@ -139,8 +140,13 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
   const safeRoundNum = typeof roundNum === 'number' && !isNaN(roundNum) && roundNum > 0 ? roundNum : 1;
   const { data: playerStats, isLoading: loadingStats, isError: isErrorStats, error: errorStats } = usePlayerStatsQuery(eventId, safeRoundNum, playerIds);
 
+  // Filter playerStats if filterId is provided
+  const filteredPlayerStats = filterId && playerStats
+    ? FilterService.getInstance().getFilterById(filterId)?.applyFilter(playerStats).filtered ?? playerStats
+    : playerStats;
+
   // After fetching playerStats (which is PlayerStat[] | undefined), create a lookup object:
-  const playerStatsMap: Record<number, PlayerStat> = (playerStats ?? []).reduce((acc, stat) => {
+  const playerStatsMap: Record<number, PlayerStat> = (filteredPlayerStats ?? []).reduce((acc, stat) => {
     if (stat.player_id != null) acc[stat.player_id] = stat;
     return acc;
   }, {} as Record<number, PlayerStat>);
