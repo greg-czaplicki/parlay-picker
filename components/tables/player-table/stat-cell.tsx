@@ -9,6 +9,9 @@ import {
 } from "@/components/ui/tooltip"
 import { type TrendIndicator as TrendIndicatorType } from "@/types/definitions"
 
+// Add styles to ensure the table cells have consistent width
+import './table-styles.css'
+
 interface StatCellProps {
   value: number | null
   colorClass: string
@@ -29,20 +32,17 @@ export const StatCell = React.memo(function StatCell({ value, colorClass, trend,
     return (
       <div 
         style={dynamicStyle}
-        className={`font-medium truncate ${className}`}
+        className={`font-medium truncate ${className} w-full flex justify-center items-center`}
       >
-        <div className="flex items-center space-x-1">
-          <span className="inline-block min-w-[40px] text-center">
+        <div className="flex items-center justify-center">
+          <span className="inline-block min-w-[32px] text-center">
             {typeof value === 'number' && !isNaN(value)
               ? isPercentage
                 ? `${(value * 100).toFixed(precision)}%`
                 : value.toFixed(precision)
               : 'N/A'}
           </span>
-          {/* Always render a placeholder for consistent alignment */}
-          <span className="inline-flex items-center justify-center w-[20px] h-[20px] ml-1 opacity-0">
-            <ArrowUp size={12} />
-          </span>
+          {/* Remove the placeholder since we're using fixed-width cells */}
         </div>
       </div>
     )
@@ -53,22 +53,22 @@ export const StatCell = React.memo(function StatCell({ value, colorClass, trend,
     <div className="relative group">
       <div 
         style={dynamicStyle}
-        className={`font-medium truncate ${className}`}
+        className={`font-medium truncate ${className} w-full flex justify-center items-center`}
         role="button"
         tabIndex={0}
         aria-label={trend.title || undefined}
       >
-        <div className="flex items-center space-x-1">
-          <span className="inline-block min-w-[40px] text-center">
+        <div className="flex items-center justify-center">
+          <span className="inline-block min-w-[32px] text-center">
             {typeof value === 'number' && !isNaN(value)
               ? isPercentage
                 ? `${(value * 100).toFixed(precision)}%`
                 : value.toFixed(precision)
               : 'N/A'}
           </span>
-          {/* Always render the trend space regardless, but apply opacity if no actual trend */}
-          <span className={`inline-flex items-center justify-center w-[20px] h-[20px] ml-1 ${trend ? trend.className : 'opacity-0'}`}>
-            {trend ? (trend.type === "up" ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUp size={12} />}
+          {/* Display trend indicators */}
+          <span className={`inline-flex items-center justify-center w-[12px] h-[12px] ml-1 ${trend ? trend.className : 'opacity-0'}`}>
+            {trend ? (trend.type === "up" ? <ArrowUp size={8} /> : <ArrowDown size={8} />) : <ArrowUp size={8} />}
           </span>
         </div>
       </div>

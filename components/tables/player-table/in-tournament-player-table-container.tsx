@@ -4,7 +4,7 @@ import { useInTournamentPlayersQuery } from '@/hooks/use-in-tournament-players-q
 import { useInitializePlayerView } from '@/hooks/use-initialize-player-view'
 import { useLastCompletedEvent } from '@/lib/queries'
 import { useColumns } from './columns'
-import { getCoreRowModel, getSortedRowModel, useReactTable } from '@tanstack/react-table'
+import { getCoreRowModel, getSortedRowModel, useReactTable, SortingState } from '@tanstack/react-table'
 import { PlayerTablePresentation } from './player-table-presentation'
 import { PlayerTableFilters } from './player-table-filters'
 import { PlayerTableSkeleton } from './player-table-skeleton'
@@ -137,23 +137,19 @@ function LiveStatsTable({ eventId, roundFilter, eventOptions }: { eventId: numbe
   }, [sgStats]);
   const columns = useColumns<any>({ dataView: 'tournament', getHeatmapColor });
 
-  // Memoize table state and callbacks to avoid render loops
-  const tableState = useMemo(() => ({ sorting: [] }), []);
-  const onSortingChange = useCallback(() => {}, []);
-  const initialState = useMemo(() => ({
-    get sorting() {
-      return [{ id: 'total', desc: false }];
-    }
-  }), []);
+  // Enable sorting - default sort by total score
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: 'total', desc: false }
+  ]);
 
   const table = useReactTable({
     data: displayPlayers,
     columns,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    state: tableState,
-    onSortingChange,
-    initialState,
+    state: { sorting },
+    onSortingChange: setSorting,
+    manualSorting: false,
   });
   return <PlayerTablePresentation table={table} caption="" />;
 }
@@ -201,23 +197,19 @@ function LastEventStatsTable({ eventId, eventName }: { eventId: number; eventNam
   }, [sgStats]);
   const columns = useColumns<any>({ dataView: 'tournament', getHeatmapColor });
 
-  // Memoize table state and callbacks to avoid render loops
-  const tableState = useMemo(() => ({ sorting: [] }), []);
-  const onSortingChange = useCallback(() => {}, []);
-  const initialState = useMemo(() => ({
-    get sorting() {
-      return [{ id: 'total', desc: false }];
-    }
-  }), []);
+  // Enable sorting - default sort by total score
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: 'total', desc: false }
+  ]);
 
   const table = useReactTable({
     data: displayPlayers,
     columns,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    state: tableState,
-    onSortingChange,
-    initialState,
+    state: { sorting },
+    onSortingChange: setSorting,
+    manualSorting: false,
   });
   return <PlayerTablePresentation table={table} caption="" />;
 } 

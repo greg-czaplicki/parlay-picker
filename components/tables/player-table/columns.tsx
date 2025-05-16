@@ -29,7 +29,12 @@ export function useColumns<T>({ dataView, getHeatmapColor }: UseColumnsProps<T>)
           {
             accessorKey: "driving_acc",
             header: ({ column }: { column: Column<T, unknown> }) => (
-              <div className="flex items-center cursor-pointer" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>Driving Acc <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" /></div>
+              <button 
+                onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+                className="flex items-center cursor-pointer w-full"
+              >
+                Driving Acc <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" />
+              </button>
             ),
             meta: { headerClassName: 'pl-3', cellClassName: 'pl-3', customStyles: { cell: { backgroundColor: '#2a2a38' }, header: { backgroundColor: '#2a2a38' } } },
             cell: ({ row }: { row: Row<T> }) => {
@@ -42,7 +47,12 @@ export function useColumns<T>({ dataView, getHeatmapColor }: UseColumnsProps<T>)
           {
             accessorKey: "driving_dist",
             header: ({ column }: { column: Column<T, unknown> }) => (
-              <div className="flex items-center cursor-pointer" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>Driving Dist <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" /></div>
+              <button 
+                onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+                className="flex items-center cursor-pointer w-full"
+              >
+                Driving Dist <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" />
+              </button>
             ),
             meta: { headerClassName: 'pl-3', cellClassName: 'pl-3', customStyles: { cell: { backgroundColor: '#2a2a38' }, header: { backgroundColor: '#2a2a38' } } },
             cell: ({ row }: { row: Row<T> }) => {
@@ -57,7 +67,14 @@ export function useColumns<T>({ dataView, getHeatmapColor }: UseColumnsProps<T>)
         return [
           {
             accessorKey: "position",
-            header: "POS",
+            header: ({ column }: { column: Column<T, unknown> }) => (
+              <button 
+                onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+                className="text-center cursor-pointer flex items-center justify-center w-full"
+              >
+                POS <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" />
+              </button>
+            ),
             cell: ({ row }: { row: Row<T> }) => (
               <div className="text-center px-1 py-1 truncate">{(row.original as any)?.position ?? '-'}</div>
             ),
@@ -76,29 +93,40 @@ export function useColumns<T>({ dataView, getHeatmapColor }: UseColumnsProps<T>)
           {
             accessorKey: "total",
             header: ({ column }: { column: Column<T, unknown> }) => (
-              <div className="text-right cursor-pointer flex items-center justify-end" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>
+              <button 
+                onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+                className="text-right cursor-pointer flex items-center justify-end w-full"
+              >
                 TOTAL <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" />
-              </div>
+              </button>
             ),
             cell: ({ row }: { row: Row<T> }) => {
               // @ts-expect-error: dynamic property access
-              const value = (row.original as LiveTournamentStat).total
+              const value = (row.original as LiveTournamentStat).total || 0
               let colorClass = "text-white"
               if (typeof value === 'number') {
                 if (value < 0) colorClass = "text-red-400"
                 else if (value === 0) colorClass = "text-green-400"
               }
-              const formatted = value === 0 ? 'E' : value && value > 0 ? `+${value}` : value?.toString() ?? '-'
+              const formatted = value === 0 ? 'E' : value > 0 ? `+${value}` : value.toString() ?? '-'
               return <div className={`font-medium px-4 py-1 ${colorClass}`}>{formatted}</div>
+            },
+            sortingFn: (rowA, rowB, columnId) => {
+              const a = (rowA.original as any).total ?? 0
+              const b = (rowB.original as any).total ?? 0
+              return a - b
             },
             meta: { headerClassName: 'text-center', cellClassName: 'text-center score-cell' },
           },
           {
             accessorKey: "thru",
             header: ({ column }: { column: Column<T, unknown> }) => (
-              <div className="text-center cursor-pointer flex items-center justify-center" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>
+              <button 
+                onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+                className="text-center cursor-pointer flex items-center justify-center w-full"
+              >
                 THRU <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" />
-              </div>
+              </button>
             ),
             cell: ({ row }: { row: Row<T> }) => {
               // @ts-expect-error: dynamic property access
@@ -122,9 +150,12 @@ export function useColumns<T>({ dataView, getHeatmapColor }: UseColumnsProps<T>)
           {
             accessorKey: "today",
             header: ({ column }: { column: Column<T, unknown> }) => (
-              <div className="text-center cursor-pointer flex items-center justify-center" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>
+              <button 
+                onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+                className="text-center cursor-pointer flex items-center justify-center w-full"
+              >
                 RD <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" />
-              </div>
+              </button>
             ),
             cell: ({ row }: { row: Row<T> }) => {
               // @ts-expect-error: dynamic property access
@@ -142,9 +173,12 @@ export function useColumns<T>({ dataView, getHeatmapColor }: UseColumnsProps<T>)
           {
             accessorKey: 'sg_ott',
             header: ({ column }: { column: Column<T, unknown> }) => (
-              <div className="text-center cursor-pointer flex items-center justify-center" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}>
+              <button 
+                onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+                className="text-center cursor-pointer flex items-center justify-center w-full"
+              >
                 SG: OTT <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" />
-              </div>
+              </button>
             ),
             cell: ({ row }: { row: Row<T> }) => {
               // @ts-expect-error: dynamic property access
@@ -157,9 +191,12 @@ export function useColumns<T>({ dataView, getHeatmapColor }: UseColumnsProps<T>)
           {
             accessorKey: 'sg_app',
             header: ({ column }: { column: Column<T, unknown> }) => (
-              <div className="text-center cursor-pointer flex items-center justify-center" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}>
+              <button 
+                onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+                className="text-center cursor-pointer flex items-center justify-center w-full"
+              >
                 SG: APP <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" />
-              </div>
+              </button>
             ),
             cell: ({ row }: { row: Row<T> }) => {
               // @ts-expect-error: dynamic property access
@@ -172,9 +209,12 @@ export function useColumns<T>({ dataView, getHeatmapColor }: UseColumnsProps<T>)
           {
             accessorKey: 'sg_arg',
             header: ({ column }: { column: Column<T, unknown> }) => (
-              <div className="text-center cursor-pointer flex items-center justify-center" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}>
+              <button 
+                onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+                className="text-center cursor-pointer flex items-center justify-center w-full"
+              >
                 SG: ARG <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" />
-              </div>
+              </button>
             ),
             cell: ({ row }: { row: Row<T> }) => {
               // @ts-expect-error: dynamic property access
@@ -187,9 +227,12 @@ export function useColumns<T>({ dataView, getHeatmapColor }: UseColumnsProps<T>)
           {
             accessorKey: 'sg_putt',
             header: ({ column }: { column: Column<T, unknown> }) => (
-              <div className="text-center cursor-pointer flex items-center justify-center" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}>
+              <button 
+                onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+                className="text-center cursor-pointer flex items-center justify-center w-full"
+              >
                 SG: PUTT <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" />
-              </div>
+              </button>
             ),
             cell: ({ row }: { row: Row<T> }) => {
               // @ts-expect-error: dynamic property access
@@ -202,9 +245,12 @@ export function useColumns<T>({ dataView, getHeatmapColor }: UseColumnsProps<T>)
           {
             accessorKey: 'sg_t2g',
             header: ({ column }: { column: Column<T, unknown> }) => (
-              <div className="text-center cursor-pointer flex items-center justify-center" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}>
+              <button 
+                onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+                className="text-center cursor-pointer flex items-center justify-center w-full"
+              >
                 SG: T2G <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" />
-              </div>
+              </button>
             ),
             cell: ({ row }: { row: Row<T> }) => {
               // @ts-expect-error: dynamic property access
@@ -217,9 +263,12 @@ export function useColumns<T>({ dataView, getHeatmapColor }: UseColumnsProps<T>)
           {
             accessorKey: 'sg_total',
             header: ({ column }: { column: Column<T, unknown> }) => (
-              <div className="text-center cursor-pointer flex items-center justify-center" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}>
+              <button 
+                onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+                className="text-center cursor-pointer flex items-center justify-center w-full"
+              >
                 SG: TOTAL <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" />
-              </div>
+              </button>
             ),
             cell: ({ row }: { row: Row<T> }) => {
               // @ts-expect-error: dynamic property access

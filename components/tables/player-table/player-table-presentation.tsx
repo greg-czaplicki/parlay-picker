@@ -11,6 +11,7 @@
 import { flexRender, Table as ReactTable, RowData } from '@tanstack/react-table'
 import { useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
+import './table-styles.css'
 
 export interface PlayerTablePresentationProps<T extends RowData> {
   table: ReactTable<T>
@@ -25,7 +26,7 @@ export const PlayerTablePresentation = <T extends RowData>({
   return (
     <div className="relative rounded-lg border border-gray-800 w-full overflow-hidden">
       <div className="max-h-[calc(100vh-22rem)] overflow-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-[13px]">
           {caption && <caption className="mt-4 text-sm text-muted-foreground">{caption}</caption>}
           <thead className="[&_tr]:border-b bg-[#1e1e23] sticky top-0 z-10">
             {table.getHeaderGroups().map(headerGroup => (
@@ -35,7 +36,7 @@ export const PlayerTablePresentation = <T extends RowData>({
                     key={header.id}
                     role="columnheader"
                     scope="col"
-                    className="h-12 px-4 text-left align-middle font-medium text-muted-foreground sticky top-0 bg-[#1e1e23] border-b border-gray-700"
+                    className={`h-7 px-1 align-middle font-medium text-muted-foreground sticky top-0 bg-[#1e1e23] border-b border-gray-700 ${(header.column.columnDef.meta as any)?.headerClassName || ''}`}
                   >
                     {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                   </th>
@@ -45,7 +46,7 @@ export const PlayerTablePresentation = <T extends RowData>({
           </thead>
           <tbody className="[&_tr:last-child]:border-0">
             {table.getRowModel().rows.length === 0 ? (
-              <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
+              <tr className="border-b border-gray-800/20 transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
                 <td 
                   colSpan={table.getAllColumns().length} 
                   className="p-4 align-middle text-center py-8 text-muted-foreground"
@@ -55,9 +56,13 @@ export const PlayerTablePresentation = <T extends RowData>({
               </tr>
             ) : (
               table.getRowModel().rows.map(row => (
-                <tr key={row.id} role="row" className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
+                <tr key={row.id} role="row" className="border-b border-gray-800/20 transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
                   {row.getVisibleCells().map(cell => (
-                    <td key={cell.id} role="cell" className="p-4 align-middle">
+                    <td 
+                      key={cell.id} 
+                      role="cell" 
+                      className={`py-[3px] px-1 align-middle ${(cell.column.columnDef.meta as any)?.cellClassName || ''}`}
+                    >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
                   ))}
