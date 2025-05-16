@@ -19,6 +19,7 @@ interface RecommendedPicksProps {
   limit?: number;
   oddsGapPercentage?: number;
   bookmaker?: string;
+  roundNum?: number | null;
 }
 
 // Helper to format Decimal odds into American odds string
@@ -62,6 +63,7 @@ export default function RecommendedPicks({
   limit = 10,
   oddsGapPercentage = 40,
   bookmaker = "fanduel",
+  roundNum,
 }: RecommendedPicksProps) {
   // Get the parlay context
   const { addSelection, removeSelection, selections } = useParlayContext()
@@ -69,7 +71,7 @@ export default function RecommendedPicks({
   const [addedPlayers, setAddedPlayers] = useState<Record<number, boolean>>({})
 
   // Use React Query for recommendations
-  const { data: recommendations, isLoading, isError, error } = useRecommendedPicksQuery(eventId, matchupType as "2ball" | "3ball", bookmaker, oddsGapPercentage, limit)
+  const { data: recommendations, isLoading, isError, error } = useRecommendedPicksQuery(eventId, matchupType as "2ball" | "3ball", bookmaker, oddsGapPercentage, limit, roundNum)
 
   // All user parlays for indicator logic
   const userId = '00000000-0000-0000-0000-000000000001';

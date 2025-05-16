@@ -58,6 +58,7 @@ export default function Dashboard({
   const { data: currentEvents, isLoading: isLoadingEvents, isError: isErrorEvents, error: eventsError } = useCurrentWeekEventsQuery()
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null)
   const [matchupType, setMatchupType] = useState<"2ball" | "3ball">("3ball")
+  const [currentRound, setCurrentRound] = useState<number>(2); // TODO: fetch from event/matchup data
 
   useEffect(() => {
     if (!currentEvents || currentEvents.length === 0) return;
@@ -191,7 +192,7 @@ export default function Dashboard({
 
           {/* Row 2: Main Matchups Table (Left) */}
           <div className="md:col-span-3">
-            <MatchupsTable eventId={selectedEventId} matchupType={matchupType} />
+            <MatchupsTable eventId={selectedEventId} matchupType={matchupType} roundNum={currentRound} />
           </div>
 
           {/* Row 2: Recommended Picks (Right) */}
@@ -202,13 +203,14 @@ export default function Dashboard({
               limit={10} 
               oddsGapPercentage={40} // 40 point American odds gap
               bookmaker="fanduel" // Use same bookmaker as matchups table default
+              roundNum={currentRound}
             />
           </div>
         </div>
       )}
 
       {/* Players tab removed and moved to its own page */}
-      {activeTab === "parlay" && <ParlayBuilder matchupType={matchupType} />}
+      {activeTab === "parlay" && <ParlayBuilder matchupType={matchupType} roundNum={currentRound} />}
       </div>
     </ParlayProvider>
   )

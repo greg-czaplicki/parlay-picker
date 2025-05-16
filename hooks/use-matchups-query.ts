@@ -33,24 +33,25 @@ interface UseMatchupsQueryResult {
   lastUpdateTime: string | null;
 }
 
-export function useMatchupsQuery(eventId: number | null, matchupType: "2ball" | "3ball"): UseMatchupsQueryResult {
+export function useMatchupsQuery(eventId: number | null, matchupType: "2ball" | "3ball", roundNum?: number | null): UseMatchupsQueryResult {
   const query = useQuery<MatchupRow[], Error>({
-    queryKey: queryKeys.matchups.byEventAndType(eventId ?? 0, matchupType),
+    queryKey: [
+      ...queryKeys.matchups.byEventAndType(eventId ?? 0, matchupType),
+      roundNum ?? 'allRounds',
+    ],
     enabled: !!eventId,
     queryFn: async () => {
-      // Unified API endpoint
-      const endpoint = eventId
+      let endpoint = eventId
         ? `/api/matchups?type=${matchupType}&event_id=${eventId}`
         : `/api/matchups?type=${matchupType}`;
+      if (roundNum) endpoint += `&round_num=${roundNum}`;
       const response = await fetch(endpoint);
       if (!response.ok) throw new Error(await response.text());
       const data = await response.json();
-      // Extract matchups array
       let matchupsData: MatchupRow[] = [];
       if (data && data.matchups && Array.isArray(data.matchups)) {
         matchupsData = data.matchups;
       }
-      // Filter by eventId if needed
       let filtered = matchupsData;
       if (eventId && matchupsData.length > 0) {
         const eventIdNum = Number(eventId);

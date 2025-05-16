@@ -1,12 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ParlayCard, ParlayCardProps, ParlayPickDisplay, ParlayPlayerDisplay } from '@/components/parlay-card/parlay-card';
+import { ParlayCardProps, ParlayPickDisplay, ParlayPlayerDisplay } from '@/components/parlay-card/parlay-card';
 import { toast } from '@/components/ui/use-toast';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useParlaysQuery } from '@/hooks/use-parlays-query';
-import { useQuery } from '@tanstack/react-query';
-import { createBrowserClient } from '@/lib/supabase';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 

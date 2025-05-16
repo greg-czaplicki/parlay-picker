@@ -110,16 +110,17 @@ function isSupabaseMatchupRow2Ball(matchup: MatchupRow): matchup is SupabaseMatc
 interface MatchupsTableProps {
   eventId: number | null;
   matchupType?: "2ball" | "3ball";
+  roundNum?: number | null;
 }
 
-export default function MatchupsTable({ eventId, matchupType = "3ball" }: MatchupsTableProps) {
+export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum }: MatchupsTableProps) {
   const [selectedBookmaker, setSelectedBookmaker] = useState<"fanduel">("fanduel");
   // Odds gap filter state
   const [oddsGapThreshold, setOddsGapThreshold] = useState(40); // Default 40 points in American odds
   const [showFiltersDialog, setShowFiltersDialog] = useState(false);
 
   // Use React Query for matchups
-  const { data: matchups, isLoading, isError, error, lastUpdateTime } = useMatchupsQuery(eventId, matchupType);
+  const { data: matchups, isLoading, isError, error, lastUpdateTime } = useMatchupsQuery(eventId, matchupType, roundNum);
 
   // Use type guards before accessing fields
   const playerIds = (matchups ?? []).flatMap(m => {
@@ -134,12 +135,9 @@ export default function MatchupsTable({ eventId, matchupType = "3ball" }: Matchu
     return [];
   });
 
-  // Use React Query for player stats (assume roundNum = 1 for now, or extract from matchups if needed)
-  const roundNum = (matchups && matchups.length > 0 && 
-    (isSupabaseMatchupRow(matchups[0]) || isSupabaseMatchupRow2Ball(matchups[0]))) 
-    ? matchups[0].round_num : 1;
-  
-  const { data: playerStats, isLoading: loadingStats, isError: isErrorStats, error: errorStats } = usePlayerStatsQuery(eventId, roundNum, playerIds);
+  // Use React Query for player stats (use roundNum prop directly, default to 1)
+  const safeRoundNum = typeof roundNum === 'number' && !isNaN(roundNum) && roundNum > 0 ? roundNum : 1;
+  const { data: playerStats, isLoading: loadingStats, isError: isErrorStats, error: errorStats } = usePlayerStatsQuery(eventId, safeRoundNum, playerIds);
 
   // After fetching playerStats (which is PlayerStat[] | undefined), create a lookup object:
   const playerStatsMap: Record<number, PlayerStat> = (playerStats ?? []).reduce((acc, stat) => {

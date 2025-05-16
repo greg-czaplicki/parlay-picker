@@ -31,15 +31,20 @@ export function useRecommendedPicksQuery(
   matchupType: "2ball" | "3ball",
   bookmaker: string = "fanduel",
   oddsGapPercentage: number = 40,
-  limit: number = 10
+  limit: number = 10,
+  roundNum?: number | null
 ): UseRecommendedPicksQueryResult {
   return useQuery<Player[], Error>({
-    queryKey: queryKeys.recommendedPicks.byEventAndType(eventId ?? 0, matchupType),
+    queryKey: [
+      ...queryKeys.recommendedPicks.byEventAndType(eventId ?? 0, matchupType),
+      roundNum ?? 'allRounds',
+    ],
     enabled: !!eventId,
     queryFn: async () => {
-      const endpoint = eventId
+      let endpoint = eventId
         ? `/api/matchups?type=${matchupType}&event_id=${eventId}`
         : `/api/matchups?type=${matchupType}`;
+      if (roundNum) endpoint += `&round_num=${roundNum}`;
       const response = await fetch(endpoint);
       if (!response.ok) throw new Error(await response.text());
       const data = await response.json();

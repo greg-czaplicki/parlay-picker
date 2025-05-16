@@ -9,7 +9,7 @@ import { useParlayContext } from "@/context/ParlayContext"
 import ParlaySummary from "./parlay-summary"
 import { Button } from "@/components/ui/button"
 
-export default function ParlayBuilder({ matchupType }: { matchupType: string }) {
+export default function ParlayBuilder({ matchupType, roundNum }: { matchupType: string, roundNum?: number | null }) {
   const {
     selections,
     addSelection,
