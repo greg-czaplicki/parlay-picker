@@ -13,6 +13,7 @@ import { useRecommendedPicksQuery, Player } from "@/hooks/use-recommended-picks-
 import { useParlaysQuery } from '@/hooks/use-parlays-query'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { FilterService } from "@/filters/filter-service"
+import { useMatchupsQuery } from "@/hooks/use-matchups-query"
 
 interface RecommendedPicksProps {
   eventId: number | null;
@@ -109,6 +110,55 @@ export default function RecommendedPicks({
   const allParlayPicks = (allParlays ?? []).flatMap((parlay: any) => parlay.picks || []);
   const isPlayerInAnyParlay = (playerName: string) =>
     allParlayPicks.some((pick: any) => (pick.picked_player_name || '').toLowerCase() === playerName.toLowerCase());
+
+  // Fetch matchups to sync with matchups-table
+  const { data: matchups } = useMatchupsQuery(eventId, matchupType, roundNum);
+
+  // Use the same odds filtering as the table
+  const filteredMatchups = useMemo(() => {
+    return (matchups ?? []).filter(matchup => {
+      if ('player3_id' in matchup) {
+        return (
+          Number(matchup.odds1 ?? 0) > 1 &&
+          Number(matchup.odds2 ?? 0) > 1 &&
+          Number(matchup.odds3 ?? 0) > 1
+        );
+      } else {
+        return (
+          Number(matchup.odds1 ?? 0) > 1 &&
+          Number(matchup.odds2 ?? 0) > 1
+        );
+      }
+    });
+  }, [matchups]);
+
+  // Build sets of valid player IDs and matchup IDs from filteredMatchups
+  const validPlayerIds = useMemo(() => {
+    const set = new Set<number>();
+    (filteredMatchups ?? []).forEach(m => {
+      if (m.player1_id) set.add(m.player1_id);
+      if (m.player2_id) set.add(m.player2_id);
+      if ('player3_id' in m && m.player3_id) set.add(m.player3_id);
+    });
+    return set;
+  }, [filteredMatchups]);
+
+  const validMatchupIds = useMemo(() => {
+    const set = new Set<number>();
+    (filteredMatchups ?? []).forEach(m => {
+      if (m.id) set.add(m.id);
+    });
+    return set;
+  }, [filteredMatchups]);
+
+  // Filter recommendations to only those present in filteredMatchups
+  const filteredAndMatchedRecommendations = useMemo(() => {
+    return (filteredRecommendations ?? []).filter(
+      player =>
+        validPlayerIds.has(player.dg_id) &&
+        validMatchupIds.has(player.matchupId)
+    );
+  }, [filteredRecommendations, validPlayerIds, validMatchupIds]);
 
   // Function to add a player to the parlay
   const addToParlay = (selection: ParlaySelection, playerId: number) => {
@@ -236,13 +286,13 @@ export default function RecommendedPicks({
           </Alert>
         )}
 
-        {!isLoading && !isError && (filteredRecommendations ?? []).length === 0 && (
+        {!isLoading && !isError && (filteredAndMatchedRecommendations ?? []).length === 0 && (
           <p className="text-gray-400 text-center py-4">No recommendations available based on current data and filters.</p>
         )}
 
-        {!isLoading && !isError && (filteredRecommendations ?? []).length > 0 && (
+        {!isLoading && !isError && (filteredAndMatchedRecommendations ?? []).length > 0 && (
           <div className="space-y-3">
-            {(filteredRecommendations ?? []).map((player: Player) => (
+            {(filteredAndMatchedRecommendations ?? []).map((player: Player) => (
               <div key={`${player.dg_id}-${player.matchupId || Math.random().toString(36).substring(7)}`} className="p-4 bg-[#1e1e23] rounded-lg flex flex-col gap-2">
                 <div className="flex justify-between items-start">
                   <div>
