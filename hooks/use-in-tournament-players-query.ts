@@ -34,8 +34,9 @@ export function useInTournamentPlayersQuery({
       let query = supabase
         .from('latest_live_tournament_stats_view')
         .select('*')
-      if (round !== 'latest') {
-        query = query.eq('round_num', round)
+      const dbRound = round === 'live' ? 'event_avg' : round;
+      if (dbRound !== 'latest') {
+        query = query.eq('round_num', dbRound)
       }
       if (eventId) {
         const selectedEvent = eventOptions.find(e => e.event_id === eventId)

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import React, { useState, useRef, useEffect } from "react"
 import { ArrowUp, ArrowDown } from "lucide-react"
 import {
   Tooltip,
@@ -17,163 +17,65 @@ interface StatCellProps {
   isPercentage?: boolean
 }
 
-export function StatCell({ value, colorClass, trend, precision = 2, isPercentage = false }: StatCellProps) {
-  // Manual tooltip handling
-  const [showTooltip, setShowTooltip] = useState(false);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
-  // Parse the color class to get inline styles
-  let bgColor = "transparent";
-  let textColor = "black";
-  
-  // Map the heatmap classes to colors 
-  // These form a more granular diverging scale that better highlights differences in performance
-  if (colorClass.includes("heatmap-exceptional")) {
-    bgColor = "#00441b"; // Very dark green - top performers
-    textColor = "white";
-  } else if (colorClass.includes("heatmap-excellent")) {
-    bgColor = "#006837"; // Dark green
-    textColor = "white";
-  } else if (colorClass.includes("heatmap-very-good")) {
-    bgColor = "#1a9850"; // Medium-dark green
-    textColor = "white";
-  } else if (colorClass.includes("heatmap-good")) {
-    bgColor = "#41ab5d"; // Medium green
-    textColor = "white";
-  } else if (colorClass.includes("heatmap-above-average")) {
-    bgColor = "#78c679"; // Light-medium green
-    textColor = "black";
-  } else if (colorClass.includes("heatmap-slightly-good")) {
-    bgColor = "#c2e699"; // Light green
-    textColor = "black";
-  } else if (colorClass.includes("heatmap-neutral")) {
-    bgColor = "#ffffbf"; // Pale yellow/almost white
-    textColor = "black";
-  } else if (colorClass.includes("heatmap-slightly-poor")) {
-    bgColor = "#fdae61"; // Light orange
-    textColor = "black";
-  } else if (colorClass.includes("heatmap-poor")) {
-    bgColor = "#e6550d"; // Medium-dark orange/red
-    textColor = "white";
-  } else if (colorClass.includes("heatmap-very-poor")) {
-    bgColor = "#a50026"; // Dark red
-    textColor = "white";
-  } else if (colorClass.includes("heatmap-terrible")) {
-    bgColor = "#7f0000"; // Very dark red
-    textColor = "white";
-  }
-  
-  const style = {
-    backgroundColor: bgColor,
-    color: textColor
-  };
-  
-  // Prepare tooltip content if trend exists
-  const tooltipContent = trend ? trend.title : null;
-  
-  // Handle hover start - set a timeout before showing tooltip
-  const handleMouseEnter = () => {
-    // Clear any existing timeout
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
-    
-    // Set a new timeout
-    timeoutRef.current = setTimeout(() => {
-      setShowTooltip(true);
-    }, 750); // 750ms delay
-  };
-  
-  // Handle hover end - immediately hide tooltip and clear timeout
-  const handleMouseLeave = () => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-    setShowTooltip(false);
-  };
-  
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-    };
-  }, []);
-  
-  // If we have a trend, use custom tooltip logic
-  if (tooltipContent) {
+export const StatCell = React.memo(function StatCell({ value, colorClass, trend, precision = 2, isPercentage = false }: StatCellProps) {
+  // Debug: log render and props
+  // console.log('[StatCell] render', { value, colorClass, trend });
+  // Only use inline style for non-heatmap cases
+  let dynamicStyle: React.CSSProperties = {};
+  let className = colorClass;
+
+  // If no trend, render a simple cell (no tooltip, no event handlers, no state)
+  if (!trend) {
     return (
-      <div className="relative" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
-        <div 
-          style={{
-            ...style,
-            height: "100%",
-            width: "100%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "4px 8px",
-            cursor: "pointer"
-          }}
-          className={`font-medium truncate ${colorClass}`}
-          role="button"
-          tabIndex={0}
-          aria-label={tooltipContent}
-        >
-          <div className="flex items-center space-x-1">
-            <span className="inline-block min-w-[40px] text-center">
-              {typeof value === 'number' && !isNaN(value)
-                ? isPercentage
-                  ? `${(value * 100).toFixed(precision)}%`
-                  : value.toFixed(precision)
-                : 'N/A'}
-            </span>
-            {/* Always render the trend space regardless, but apply opacity if no actual trend */}
-            <span className={`inline-flex items-center justify-center w-[20px] h-[20px] ml-1 ${trend ? trend.className : 'opacity-0'}`}>
-              {trend ? (trend.type === "up" ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUp size={12} />}
-            </span>
-          </div>
+      <div 
+        style={dynamicStyle}
+        className={`font-medium truncate ${className}`}
+      >
+        <div className="flex items-center space-x-1">
+          <span className="inline-block min-w-[40px] text-center">
+            {typeof value === 'number' && !isNaN(value)
+              ? isPercentage
+                ? `${(value * 100).toFixed(precision)}%`
+                : value.toFixed(precision)
+              : 'N/A'}
+          </span>
+          {/* Always render a placeholder for consistent alignment */}
+          <span className="inline-flex items-center justify-center w-[20px] h-[20px] ml-1 opacity-0">
+            <ArrowUp size={12} />
+          </span>
         </div>
-        
-        {/* Manual tooltip */}
-        {showTooltip && (
-          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 -translate-y-1 z-50 px-3 py-1.5 rounded-md border bg-popover text-sm text-popover-foreground shadow-md pointer-events-none whitespace-nowrap">
-            <p>{tooltipContent}</p>
-          </div>
-        )}
       </div>
-    );
+    )
   }
-  
-  // If no trend, just render the cell without a tooltip but maintain alignment space
+
+  // If we have a trend, show a tooltip on hover using pure CSS
   return (
-    <div 
-      style={{
-        ...style,
-        height: "100%",
-        width: "100%",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "4px 8px"
-      }}
-      className={`font-medium truncate ${colorClass}`}
-    >
-      <div className="flex items-center space-x-1">
-        <span className="inline-block min-w-[40px] text-center">
-          {typeof value === 'number' && !isNaN(value)
-            ? isPercentage
-              ? `${(value * 100).toFixed(precision)}%`
-              : value.toFixed(precision)
-            : 'N/A'}
-        </span>
-        {/* Always render a placeholder for consistent alignment */}
-        <span className="inline-flex items-center justify-center w-[20px] h-[20px] ml-1 opacity-0">
-          <ArrowUp size={12} />
-        </span>
+    <div className="relative group">
+      <div 
+        style={dynamicStyle}
+        className={`font-medium truncate ${className}`}
+        role="button"
+        tabIndex={0}
+        aria-label={trend.title || undefined}
+      >
+        <div className="flex items-center space-x-1">
+          <span className="inline-block min-w-[40px] text-center">
+            {typeof value === 'number' && !isNaN(value)
+              ? isPercentage
+                ? `${(value * 100).toFixed(precision)}%`
+                : value.toFixed(precision)
+              : 'N/A'}
+          </span>
+          {/* Always render the trend space regardless, but apply opacity if no actual trend */}
+          <span className={`inline-flex items-center justify-center w-[20px] h-[20px] ml-1 ${trend ? trend.className : 'opacity-0'}`}>
+            {trend ? (trend.type === "up" ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUp size={12} />}
+          </span>
+        </div>
+      </div>
+      {/* Pure CSS tooltip */}
+      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 -translate-y-1 z-50 px-3 py-1.5 rounded-md border bg-popover text-sm text-popover-foreground shadow-md pointer-events-none whitespace-nowrap opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150">
+        <p>{trend.title}</p>
       </div>
     </div>
   )
-}
+})

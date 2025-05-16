@@ -20,6 +20,17 @@ interface PlayerTableProps {
   initialPgaTourStats?: PgaTourPlayerStats[]
 }
 
+// Heatmap classes for SG columns
+const HEATMAP_CLASSES = [
+  'heatmap-bg-0', // strong red
+  'heatmap-bg-1', // orange
+  'heatmap-bg-2', // yellow/peach
+  'heatmap-bg-3', // light yellow (neutral)
+  'heatmap-bg-4', // light green
+  'heatmap-bg-5', // green
+  'heatmap-bg-6', // strong green
+];
+
 export default function PlayerTable({ 
   initialSeasonSkills, 
   initialLiveStats, 
@@ -62,10 +73,9 @@ export default function PlayerTable({
   // Round filter options
   const roundOptions = ["1", "2", "3", "4", "event_avg"]
 
-  // Memoized getHeatmapColor function
+  // Memoized getHeatmapColor function for season (stub)
   const getHeatmapColor = useCallback(
     (value: number | null, statKey: string, isHigherBetter: boolean = true) => {
-      // TODO: Implement actual heatmap logic if needed
       return ""
     },
     []
@@ -73,8 +83,32 @@ export default function PlayerTable({
 
   // Call useColumns directly at the top level for both views
   const seasonColumns = useColumns<PlayerSkillRating>({ dataView: 'season', getHeatmapColor })
-  const tournamentColumns = useColumns<LiveTournamentStat>({ dataView: 'tournament', getHeatmapColor })
   const seasonPlayers = useMemo(() => (seasonSkills ?? []) as PlayerSkillRating[], [seasonSkills])
+
+  // Tournament heatmap logic
+  const SG_COLUMNS = ['sg_putt', 'sg_arg', 'sg_app', 'sg_ott', 'sg_t2g', 'sg_total'];
+  const sgStats = useMemo(() => {
+    const stats: Record<string, { softMax: number }> = {};
+    SG_COLUMNS.forEach(col => {
+      const values = (liveStats ?? []).map((p: any) => Math.abs(Number(p[col]) || 0)).filter(v => !isNaN(v));
+      if (values.length) {
+        const sorted = [...values].sort((a, b) => a - b);
+        const idx = Math.floor(0.9 * (sorted.length - 1));
+        stats[col] = { softMax: sorted[idx] };
+      } else {
+        stats[col] = { softMax: 1 };
+      }
+    });
+    return stats;
+  }, [liveStats]);
+  const getTournamentHeatmapColor = useCallback((value: number | null, statKey: string) => {
+    if (!SG_COLUMNS.includes(statKey) || value == null) return '';
+    const softMax = sgStats[statKey]?.softMax || 1;
+    const norm = Math.max(-1, Math.min(1, value / softMax));
+    const idx = Math.round(((norm + 1) / 2) * 6);
+    return HEATMAP_CLASSES[idx];
+  }, [sgStats]);
+  const tournamentColumns = useColumns<LiveTournamentStat>({ dataView: 'tournament', getHeatmapColor: getTournamentHeatmapColor })
   const tournamentPlayers = useMemo(() => (liveStats ?? []) as LiveTournamentStat[], [liveStats])
 
   let columns, displayPlayers, loading, table

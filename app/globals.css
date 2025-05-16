@@ -2,6 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
+
 :root {
   --background: 240 10% 3.9%;
   --foreground: 0 0% 98%;
@@ -210,3 +211,12 @@ body {
   background-color: hsl(var(--primary));
   color: white;
 }
+
+.heatmap-bg-0 { background-color: #d73027 !important; color: #fff !important; }
+.heatmap-bg-1 { background-color: #fc8d59 !important; color: #000 !important; }
+.heatmap-bg-2 { background-color: #fee08b !important; color: #000 !important; }
+.heatmap-bg-3 { background-color: #ffffbf !important; color: #000 !important; }
+.heatmap-bg-4 { background-color: #d9ef8b !important; color: #000 !important; }
+.heatmap-bg-5 { background-color: #91cf60 !important; color: #000 !important; }
+.heatmap-bg-6 { background-color: #1a9850 !important; color: #fff !important; }
+

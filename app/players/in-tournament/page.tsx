@@ -2,7 +2,7 @@ import { InTournamentPlayerTableContainer } from '@/components/tables/player-tab
 
 export default function InTournamentPlayersPage() {
   return (
-    <main className="p-4">
+    <main className="p-4 w-full">
       <h1 className="text-2xl font-bold mb-4">In-Tournament Player Stats</h1>
       <InTournamentPlayerTableContainer />
     </main>

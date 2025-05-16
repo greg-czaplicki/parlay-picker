@@ -21,7 +21,7 @@ import { PlayerTableSkeleton } from './player-table-skeleton'
  * - Renders PlayerTableFilters and PlayerTablePresentation
  */
 export function InTournamentPlayerTableContainer() {
-  const [roundFilter, setRoundFilter] = useState<string>('event_avg')
+  const [roundFilter, setRoundFilter] = useState<string>('live')
   const {
     selectedEventId,
     setSelectedEventId,
@@ -72,6 +72,25 @@ export function InTournamentPlayerTableContainer() {
   return <PlayerTableSkeleton rows={10} columns={8} />
 }
 
+const HEATMAP_CLASSES = [
+  'heatmap-bg-0', // strong red
+  'heatmap-bg-1', // orange
+  'heatmap-bg-2', // yellow/peach
+  'heatmap-bg-3', // light yellow (neutral)
+  'heatmap-bg-4', // light green
+  'heatmap-bg-5', // green
+  'heatmap-bg-6', // strong green
+];
+
+function getPercentile(sorted: number[], p: number) {
+  if (sorted.length === 0) return 0;
+  const idx = (sorted.length - 1) * p;
+  const lower = Math.floor(idx);
+  const upper = Math.ceil(idx);
+  if (lower === upper) return sorted[lower];
+  return sorted[lower] + (sorted[upper] - sorted[lower]) * (idx - lower);
+}
+
 /**
  * LiveStatsTable
  *
@@ -86,23 +105,57 @@ function LiveStatsTable({ eventId, roundFilter, eventOptions }: { eventId: numbe
     round: roundFilter,
     eventOptions
   })
-  const getHeatmapColor = useCallback(() => '', [])
-  const columns = useColumns<any>({ dataView: 'tournament', getHeatmapColor })
-  const displayPlayers = useMemo(() => liveStats ?? [], [liveStats])
+
+  // Restore all rows for performance
+  const displayPlayers = useMemo(() => liveStats ?? [], [liveStats]);
+
+  // Restore heatmap logic and SG columns
+  // Strokes gained columns to heatmap
+  const SG_COLUMNS = ['sg_putt', 'sg_arg', 'sg_app', 'sg_ott', 'sg_t2g', 'sg_total'];
+  // Compute 90th percentile of absolute values for each SG column (soft max)
+  const sgStats = useMemo(() => {
+    const stats: Record<string, { softMax: number }> = {};
+    SG_COLUMNS.forEach(col => {
+      const values = (liveStats ?? []).map((p: any) => Math.abs(Number(p[col]) || 0)).filter(v => !isNaN(v));
+      if (values.length) {
+        const sorted = [...values].sort((a, b) => a - b);
+        const idx = Math.floor(0.9 * (sorted.length - 1));
+        stats[col] = { softMax: sorted[idx] };
+      } else {
+        stats[col] = { softMax: 1 };
+      }
+    });
+    return stats;
+  }, [liveStats]);
+  const getHeatmapColor = useCallback((value: number | null, statKey: string) => {
+    if (!SG_COLUMNS.includes(statKey) || value == null) return '';
+    const softMax = sgStats[statKey]?.softMax || 1;
+    const norm = Math.max(-1, Math.min(1, value / softMax));
+    // 7-band diverging palette
+    const idx = Math.round(((norm + 1) / 2) * 6);
+    return HEATMAP_CLASSES[idx];
+  }, [sgStats]);
+  const columns = useColumns<any>({ dataView: 'tournament', getHeatmapColor });
+
+  // Memoize table state and callbacks to avoid render loops
+  const tableState = useMemo(() => ({ sorting: [] }), []);
+  const onSortingChange = useCallback(() => {}, []);
+  const initialState = useMemo(() => ({
+    get sorting() {
+      return [{ id: 'total', desc: false }];
+    }
+  }), []);
+
   const table = useReactTable({
     data: displayPlayers,
     columns,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    state: { sorting: [] },
-    onSortingChange: () => {},
-    initialState: {
-      get sorting() {
-        return [{ id: 'total', desc: false }]
-      }
-    },
-  })
-  return <PlayerTablePresentation table={table} caption="Live In-Tournament Player Stats" />
+    state: tableState,
+    onSortingChange,
+    initialState,
+  });
+  return <PlayerTablePresentation table={table} caption="" />;
 }
 
 /**
@@ -113,28 +166,58 @@ function LiveStatsTable({ eventId, roundFilter, eventOptions }: { eventId: numbe
  * @param eventName - The last event's name
  */
 function LastEventStatsTable({ eventId, eventName }: { eventId: number; eventName: string }) {
-  // We need to pass a fake eventOptions array so the hook can find the event name
-  const eventOptions = [{ event_id: eventId, event_name: eventName }]
+  const eventOptions = [{ event_id: eventId, event_name: eventName }];
   const { data: stats } = useInTournamentPlayersQuery({
     eventId,
     round: 'event_avg',
     eventOptions
-  })
-  const getHeatmapColor = useCallback(() => '', [])
-  const columns = useColumns<any>({ dataView: 'tournament', getHeatmapColor })
-  const displayPlayers = useMemo(() => stats ?? [], [stats])
+  });
+
+  // Restore all rows for performance
+  const displayPlayers = useMemo(() => stats ?? [], [stats]);
+
+  // Restore heatmap logic and SG columns
+  const SG_COLUMNS = ['sg_putt', 'sg_arg', 'sg_app', 'sg_ott', 'sg_t2g', 'sg_total'];
+  const sgStats = useMemo(() => {
+    const result: Record<string, { softMax: number }> = {};
+    SG_COLUMNS.forEach(col => {
+      const values = (stats ?? []).map((p: any) => Math.abs(Number(p[col]) || 0)).filter((v: number) => !isNaN(v));
+      if (values.length) {
+        const sorted = [...values].sort((a, b) => a - b);
+        const idx = Math.floor(0.9 * (sorted.length - 1));
+        result[col] = { softMax: sorted[idx] };
+      } else {
+        result[col] = { softMax: 1 };
+      }
+    });
+    return result;
+  }, [stats]);
+  const getHeatmapColor = useCallback((value: number | null, statKey: string) => {
+    if (!SG_COLUMNS.includes(statKey) || value == null) return '';
+    const softMax = sgStats[statKey]?.softMax || 1;
+    const norm = Math.max(-1, Math.min(1, value / softMax));
+    const idx = Math.round(((norm + 1) / 2) * 6);
+    return HEATMAP_CLASSES[idx];
+  }, [sgStats]);
+  const columns = useColumns<any>({ dataView: 'tournament', getHeatmapColor });
+
+  // Memoize table state and callbacks to avoid render loops
+  const tableState = useMemo(() => ({ sorting: [] }), []);
+  const onSortingChange = useCallback(() => {}, []);
+  const initialState = useMemo(() => ({
+    get sorting() {
+      return [{ id: 'total', desc: false }];
+    }
+  }), []);
+
   const table = useReactTable({
     data: displayPlayers,
     columns,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    state: { sorting: [] },
-    onSortingChange: () => {},
-    initialState: {
-      get sorting() {
-        return [{ id: 'total', desc: false }]
-      }
-    },
-  })
-  return <PlayerTablePresentation table={table} caption="Last Tournament Results" />
+    state: tableState,
+    onSortingChange,
+    initialState,
+  });
+  return <PlayerTablePresentation table={table} caption="" />;
 } 

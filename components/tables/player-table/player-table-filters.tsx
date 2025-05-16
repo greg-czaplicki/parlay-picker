@@ -28,19 +28,17 @@ export const PlayerTableFilters: FC<PlayerTableFiltersProps> = ({
       {dataView === 'tournament' && setRoundFilter && roundFilter && (
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-gray-300 mr-2">Round:</span>
-          {["1", "2", "3", "4", "event_avg"].map((round) => (
-            <label key={round} className="flex items-center gap-1 cursor-pointer">
-              <input
-                type="radio"
-                name="roundFilter"
-                value={round}
-                checked={roundFilter === round}
-                onChange={() => setRoundFilter(round)}
-                className="form-radio h-4 w-4 text-primary focus:ring-primary border-gray-600 bg-gray-700"
-              />
-              <span className="text-sm capitalize">{round.replace("_", " ")}</span>
-            </label>
-          ))}
+          <select
+            value={roundFilter}
+            onChange={e => setRoundFilter(e.target.value)}
+            className="bg-gray-800 text-white border border-gray-700 rounded px-2 py-1 text-sm"
+          >
+            <option value="live">Live</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+          </select>
         </div>
       )}
       {dataView === 'tournament' && setSelectedEventId && selectedEventId !== undefined && eventOptions.length > 1 && (
