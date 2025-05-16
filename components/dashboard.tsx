@@ -37,7 +37,7 @@ export default function Dashboard({
   initialPgaTourStats = [],
   defaultTab = "matchups"
 }: DashboardProps) {
-  const [activeFilter, setActiveFilter] = useState<string | null>(null)
+  const [activeFilter, setActiveFilter] = useState<string | null>('balanced')
   const [activeTab, setActiveTab] = useState(defaultTab)
   const [showCustom, setShowCustom] = useState(false)
   const { data: currentEvents, isLoading: isLoadingEvents } = useCurrentWeekEventsQuery()

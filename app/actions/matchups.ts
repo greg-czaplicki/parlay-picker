@@ -106,6 +106,9 @@ export interface Parlay {
     // user_id?: string; // If using auth
     name: string | null;
     created_at: string;
+    // ML fields
+    outcome: 'win' | 'loss' | 'push';
+    payout_amount: string; // NUMERIC(12,2) as string for precision
 }
 
 // Interface for ParlayPicks table (add parlay_id)
@@ -119,6 +122,8 @@ export interface ParlayPick {
     event_name: string | null;
     round_num: number | null;
     created_at: string;
+    // ML fields
+    outcome: 'win' | 'loss' | 'push' | 'void';
 }
 
 // Type for returning grouped data
@@ -492,7 +497,11 @@ export async function createParlay(name?: string): Promise<{ parlay: Parlay | nu
         // TODO: Add user_id if auth is implemented
         const { data, error } = await supabase
             .from('parlays')
-            .insert([{ name: name /* , user_id: userId */ }])
+            .insert([{ 
+                name: name /* , user_id: userId */,
+                outcome: 'push',
+                payout_amount: '0.00',
+            }])
             .select()
             .single();
 
@@ -597,6 +606,7 @@ export async function addParlayPick(pickData: Omit<ParlayPick, 'id' | 'created_a
                 matchup_id: pickData.matchup_id,
                 event_name: pickData.event_name,
                 round_num: pickData.round_num,
+                outcome: 'void',
             }])
             .select()
             .single(); // Expecting one row back

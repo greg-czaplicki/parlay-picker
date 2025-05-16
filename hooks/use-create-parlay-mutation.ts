@@ -10,7 +10,7 @@ interface CreateParlayInput {
   round_num: number | null
   picks: Array<{
     matchup_id?: number
-    picked_player_id: number
+    picked_player_dg_id: number
     picked_player_name: string
   }>
 }

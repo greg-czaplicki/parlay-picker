@@ -50,16 +50,25 @@ export default function ParlaySummary({ selections, userId = '00000000-0000-0000
       })
       return
     }
+    // Defensive check for missing picked_player_dg_id
+    const picks = selections.map(s => ({
+      matchup_id: s.matchupId,
+      picked_player_dg_id: s.id,
+      picked_player_name: s.player,
+    }))
+    console.log('Submitting picks:', picks)
+    if (picks.some(p => !p.picked_player_dg_id || typeof p.picked_player_dg_id !== 'number' || isNaN(p.picked_player_dg_id))) {
+      toast({
+        title: "Invalid Pick",
+        description: "One or more picks are missing a player DG ID.",
+        variant: "destructive"
+      });
+      setSubmitting(false);
+      return;
+    }
     setSubmitting(true)
     try {
       const parlayName = `${selections[0].matchupType.toUpperCase()} Parlay - $${stake}`
-      // Prepare picks array for API
-      const picks = selections.map(s => ({
-        matchup_id: s.matchupId,
-        picked_player_id: s.id,
-        picked_player_name: s.player,
-      }))
-      console.log('Submitting picks:', picks)
       // Create the parlay with all required fields
       await createParlayMutation.mutateAsync({
         name: parlayName,
