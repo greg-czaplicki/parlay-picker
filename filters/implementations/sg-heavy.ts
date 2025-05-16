@@ -12,6 +12,7 @@ export function createSGHeavyFilter(): Filter<any> {
     description: 'For each group, returns the top SG player and the odds gap to the next lowest odds in the group.',
     category: FilterCategory.PLAYER,
     applyFilter: (data, options?: FilterOptions): FilterResult<any> => {
+      console.log('SG_HEAVY_DEBUG_FILTER_CALLED');
       const sgGapThreshold = typeof options?.sgGapThreshold === 'number' ? options.sgGapThreshold : 0.5;
       // Determine if in-tournament: if any player has sgTotal > 0
       const inTournament = (data ?? []).some((p: any) => typeof p.sgTotal === 'number' && p.sgTotal > 0);
@@ -24,6 +25,26 @@ export function createSGHeavyFilter(): Filter<any> {
       });
       const sgHeavy: any[] = [];
       Object.values(groups).forEach(group => {
+        // Log every group for debugging
+        console.log('SG_HEAVY_DEBUG_GROUP');
+        group.forEach((p: any) => {
+          let sgTotalWeighted = 0;
+          if (inTournament && typeof p.sgTotal === 'number' && typeof p.seasonSgTotal === 'number') {
+            sgTotalWeighted = 0.6 * p.sgTotal + 0.4 * p.seasonSgTotal;
+          } else if (inTournament && typeof p.sgTotal === 'number') {
+            sgTotalWeighted = p.sgTotal;
+          } else if (typeof p.seasonSgTotal === 'number') {
+            sgTotalWeighted = p.seasonSgTotal;
+          }
+          console.log(
+            'SG_HEAVY_DEBUG_PLAYER',
+            p.name || p.playerName,
+            'sgTotal:', p.sgTotal,
+            'seasonSgTotal:', p.seasonSgTotal,
+            'sgTotalWeighted:', sgTotalWeighted,
+            'odds:', p.odds
+          );
+        });
         // Compute weighted SG for each player
         const withSG = group.map((p: any) => {
           let sgTotalWeighted = 0;

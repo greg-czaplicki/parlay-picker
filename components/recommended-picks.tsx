@@ -292,18 +292,26 @@ export default function RecommendedPicks({
 
         {!isLoading && !isError && (filteredAndMatchedRecommendations ?? []).length > 0 && (
           <div className="space-y-3">
-            {(filteredAndMatchedRecommendations ?? []).map((player: Player) => (
+            {(filteredAndMatchedRecommendations ?? []).slice(0, 15).map((player: Player) => (
               <div key={`${player.dg_id}-${player.matchupId || Math.random().toString(36).substring(7)}`} className="p-4 bg-[#1e1e23] rounded-lg flex flex-col gap-2">
                 <div className="flex justify-between items-start">
                   <div>
                     <div className="font-medium text-lg">{player.name}</div>
-                    {typeof player.oddsGapToNext === 'number' && (
-                      <span className="inline-block text-xs text-blue-400 bg-blue-900/20 rounded px-2 py-0.5 mt-1 ml-0">
-                        {`+${Math.round(player.oddsGapToNext * 100)}`}
-                      </span>
-                    )}
                     {typeof player.sgTotal === 'number' && !isNaN(player.sgTotal) && (
                       <div className="text-xs text-gray-400">
+                        {typeof player.oddsGapToNext === 'number' && (
+                          <span className="block text-xs text-muted-foreground mt-0.5">
+                            Gap: <span
+                              className={
+                                Math.round(player.oddsGapToNext * 100) >= 10 ? 'text-green-500 font-bold' :
+                                Math.round(player.oddsGapToNext * 100) >= 0 ? 'text-yellow-400 font-semibold' :
+                                'text-red-500 font-semibold'
+                              }
+                            >
+                              +{Math.round(player.oddsGapToNext * 100)}
+                            </span>
+                          </span>
+                        )}
                         SG Total: <span className={getSGColorClass(player.sgTotal)}>{player.sgTotal.toFixed(2)}</span>
                         {typeof player.seasonSgTotal === 'number' && !isNaN(player.seasonSgTotal) && (
                           <span className="block text-xs text-muted-foreground mt-0.5" title="Season SG Total">
