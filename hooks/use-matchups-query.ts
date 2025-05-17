@@ -7,16 +7,16 @@ import { useQuery } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/query-keys'
 
 export interface MatchupRow {
-  id: number;
-  event_id: number;
+  uuid: string;
+  event_id: string;
   event_name?: string;
   round_num: number;
   created_at: string;
-  player1_id: number;
+  player1_dg_id: number;
   player1_name: string;
-  player2_id: number;
+  player2_dg_id: number;
   player2_name: string;
-  player3_id?: number | null;
+  player3_dg_id?: number | null;
   player3_name?: string | null;
   odds1: number | null;
   odds2: number | null;

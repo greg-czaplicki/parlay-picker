@@ -12,10 +12,12 @@ export async function GET(req: NextRequest) {
       return Response.json({ success: false, error: 'Missing required parameters: eventId, roundNum, playerIds' }, { status: 400 });
     }
 
-    // Parse playerIds as array of numbers
+    // Debug: Log raw and parsed playerIds
+    console.log('Raw playerIds:', playerIds);
     const playerIdArr = playerIds.split(',').map((id) => Number(id)).filter((id) => !isNaN(id));
+    console.log('Parsed playerIdArr:', playerIdArr);
     if (playerIdArr.length === 0) {
-      return Response.json({ success: false, error: 'No valid playerIds provided' }, { status: 400 });
+      return Response.json({ success: false, error: `No valid playerIds provided. Raw: ${playerIds}` }, { status: 400 });
     }
 
     const supabase = createSupabaseClient();

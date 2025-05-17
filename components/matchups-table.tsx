@@ -37,16 +37,16 @@ import { FilterService } from "@/filters/filter-service"
 
 // Only 3-ball matchups
 interface SupabaseMatchupRow {
-  id: number;
-  event_id: number;
+  uuid: string;
+  event_id: string;
   event_name?: string;
   round_num: number;
   created_at: string;
-  player1_id: number;
+  player1_dg_id: number;
   player1_name: string;
-  player2_id: number;
+  player2_dg_id: number;
   player2_name: string;
-  player3_id?: number | null;
+  player3_dg_id?: number | null;
   player3_name?: string | null;
   odds1?: number | null;
   odds2?: number | null;
@@ -61,14 +61,14 @@ interface SupabaseMatchupRow {
 
 // Interface for 2-ball matchups
 interface SupabaseMatchupRow2Ball {
-  id: number;
-  event_id: number;
+  uuid: string;
+  event_id: string;
   event_name?: string;
   round_num: number;
   created_at: string;
-  player1_id: number;
+  player1_dg_id: number;
   player1_name: string;
-  player2_id: number;
+  player2_dg_id: number;
   player2_name: string;
   odds1?: number | null;
   odds2?: number | null;
@@ -95,15 +95,15 @@ type MatchupRow = SupabaseMatchupRow | SupabaseMatchupRow2Ball;
 
 // Helper type guard for SupabaseMatchupRow
 function isSupabaseMatchupRow(matchup: MatchupRow): matchup is SupabaseMatchupRow {
-  return 'player3_id' in matchup;
+  return 'player3_dg_id' in matchup;
 }
 
 // Helper type guard for SupabaseMatchupRow2Ball
 function isSupabaseMatchupRow2Ball(matchup: MatchupRow): matchup is SupabaseMatchupRow2Ball {
   return (
-    !('player3_id' in matchup) &&
-    typeof (matchup as SupabaseMatchupRow2Ball).player1_id === 'number' &&
-    typeof (matchup as SupabaseMatchupRow2Ball).player2_id === 'number'
+    !('player3_dg_id' in matchup) &&
+    typeof (matchup as SupabaseMatchupRow2Ball).player1_dg_id === 'number' &&
+    typeof (matchup as SupabaseMatchupRow2Ball).player2_dg_id === 'number'
   );
 }
 
@@ -127,30 +127,30 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
   const playerIds = (matchups ?? []).flatMap(m => {
     if (isSupabaseMatchupRow(m)) {
       const ids = [
-        (m as SupabaseMatchupRow).player1_id ?? 0,
-        (m as SupabaseMatchupRow).player2_id ?? 0
+        (m as any).player1_dg_id,
+        (m as any).player2_dg_id
       ];
-      if ((m as SupabaseMatchupRow).player3_id != null) ids.push((m as SupabaseMatchupRow).player3_id ?? 0);
-      return ids.filter((id): id is number => typeof id === 'number' && id > 0);
+      if ((m as any).player3_dg_id != null) ids.push((m as any).player3_dg_id);
+      return ids.filter((id): id is number => typeof id === 'number' && !isNaN(id));
     } else if (isSupabaseMatchupRow2Ball(m)) {
       const ids = [
-        (m as SupabaseMatchupRow2Ball).player1_id ?? 0,
-        (m as SupabaseMatchupRow2Ball).player2_id ?? 0
+        (m as any).player1_dg_id,
+        (m as any).player2_dg_id
       ];
-      return ids.filter((id): id is number => typeof id === 'number' && id > 0);
+      return ids.filter((id): id is number => typeof id === 'number' && !isNaN(id));
     }
     return [];
-  });
+  }).map(String);
 
   // Use React Query for player stats (use roundNum prop directly, default to 1)
   const safeRoundNum = typeof roundNum === 'number' && !isNaN(roundNum) && roundNum > 0 ? roundNum : 1;
   const { data: playerStats, isLoading: loadingStats, isError: isErrorStats, error: errorStats } = usePlayerStatsQuery(eventId, safeRoundNum, playerIds);
 
-  // Always use the original playerStats for the table and lookups
-  const playerStatsMap: Record<number, PlayerStat> = (playerStats ?? []).reduce((acc, stat) => {
-    if (stat.player_id != null) acc[stat.player_id] = stat;
+  // Always use string keys for playerStatsMap
+  const playerStatsMap: Record<string, PlayerStat> = (playerStats ?? []).reduce((acc, stat) => {
+    if (stat.player_id != null) acc[String(stat.player_id)] = stat;
     return acc;
-  }, {} as Record<number, PlayerStat>);
+  }, {} as Record<string, PlayerStat>);
 
   const decimalToAmerican = (decimalOdds: number): string => {
     if (decimalOdds >= 2.0) return `+${Math.round((decimalOdds - 1) * 100)}`;
@@ -370,7 +370,8 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredMatchups.map((matchup, index) => {
+                  {filteredMatchups.map((matchup) => {
+                    if (!matchup.uuid) return null; // Strict: only render if uuid exists
                     if (isSupabaseMatchupRow(matchup)) {
                       // DataGolf odds are only available in the SupabaseMatchupRow type
                       const dg_p1_odds = isSupabaseMatchupRow(matchup) ? (matchup as SupabaseMatchupRow).dg_odds1 ?? null : null;
@@ -504,7 +505,7 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
                       const sortedPlayers = [
                         {
                           id: 'p1',
-                          dg_id: (matchup as SupabaseMatchupRow).player1_id,
+                          dg_id: (matchup as SupabaseMatchupRow).player1_dg_id,
                           odds: (matchup as SupabaseMatchupRow).odds1,
                           name: (matchup as SupabaseMatchupRow).player1_name,
                           dgOdds: dg_p1_odds,
@@ -514,7 +515,7 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
                         },
                         {
                           id: 'p2',
-                          dg_id: (matchup as SupabaseMatchupRow).player2_id,
+                          dg_id: (matchup as SupabaseMatchupRow).player2_dg_id,
                           odds: (matchup as SupabaseMatchupRow).odds2,
                           name: (matchup as SupabaseMatchupRow).player2_name,
                           dgOdds: dg_p2_odds,
@@ -524,7 +525,7 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
                         },
                         {
                           id: 'p3',
-                          dg_id: (matchup as SupabaseMatchupRow).player3_id ?? undefined,
+                          dg_id: (matchup as SupabaseMatchupRow).player3_dg_id ?? undefined,
                           odds: (matchup as SupabaseMatchupRow).odds3,
                           name: (matchup as SupabaseMatchupRow).player3_name ?? '',
                           dgOdds: dg_p3_odds,
@@ -532,7 +533,7 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
                           hasDGGap: p3HasDGGap,
                           dgFavorite: divergence?.datagolfFavorite === 'p3',
                         },
-                      ].filter(p => typeof p.dg_id === 'number' && p.dg_id > 0)
+                      ].filter(p => p.dg_id !== null && p.dg_id !== undefined)
                        .sort((a, b) => {
                           if (!a.odds || a.odds <= 1) return 1;
                           if (!b.odds || b.odds <= 1) return -1;
@@ -540,24 +541,23 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
                         });
 
                       // Format the player's tournament position and score
-                      const formatPlayerPosition = (playerId: number) => {
-                        const playerStat = playerStatsMap[playerId];
+                      const formatPlayerPosition = (playerId: string | number) => {
+                        const playerStat = playerStatsMap[String(playerId)];
                         if (!playerStat) return { position: '-', score: '-' };
-
                         const position = playerStat.position || '-';
                         let score: string = '-';
-                          if (playerStat.total === 0) {
-                            score = 'E';
+                        if (playerStat.total === 0) {
+                          score = 'E';
                         } else if (typeof playerStat.total === 'number' && playerStat.total > 0) {
-                            score = `+${playerStat.total}`;
+                          score = `+${playerStat.total}`;
                         } else if (typeof playerStat.total === 'number' && playerStat.total < 0) {
-                            score = playerStat.total.toString();
+                          score = playerStat.total.toString();
                         }
                         return { position, score };
                       };
                       
                       return (
-                        <TableRow key={`3ball-${matchup.id}`}>
+                        <TableRow key={`3ball-${matchup.uuid}`}>
                           <TableCell>
                             {sortedPlayers.map((player, idx) => (
                               <div key={`player-${idx}`} className="py-1 h-8 flex items-center">
@@ -570,13 +570,13 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
                                         <Button size="icon" variant="secondary" disabled className="h-6 w-6 p-0"><CheckCircle className="text-green-400" size={16} /></Button>
                                       ) : (
                                         <Button size="icon" variant="outline" className="h-6 w-6 p-0" onClick={() => {
-                                          if (player.dg_id == null || typeof player.dg_id !== 'number' || isNaN(player.dg_id)) return;
+                                          if (typeof player.dg_id !== 'string' || player.dg_id.length === 0) return;
                                           addSelection({
                                             id: player.dg_id,
                                             matchupType,
                                             player: formatPlayerName(player.name),
                                             odds: Number(player.odds) || 0,
-                                            matchupId: matchup.id,
+                                            matchupId: matchup.uuid,
                                             eventName: matchup.event_name,
                                             roundNum: matchup.round_num
                                           });
@@ -596,19 +596,19 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
                           {/* New Position column */}
                           <TableCell className="text-center">
                             {sortedPlayers.map((player, idx) => {
-                              let playerId = 0;
+                              let playerId = '';
                               
                               if (isSupabaseMatchupRow(matchup)) {
                                 if (player.id === 'p1') {
-                                  playerId = (matchup as SupabaseMatchupRow).player1_id ?? 0;
+                                  playerId = (matchup as SupabaseMatchupRow).player1_dg_id;
                                 } else if (player.id === 'p2') {
-                                  playerId = (matchup as SupabaseMatchupRow).player2_id ?? 0;
-                                } else if (player.id === 'p3' && (matchup as SupabaseMatchupRow).player3_id != null) {
-                                  playerId = (matchup as SupabaseMatchupRow).player3_id ?? 0;
+                                  playerId = (matchup as SupabaseMatchupRow).player2_dg_id;
+                                } else if (player.id === 'p3' && (matchup as SupabaseMatchupRow).player3_dg_id != null) {
+                                  playerId = (matchup as SupabaseMatchupRow).player3_dg_id;
                                 }
                               }
                               
-                              const positionData = formatPlayerPosition(playerId ?? 0);
+                              const positionData = formatPlayerPosition(playerId);
                               
                               return (
                                 <div key={`position-${idx}`} className="py-1 h-8 flex items-center justify-center">
@@ -676,35 +676,17 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
                           </TableCell>
                           
                           <TableCell className="text-center">
-                            {sortedPlayers.map((player, idx) => (
-                              <div key={`odds-${idx}`} className={`${player.hasGap ? "font-bold text-green-400" : ""} relative w-24 mx-auto py-1 h-8 flex items-center justify-center`}>
-                                <span>{formatOdds(player.odds ?? 0)}</span>
-                                {divergence?.isDivergence && player.dgFavorite ? (
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <span className="absolute right-0 top-1/2 transform -translate-y-1/2 bg-green-600 text-green-100 rounded-full p-1 flex items-center justify-center cursor-pointer">
-                                        <DollarSign size={12} className="text-green-100" aria-label="Data Golf value" />
-                                      </span>
-                                    </TooltipTrigger>
-                                    <TooltipContent className="z-50">
-                                      <span>
-                                        Divergence: FanDuel favorite: <b>{
-                                          divergence.fanduelFavorite === 'p1' ? formatPlayerName((matchup as SupabaseMatchupRow).player1_name ?? '') :
-                                          divergence.fanduelFavorite === 'p2' ? formatPlayerName((matchup as SupabaseMatchupRow).player2_name ?? '') :
-                                          divergence.fanduelFavorite === 'p3' ? formatPlayerName((matchup as SupabaseMatchupRow).player3_name ?? '') :
-                                          'N/A'
-                                        }</b>, DG favorite: <b>{formatPlayerName(player.name)}</b>.
-                                      </span>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                ) : null}
-                              </div>
-                            ))}
+                            {(sortedPlayers.filter((player: typeof sortedPlayers[number]) => player.odds && player.odds > 1) as typeof sortedPlayers).map((player: typeof sortedPlayers[number], idx: number) => {
+                              const formatted = formatOdds(player.odds ?? 0);
+                              return (
+                                <div key={`odds-${idx}`} className={`py-1 h-8 flex items-center justify-center ${player.hasGap ? "font-bold text-green-400" : ""}`}>{formatted}</div>
+                              );
+                            })}
                           </TableCell>
                           <TableCell className="text-center">
-                            {sortedPlayers.map((player, idx) => (
-                              <div key={`dg-odds-${idx}`} className={`${player.hasDGGap ? "font-bold text-green-400" : ""} py-1 h-8 flex items-center justify-center`}>
-                                {formatOdds(player.dgOdds ?? null)}
+                            {(sortedPlayers.filter((player: typeof sortedPlayers[number]) => player.dgOdds && player.dgOdds > 1) as typeof sortedPlayers).map((player: typeof sortedPlayers[number], idx: number) => (
+                              <div key={`dg-odds-${idx}`} className={`py-1 h-8 flex items-center justify-center ${player.hasDGGap ? "font-bold text-green-400" : ""}`}>
+                                {formatOdds(player.dgOdds ?? 0)}
                               </div>
                             ))}
                           </TableCell>
@@ -771,7 +753,7 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
                       const sortedPlayers = [
                         {
                           id: 'p1',
-                          dg_id: m2.player1_id,
+                          dg_id: m2.player1_dg_id,
                           odds: m2.odds1,
                           name: m2.player1_name,
                           dkOdds: dkP1Odds,
@@ -780,14 +762,14 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
                         },
                         {
                           id: 'p2',
-                          dg_id: m2.player2_id,
+                          dg_id: m2.player2_dg_id,
                           odds: m2.odds2,
                           name: m2.player2_name,
                           dkOdds: dkP2Odds,
                           hasGap: p2HasFDGap,
                           hasDKGap: p2HasDKGap,
                         },
-                      ].filter(p => typeof p.dg_id === 'number' && p.dg_id > 0)
+                      ].filter(p => p.dg_id !== null && p.dg_id !== undefined)
                        .sort((a, b) => {
                           if (!a.odds || a.odds <= 1) return 1;
                           if (!b.odds || b.odds <= 1) return -1;
@@ -795,24 +777,23 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
                         });
 
                       // Format the player's tournament position and score
-                      const formatPlayerPosition = (playerId: number) => {
-                        const playerStat = playerStatsMap[playerId];
+                      const formatPlayerPosition = (playerId: string | number) => {
+                        const playerStat = playerStatsMap[String(playerId)];
                         if (!playerStat) return { position: '-', score: '-' };
-
                         const position = playerStat.position || '-';
                         let score: string = '-';
-                          if (playerStat.total === 0) {
-                            score = 'E';
+                        if (playerStat.total === 0) {
+                          score = 'E';
                         } else if (typeof playerStat.total === 'number' && playerStat.total > 0) {
-                            score = `+${playerStat.total}`;
+                          score = `+${playerStat.total}`;
                         } else if (typeof playerStat.total === 'number' && playerStat.total < 0) {
-                            score = playerStat.total.toString();
+                          score = playerStat.total.toString();
                         }
                         return { position, score };
                       };
                       
                       return (
-                        <TableRow key={`2ball-${m2.id}`}>
+                        <TableRow key={`2ball-${m2.uuid}`}>
                           <TableCell>
                             {sortedPlayers.map((player, idx) => (
                               <div key={`player-${idx}`} className="py-1 h-8 flex items-center">
@@ -825,13 +806,13 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
                                         <Button size="icon" variant="secondary" disabled className="h-6 w-6 p-0"><CheckCircle className="text-green-400" size={16} /></Button>
                                       ) : (
                                         <Button size="icon" variant="outline" className="h-6 w-6 p-0" onClick={() => {
-                                          if (player.dg_id == null || typeof player.dg_id !== 'number' || isNaN(player.dg_id)) return;
+                                          if (typeof player.dg_id !== 'string' || player.dg_id.length === 0) return;
                                           addSelection({
                                             id: player.dg_id,
                                             matchupType,
                                             player: formatPlayerName(player.name),
                                             odds: Number(player.odds) || 0,
-                                            matchupId: m2.id,
+                                            matchupId: m2.uuid,
                                             eventName: m2.event_name,
                                             roundNum: m2.round_num ?? 0
                                           });
@@ -851,17 +832,17 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
                           {/* Position column for 2-ball */}
                           <TableCell className="text-center">
                             {sortedPlayers.map((player, idx) => {
-                              let playerId = 0;
+                              let playerId = '';
 
                               if (isSupabaseMatchupRow2Ball(matchup)) {
                                 if (player.id === 'p1') {
-                                  playerId = (matchup as SupabaseMatchupRow2Ball).player1_id ?? 0;
+                                  playerId = (matchup as SupabaseMatchupRow2Ball).player1_dg_id;
                                 } else if (player.id === 'p2') {
-                                  playerId = (matchup as SupabaseMatchupRow2Ball).player2_id ?? 0;
+                                  playerId = (matchup as SupabaseMatchupRow2Ball).player2_dg_id;
                                 }
                               }
                               
-                              const positionData = formatPlayerPosition(playerId ?? 0);
+                              const positionData = formatPlayerPosition(playerId);
                               
                               return (
                                 <div key={`position-${idx}`} className="py-1 h-8 flex items-center justify-center">
@@ -929,14 +910,14 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
                           </TableCell>
                           
                           <TableCell className="text-center">
-                            {sortedPlayers.map((player, idx) => (
+                            {(sortedPlayers.filter((player: typeof sortedPlayers[number]) => player.odds && player.odds > 1) as typeof sortedPlayers).map((player: typeof sortedPlayers[number], idx: number) => (
                               <div key={`odds-${idx}`} className={`py-1 h-8 flex items-center justify-center ${player.hasGap ? "font-bold text-green-400" : ""}`}>
                                 {formatOdds(player.odds ?? 0)}
                               </div>
                             ))}
                           </TableCell>
                           <TableCell className="text-center">
-                            {sortedPlayers.map((player, idx) => (
+                            {(sortedPlayers.filter((player: typeof sortedPlayers[number]) => player.dkOdds && player.dkOdds > 1) as typeof sortedPlayers).map((player: typeof sortedPlayers[number], idx: number) => (
                               <div key={`dk-odds-${idx}`} className={`py-1 h-8 flex items-center justify-center ${player.hasDKGap ? "font-bold text-green-400" : ""}`}>
                                 {formatOdds(player.dkOdds ?? 0)}
                               </div>

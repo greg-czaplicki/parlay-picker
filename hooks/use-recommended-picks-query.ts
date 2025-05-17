@@ -74,7 +74,7 @@ export function useRecommendedPicksQuery(
         if (!apiMatchup.player1_name || !apiMatchup.player2_name || !apiMatchup.player3_name) continue;
         result.push(
           {
-            dg_id: apiMatchup.player1_id || 0,
+            dg_id: apiMatchup.player1_dg_id || 0,
             name: apiMatchup.player1_name,
             odds: apiMatchup.odds1,
             sgTotal: 0,
@@ -86,7 +86,7 @@ export function useRecommendedPicksQuery(
             roundNum: apiMatchup.round_num
           },
           {
-            dg_id: apiMatchup.player2_id || 0,
+            dg_id: apiMatchup.player2_dg_id || 0,
             name: apiMatchup.player2_name,
             odds: apiMatchup.odds2,
             sgTotal: 0,
@@ -98,7 +98,7 @@ export function useRecommendedPicksQuery(
             roundNum: apiMatchup.round_num
           },
           {
-            dg_id: apiMatchup.player3_id || 0,
+            dg_id: apiMatchup.player3_dg_id || 0,
             name: apiMatchup.player3_name,
             odds: apiMatchup.odds3,
             sgTotal: 0,
@@ -115,7 +115,7 @@ export function useRecommendedPicksQuery(
         if (!apiMatchup.player1_name || !apiMatchup.player2_name) continue;
         result.push(
           {
-            dg_id: apiMatchup.player1_id || 0,
+            dg_id: apiMatchup.player1_dg_id || 0,
             name: apiMatchup.player1_name,
             odds: apiMatchup.odds1,
             sgTotal: 0,
@@ -127,7 +127,7 @@ export function useRecommendedPicksQuery(
             roundNum: apiMatchup.round_num
           },
           {
-            dg_id: apiMatchup.player2_id || 0,
+            dg_id: apiMatchup.player2_dg_id || 0,
             name: apiMatchup.player2_name,
             odds: apiMatchup.odds2,
             sgTotal: 0,
@@ -148,34 +148,35 @@ export function useRecommendedPicksQuery(
   const playerIds = useMemo(() => players.map(p => p.dg_id).filter(Boolean), [players]);
 
   // Fetch player stats
-  const statsQuery = usePlayerStatsQuery(eventId, roundNum ?? 1, playerIds);
-
-  // Debug: Log raw stats data
-  useEffect(() => {
-    if (statsQuery.data) {
-      console.log('API stats response:', statsQuery.data);
-    }
-  }, [statsQuery.data]);
+  const statsQuery = usePlayerStatsQuery(eventId, roundNum ?? 1, playerIds.map(String));
 
   // Merge stats into players
   const mergedPlayers = useMemo(() => {
     if (!statsQuery.data) return players;
     // Build a map of dg_id -> all stats for that player
-    const statsMap: Record<number, any> = {};
+    const statsMap: Record<string, any> = {};
     for (const stat of statsQuery.data) {
-      if (!statsMap[stat.player_id]) statsMap[stat.player_id] = {};
-      statsMap[stat.player_id].sgTotal = stat.sg_total;
+      const key = String(stat.player_id);
+      if (!statsMap[key]) statsMap[key] = {};
+      statsMap[key].sgTotal = stat.sg_total;
       // Add season SG Total
-      statsMap[stat.player_id].seasonSgTotal = stat.season_sg_total;
+      statsMap[key].seasonSgTotal = stat.season_sg_total;
       // Copy other fields as before
-      statsMap[stat.player_id].position = stat.position;
-      statsMap[stat.player_id].total = stat.total;
-      statsMap[stat.player_id].today = stat.today;
-      statsMap[stat.player_id].thru = stat.thru;
+      statsMap[key].position = stat.position;
+      statsMap[key].total = stat.total;
+      statsMap[key].today = stat.today;
+      statsMap[key].thru = stat.thru;
+    }
+    // After building statsMap
+    console.log('statsMap keys:', Object.keys(statsMap));
+    if (Object.keys(statsMap).length > 0) {
+      const firstKey = Object.keys(statsMap)[0];
+      console.log('Sample statsMap value:', statsMap[firstKey]);
     }
     return players.map(player => {
-      const stat = statsMap[player.dg_id] || {};
-      return {
+      const stat = statsMap[String(player.dg_id)] || {};
+      console.log('Merging for player', player.dg_id, stat);
+      const merged = {
         ...player,
         sgTotal: stat.sgTotal ?? player.sgTotal,
         seasonSgTotal: stat.seasonSgTotal ?? null,
@@ -184,6 +185,11 @@ export function useRecommendedPicksQuery(
         today: stat.today ?? player.today,
         thru: stat.thru ?? player.thru,
       };
+      // Log the merged player for the first few
+      if (player.dg_id && Number(player.dg_id) < 10000) {
+        console.log('Merged player:', merged);
+      }
+      return merged;
     });
   }, [players, statsQuery.data]);
 

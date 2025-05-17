@@ -83,7 +83,7 @@ export default function RecommendedPicks({
   // Get the parlay context
   const { addSelection, removeSelection, selections } = useParlayContext()
   // Track which players have been added to the parlay
-  const [addedPlayers, setAddedPlayers] = useState<Record<number, boolean>>({})
+  const [addedPlayers, setAddedPlayers] = useState<Record<string, boolean>>({})
 
   // Use React Query for recommendations
   const { data: recommendations, isLoading, isError, error } = useRecommendedPicksQuery(eventId, matchupType as "2ball" | "3ball", bookmaker, oddsGapPercentage, limit, roundNum)
@@ -95,14 +95,6 @@ export default function RecommendedPicks({
     }
     return recommendations;
   }, [filterId, recommendations]);
-
-  // Debug: Log raw and filtered recommendations
-  useEffect(() => {
-    console.log('Recommended picks (raw):', recommendations);
-  }, [recommendations]);
-  useEffect(() => {
-    console.log('Filtered recommendations:', filteredRecommendations);
-  }, [filteredRecommendations]);
 
   // All user parlays for indicator logic
   const userId = '00000000-0000-0000-0000-000000000001';
@@ -117,7 +109,7 @@ export default function RecommendedPicks({
   // Use the same odds filtering as the table
   const filteredMatchups = useMemo(() => {
     return (matchups ?? []).filter(matchup => {
-      if ('player3_id' in matchup) {
+      if ('player3_dg_id' in matchup) {
         return (
           Number(matchup.odds1 ?? 0) > 1 &&
           Number(matchup.odds2 ?? 0) > 1 &&
@@ -134,19 +126,19 @@ export default function RecommendedPicks({
 
   // Build sets of valid player IDs and matchup IDs from filteredMatchups
   const validPlayerIds = useMemo(() => {
-    const set = new Set<number>();
+    const set = new Set<string>();
     (filteredMatchups ?? []).forEach(m => {
-      if (m.player1_id) set.add(m.player1_id);
-      if (m.player2_id) set.add(m.player2_id);
-      if ('player3_id' in m && m.player3_id) set.add(m.player3_id);
+      if (m.player1_dg_id) set.add(String(m.player1_dg_id));
+      if (m.player2_dg_id) set.add(String(m.player2_dg_id));
+      if ('player3_dg_id' in m && m.player3_dg_id) set.add(String(m.player3_dg_id));
     });
     return set;
   }, [filteredMatchups]);
 
   const validMatchupIds = useMemo(() => {
-    const set = new Set<number>();
+    const set = new Set<string>();
     (filteredMatchups ?? []).forEach(m => {
-      if (m.id) set.add(m.id);
+      if (m.uuid) set.add(String(m.uuid));
     });
     return set;
   }, [filteredMatchups]);
@@ -155,13 +147,13 @@ export default function RecommendedPicks({
   const filteredAndMatchedRecommendations = useMemo(() => {
     return (filteredRecommendations ?? []).filter(
       player =>
-        validPlayerIds.has(player.dg_id) &&
-        validMatchupIds.has(player.matchupId)
+        validPlayerIds.has(String(player.dg_id)) &&
+        validMatchupIds.has(String(player.matchupId))
     );
   }, [filteredRecommendations, validPlayerIds, validMatchupIds]);
 
   // Function to add a player to the parlay
-  const addToParlay = (selection: ParlaySelection, playerId: number) => {
+  const addToParlay = (selection: ParlaySelection, playerId: string) => {
     // Format player name to "First Last" format if it's in "Last, First" format
     let playerName = selection.player
     if (playerName.includes(",")) {
@@ -183,7 +175,7 @@ export default function RecommendedPicks({
   }
   
   // Function to remove a player from the parlay
-  const removeFromParlay = (selectionId: number, playerId: number, playerName: string) => {
+  const removeFromParlay = (selectionId: string, playerId: string, playerName: string) => {
     removeSelection(selectionId)
     
     // Mark player as removed in local state
@@ -204,7 +196,7 @@ export default function RecommendedPicks({
   }
   
   // Check if a player is already in the parlay
-  const isPlayerInParlay = (playerId: number, playerName: string): { inParlay: boolean, selectionId?: number } => {
+  const isPlayerInParlay = (playerId: string, playerName: string): { inParlay: boolean, selectionId?: string } => {
     // First check our local tracking state
     if (addedPlayers[playerId]) {
       // Find the selection ID
@@ -235,7 +227,7 @@ export default function RecommendedPicks({
   // Sync addedPlayers state with selections from context
   useEffect(() => {
     // Find players that are currently in recommendations and also in selections
-    const newAddedPlayers: Record<number, boolean> = {};
+    const newAddedPlayers: Record<string, boolean> = {};
     (filteredRecommendations ?? []).forEach((player: Player) => {
       let formattedPlayerName = player.name
       if (formattedPlayerName.includes(",")) {
@@ -250,156 +242,8 @@ export default function RecommendedPicks({
         }
         return selectionPlayerName.toLowerCase() === formattedPlayerName.toLowerCase()
       })
-      newAddedPlayers[player.dg_id] = isInParlay
+      newAddedPlayers[String(player.dg_id)] = isInParlay
     })
-    // Only update state if changed
-    const isChanged =
-      Object.keys(newAddedPlayers).length !== Object.keys(addedPlayers).length ||
-      Object.keys(newAddedPlayers).some(
-        key => newAddedPlayers[Number(key)] !== addedPlayers[Number(key)]
-      );
-    if (isChanged) {
-      setAddedPlayers(newAddedPlayers)
-    }
-  }, [selections, filteredRecommendations]);
-
-  return (
-    <Card className="glass-card highlight-card">
-      <CardContent className="p-6">
-        <h2 className="text-xl font-bold mb-4">
-          Top {matchupType === "3ball" ? "3-Ball" : "2-Ball"} Picks
-        </h2>
-
-        {isLoading && (
-          <div className="space-y-4">
-            {[...Array(limit)].map((_, i) => (
-              <Skeleton key={i} className="h-[120px] w-full rounded-lg bg-[#1e1e23]" />
-            ))}
-          </div>
-        )}
-
-        {isError && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Error</AlertTitle>
-            <AlertDescription>{error instanceof Error ? error.message : error}</AlertDescription>
-          </Alert>
-        )}
-
-        {!isLoading && !isError && (filteredAndMatchedRecommendations ?? []).length === 0 && (
-          <p className="text-gray-400 text-center py-4">No recommendations available based on current data and filters.</p>
-        )}
-
-        {!isLoading && !isError && (filteredAndMatchedRecommendations ?? []).length > 0 && (
-          <div className="space-y-3">
-            {(filteredAndMatchedRecommendations ?? []).slice(0, 15).map((player: Player) => (
-              <div key={`${player.dg_id}-${player.matchupId || Math.random().toString(36).substring(7)}`} className="p-4 bg-[#1e1e23] rounded-lg flex flex-col gap-2">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <div className="font-medium text-lg">{player.name}</div>
-                    {typeof player.sgTotal === 'number' && !isNaN(player.sgTotal) && (
-                      <div className="text-xs text-gray-400">
-                        {typeof player.oddsGapToNext === 'number' && (
-                          <span className="block text-xs text-muted-foreground mt-0.5">
-                            Gap: <span
-                              className={
-                                Math.round(player.oddsGapToNext * 100) >= 10 ? 'text-green-500 font-bold' :
-                                Math.round(player.oddsGapToNext * 100) >= 0 ? 'text-yellow-400 font-semibold' :
-                                'text-red-500 font-semibold'
-                              }
-                            >
-                              +{Math.round(player.oddsGapToNext * 100)}
-                            </span>
-                          </span>
-                        )}
-                        SG Total: <span className={getSGColorClass(player.sgTotal)}>{player.sgTotal.toFixed(2)}</span>
-                        {typeof player.seasonSgTotal === 'number' && !isNaN(player.seasonSgTotal) && (
-                          <span className="block text-xs text-muted-foreground mt-0.5" title="Season SG Total">
-                            Season: <span className={getSGColorClass(player.seasonSgTotal)}>{player.seasonSgTotal.toFixed(2)}</span>
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <div className="text-right flex flex-col items-end">
-                     <span
-                       className={`text-lg font-semibold px-2 py-1 rounded mb-1 ${
-                         player.confidenceScore >= 100
-                           ? "bg-green-900/30 text-green-400"
-                           : player.confidenceScore >= 70
-                             ? "bg-yellow-900/30 text-yellow-400"
-                             : player.confidenceScore >= 40
-                               ? "bg-blue-900/30 text-blue-400"
-                               : "bg-red-900/30 text-red-400"
-                       }`}
-                     >
-                       +{player.confidenceScore}
-                     </span>
-                    <span className="text-base font-medium text-green-400">{formatOdds(player.odds)}</span>
-                  </div>
-                </div>
-                {(() => {
-                  const { inParlay, selectionId } = isPlayerInParlay(player.dg_id, player.name);
-                  return (
-                    <div className="flex items-center gap-2 mt-2">
-                      {inParlay ? (
-                        <Button
-                          size="sm"
-                          variant="default"
-                          className="w-full bg-primary border-none hover:bg-primary/90 text-white"
-                          onClick={() => {
-                            if (!player.dg_id || !player.name || !selectionId) return;
-                            removeFromParlay(selectionId, player.dg_id, player.name);
-                          }}
-                        >
-                          ✓ Added to Parlay
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="w-full bg-[#2a2a35] border-none hover:bg-[#34343f] text-white"
-                          onClick={() => {
-                            if (!player.dg_id || !player.name) return;
-                            // Convert decimal odds to American odds if needed
-                            const americanOdds = convertToAmericanOdds(player.odds);
-                            // Add player to parlay context
-                            addToParlay({
-                              id: player.dg_id,
-                              matchupType: matchupType,
-                              group: player.eventName || 'Unknown Event',
-                              player: player.name,
-                              odds: americanOdds,
-                              valueRating: player.valueRating || 7.5,
-                              confidenceScore: player.confidenceScore || 75,
-                              matchupId: player.matchupId,
-                              eventName: player.eventName,
-                              roundNum: player.roundNum || 2
-                            }, player.dg_id);
-                          }}
-                        >
-                          <Plus size={16} className="mr-1" /> Add to Parlay
-                        </Button>
-                      )}
-                      {/* Indicator for player used in any other parlay */}
-                      {!inParlay && isPlayerInAnyParlay(player.name) && (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Info className="text-blue-400 inline-block align-middle" size={16} />
-                            </TooltipTrigger>
-                            <TooltipContent>Already used in another parlay</TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  )
-} 
+    setAddedPlayers(newAddedPlayers)
+  }, [filteredRecommendations, selections])
+}

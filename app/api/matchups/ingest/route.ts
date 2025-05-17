@@ -25,7 +25,7 @@ function findPairing(pairings: any[], playerIds: number[]) {
   return null;
 }
 
-function transformMatchups(matchups: any[], pairings: any[], type: '2ball' | '3ball', event_id: number, round_num: number, created_at: string) {
+function transformMatchups(matchups: any[], pairings: any[], type: '2ball' | '3ball', event_id: number, round_num: number, created_at: string, dgIdToUuid: Record<number, string>) {
   return matchups.map(m => {
     const playerIds = type === '3ball'
       ? [m.p1_dg_id, m.p2_dg_id, m.p3_dg_id]
@@ -35,11 +35,14 @@ function transformMatchups(matchups: any[], pairings: any[], type: '2ball' | '3b
       event_id,
       round_num,
       type,
-      player1_id: m.p1_dg_id,
+      player1_id: dgIdToUuid[m.p1_dg_id] ?? null,
+      player1_dg_id: m.p1_dg_id,
       player1_name: m.p1_player_name,
-      player2_id: m.p2_dg_id,
+      player2_id: dgIdToUuid[m.p2_dg_id] ?? null,
+      player2_dg_id: m.p2_dg_id,
       player2_name: m.p2_player_name,
-      player3_id: type === '3ball' ? m.p3_dg_id : null,
+      player3_id: type === '3ball' ? (dgIdToUuid[m.p3_dg_id] ?? null) : null,
+      player3_dg_id: type === '3ball' ? m.p3_dg_id : null,
       player3_name: type === '3ball' ? m.p3_player_name : null,
       odds1: m.odds?.fanduel?.p1 ?? m.odds?.draftkings?.p1 ?? null,
       odds2: m.odds?.fanduel?.p2 ?? m.odds?.draftkings?.p2 ?? null,
@@ -84,8 +87,56 @@ export async function POST(req: NextRequest) {
     const round_num_2 = dg2.round_num;
     const created_at_3 = new Date(dg3.last_updated.replace(' UTC', 'Z')).toISOString();
     const created_at_2 = new Date(dg2.last_updated.replace(' UTC', 'Z')).toISOString();
-    const matchups3 = transformMatchups(dg3.match_list, dgModel.pairings, '3ball', event_id, round_num_3, created_at_3);
-    const matchups2 = transformMatchups(dg2.match_list, dgModel.pairings, '2ball', event_id, round_num_2, created_at_2);
+
+    // --- NEW: Extract all unique players from both 2ball and 3ball matchups ---
+    const allPlayers: { dg_id: number, name: string }[] = [];
+    const addPlayer = (dg_id: number, name: string) => {
+      if (dg_id && name && !allPlayers.some(p => p.dg_id === dg_id)) {
+        allPlayers.push({ dg_id, name });
+      }
+    };
+    dg3.match_list.forEach((m: any) => {
+      addPlayer(m.p1_dg_id, m.p1_player_name);
+      addPlayer(m.p2_dg_id, m.p2_player_name);
+      if (m.p3_dg_id) addPlayer(m.p3_dg_id, m.p3_player_name);
+    });
+    dg2.match_list.forEach((m: any) => {
+      addPlayer(m.p1_dg_id, m.p1_player_name);
+      addPlayer(m.p2_dg_id, m.p2_player_name);
+    });
+    // Upsert all unique players into the players table
+    if (allPlayers.length > 0) {
+      const { error: upsertError } = await supabase
+        .from('players')
+        .upsert(allPlayers, { onConflict: 'dg_id' });
+      if (upsertError) {
+        throw new Error(`Could not upsert players: ${upsertError.message}`);
+      }
+    }
+    // --- END NEW ---
+
+    // Gather all unique DG_IDs from both 2ball and 3ball matchups
+    const allDgIds = [
+      ...new Set([
+        ...dg3.match_list.flatMap((m: any) => [m.p1_dg_id, m.p2_dg_id, m.p3_dg_id]),
+        ...dg2.match_list.flatMap((m: any) => [m.p1_dg_id, m.p2_dg_id]),
+      ].filter(Boolean))
+    ];
+    // Fetch UUIDs for all DG_IDs
+    const { data: playerRows, error: playerError } = await supabase
+      .from('players')
+      .select('uuid, dg_id')
+      .in('dg_id', allDgIds);
+    if (playerError) {
+      throw new Error(`Could not fetch player UUIDs: ${playerError.message}`);
+    }
+    const dgIdToUuid: Record<number, string> = {};
+    (playerRows ?? []).forEach((row: any) => {
+      if (row.dg_id && row.uuid) dgIdToUuid[Number(row.dg_id)] = row.uuid;
+    });
+
+    const matchups3 = transformMatchups(dg3.match_list, dgModel.pairings, '3ball', event_id, round_num_3, created_at_3, dgIdToUuid);
+    const matchups2 = transformMatchups(dg2.match_list, dgModel.pairings, '2ball', event_id, round_num_2, created_at_2, dgIdToUuid);
     // Insert into matchups table
     const allMatchups = [...matchups3, ...matchups2]
     if (allMatchups.length === 0) {

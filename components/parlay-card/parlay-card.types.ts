@@ -5,7 +5,7 @@ export interface ParlayPlayer {
   /** The name used for searching (e.g., "Corey Conners") */
   name: string;
   /** ID from the parlay_picks table */
-  pickId?: number;
+  pickId?: string;
   /** Matchup data for the player */
   matchup: any | null; // TODO: Replace 'any' with PlayerMatchupData type import
   /** Live stats keyed by dg_id */
@@ -27,13 +27,13 @@ export interface ParlayPlayer {
  */
 export interface ParlayCardProps {
   /** Unique parlay identifier */
-  parlayId: number;
+  parlayUuid: string;
   /** Display name for the parlay */
   parlayName: string | null;
   /** Optional: round to display */
   selectedRound?: number | null;
   /** Optional: callback for parlay deletion */
-  onDelete?: (parlayId: number) => void;
+  onDelete?: (parlayUuid: string) => void;
 }
 
 /**

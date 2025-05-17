@@ -74,17 +74,17 @@ export async function GET() {
       }
       // Gather all players in the matchup with their live stats for this round
       const players: { id: number, name: string, score: number | null }[] = []
-      if (matchup.player1_id && matchup.player1_name) {
+      if (matchup.player1_dg_id && matchup.player1_name) {
         const stats = getStats(matchup.player1_name, matchup.round_num) || {}
-        players.push({ id: matchup.player1_id, name: matchup.player1_name, score: parseToday(stats.today) })
+        players.push({ id: matchup.player1_dg_id, name: matchup.player1_name, score: parseToday(stats.today) })
       }
-      if (matchup.player2_id && matchup.player2_name) {
+      if (matchup.player2_dg_id && matchup.player2_name) {
         const stats = getStats(matchup.player2_name, matchup.round_num) || {}
-        players.push({ id: matchup.player2_id, name: matchup.player2_name, score: parseToday(stats.today) })
+        players.push({ id: matchup.player2_dg_id, name: matchup.player2_name, score: parseToday(stats.today) })
       }
-      if (matchup.player3_id && matchup.player3_name) {
+      if (matchup.player3_dg_id && matchup.player3_name) {
         const stats = getStats(matchup.player3_name, matchup.round_num) || {}
-        players.push({ id: matchup.player3_id, name: matchup.player3_name, score: parseToday(stats.today) })
+        players.push({ id: matchup.player3_dg_id, name: matchup.player3_name, score: parseToday(stats.today) })
       }
       // Only use players with valid scores
       const validScores: { id: number, name: string, score: number }[] = players.filter((p): p is { id: number, name: string, score: number } => typeof p.score === 'number')

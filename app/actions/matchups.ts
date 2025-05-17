@@ -230,14 +230,14 @@ export async function getMatchups(matchupType: string, bookmaker?: string): Prom
     if (matchupType === '3ball') {
       playerIds = [
         ...new Set(
-          matchupRows.flatMap(row => [row.player1_id, row.player2_id, row.player3_id])
+          matchupRows.flatMap(row => [row.player1_dg_id, row.player2_dg_id, row.player3_dg_id])
                      .filter((id): id is number => id != null)
         ),
       ];
     } else {
       playerIds = [
         ...new Set(
-          matchupRows.flatMap(row => [row.player1_id, row.player2_id])
+          matchupRows.flatMap(row => [row.player1_dg_id, row.player2_dg_id])
                      .filter((id): id is number => id != null)
         ),
       ];
@@ -273,38 +273,38 @@ export async function getMatchups(matchupType: string, bookmaker?: string): Prom
       if (matchupType === '3ball') {
         // Use new unified schema
         const p1 = {
-          id: row.player1_id,
+          id: row.player1_dg_id,
           name: row.player1_name,
           odds: Number(row[`${selectedBookmaker}_p1_odds`]) || 0,
-          sgTotal: playerStatsMap.get(row.player1_id)?.sgTotal ?? 0
+          sgTotal: playerStatsMap.get(row.player1_dg_id)?.sgTotal ?? 0
         };
         const p2 = {
-          id: row.player2_id,
+          id: row.player2_dg_id,
           name: row.player2_name,
           odds: Number(row[`${selectedBookmaker}_p2_odds`]) || 0,
-          sgTotal: playerStatsMap.get(row.player2_id)?.sgTotal ?? 0
+          sgTotal: playerStatsMap.get(row.player2_dg_id)?.sgTotal ?? 0
         };
         const p3 = {
-          id: row.player3_id,
+          id: row.player3_dg_id,
           name: row.player3_name,
           odds: Number(row[`${selectedBookmaker}_p3_odds`]) || 0,
-          sgTotal: playerStatsMap.get(row.player3_id)?.sgTotal ?? 0
+          sgTotal: playerStatsMap.get(row.player3_dg_id)?.sgTotal ?? 0
         };
         playersInitial = [p1, p2, p3];
         expectedPlayerCount = 3;
       } else {
         // 2ball
         const p1 = {
-          id: row.player1_id,
+          id: row.player1_dg_id,
           name: row.player1_name,
           odds: Number(row[`${selectedBookmaker}_p1_odds`]) || 0,
-          sgTotal: playerStatsMap.get(row.player1_id)?.sgTotal ?? 0
+          sgTotal: playerStatsMap.get(row.player1_dg_id)?.sgTotal ?? 0
         };
         const p2 = {
-          id: row.player2_id,
+          id: row.player2_dg_id,
           name: row.player2_name,
           odds: Number(row[`${selectedBookmaker}_p2_odds`]) || 0,
-          sgTotal: playerStatsMap.get(row.player2_id)?.sgTotal ?? 0
+          sgTotal: playerStatsMap.get(row.player2_dg_id)?.sgTotal ?? 0
         };
         playersInitial = [p1, p2];
         expectedPlayerCount = 2;

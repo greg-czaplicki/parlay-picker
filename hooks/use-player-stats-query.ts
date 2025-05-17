@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/query-keys'
 
 export interface PlayerStat {
-  player_id: number; // dg_id from API
+  player_id: string; // uuid from API
   player_name?: string;
   event_name?: string;
   round_num?: number | string | null;
@@ -35,7 +35,7 @@ interface UsePlayerStatsQueryResult {
   error: Error | null;
 }
 
-export function usePlayerStatsQuery(eventId: number | null, roundNum: number, playerIds: number[]): UsePlayerStatsQueryResult {
+export function usePlayerStatsQuery(eventId: number | null, roundNum: number, playerIds: string[]): UsePlayerStatsQueryResult {
   return useQuery<PlayerStat[], Error>({
     queryKey: queryKeys.playerData.live(eventId ?? 0, roundNum + ':' + playerIds.join(',')),
     enabled: !!eventId && playerIds.length > 0,

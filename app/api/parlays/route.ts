@@ -10,7 +10,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey)
 export async function POST(req: NextRequest) {
   const body = await req.json()
   const { name, user_id, amount, odds, payout, round_num, picks } = body
-  // picks: [{ matchup_id, picked_player_id, picked_player_name }]
+  // picks: [{ matchup_id, picked_player_dg_id, picked_player_name }]
   if (!user_id || !Array.isArray(picks) || picks.length === 0) {
     return NextResponse.json({ error: 'Missing user_id or picks' }, { status: 400 })
   }
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   const picksToInsert = picks.map((pick: any) => ({
     parlay_id: parlay.id,
     matchup_id: pick.matchup_id,
-    picked_player_dg_id: pick.picked_player_dg_id, // Use correct field name
+    picked_player_dg_id: pick.picked_player_dg_id,
     picked_player_name: pick.picked_player_name,
     outcome: 'void',
   }))
@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
   }
   // Fetch matchups and players for all picks
   const matchupIds = picks.map((pick: any) => pick.matchup_id).filter(Boolean)
-  const playerDgIds = picks.map((pick: any) => pick.picked_player_id).filter(Boolean)
+  const playerDgIds = picks.map((pick: any) => pick.picked_player_dg_id).filter(Boolean)
   let matchups = []
   let players = []
   if (matchupIds.length > 0) {
@@ -133,7 +133,7 @@ export async function GET(req: NextRequest) {
           playersInMatchup.push({
             id: matchup.player1_id,
             name: matchup.player1_name,
-            isUserPick: pick.picked_player_dg_id === matchup.player1_id,
+            isUserPick: pick.picked_player_dg_id === matchup.player1_dg_id,
             currentPosition: typeof stats.position === 'string' ? stats.position : '-',
             totalScore: typeof stats.total === 'number' ? stats.total : Number(stats.total) || 0,
             roundScore: typeof stats.today === 'number' ? stats.today : Number(stats.today) || 0,
@@ -146,7 +146,7 @@ export async function GET(req: NextRequest) {
           playersInMatchup.push({
             id: matchup.player2_id,
             name: matchup.player2_name,
-            isUserPick: pick.picked_player_dg_id === matchup.player2_id,
+            isUserPick: pick.picked_player_dg_id === matchup.player2_dg_id,
             currentPosition: typeof stats.position === 'string' ? stats.position : '-',
             totalScore: typeof stats.total === 'number' ? stats.total : Number(stats.total) || 0,
             roundScore: typeof stats.today === 'number' ? stats.today : Number(stats.today) || 0,
@@ -159,7 +159,7 @@ export async function GET(req: NextRequest) {
           playersInMatchup.push({
             id: matchup.player3_id,
             name: matchup.player3_name,
-            isUserPick: pick.picked_player_dg_id === matchup.player3_id,
+            isUserPick: pick.picked_player_dg_id === matchup.player3_dg_id,
             currentPosition: typeof stats.position === 'string' ? stats.position : '-',
             totalScore: typeof stats.total === 'number' ? stats.total : Number(stats.total) || 0,
             roundScore: typeof stats.today === 'number' ? stats.today : Number(stats.today) || 0,

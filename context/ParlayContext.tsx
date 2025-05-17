@@ -3,11 +3,11 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from "react"
 
 export type ParlaySelection = {
-  id: number
+  id: string
   matchupType: string
   group: string
   player: string
-  matchupId?: number
+  matchupId?: string
   eventName?: string
   roundNum?: number
   odds: number
@@ -19,8 +19,8 @@ interface ParlayContextType {
   // UI state for building a new parlay
   selections: ParlaySelection[]
   addSelection: (selection: Partial<ParlaySelection>) => void
-  removeSelection: (id: number) => void
-  updateSelection: (id: number, field: keyof ParlaySelection, value: string | number) => void
+  removeSelection: (id: string) => void
+  updateSelection: (id: string, field: keyof ParlaySelection, value: string | number) => void
   clearSelections: () => void
 
   // UI state for stake and payout preview
@@ -30,8 +30,8 @@ interface ParlayContextType {
   potentialPayout: number
 
   // UI state for modals, selected parlay, etc.
-  selectedParlayId: number | null
-  setSelectedParlayId: (id: number | null) => void
+  selectedParlayUuid: string | null
+  setSelectedParlayUuid: (id: string | null) => void
   isParlayModalOpen: boolean
   setParlayModalOpen: (open: boolean) => void
 }
@@ -44,7 +44,7 @@ export function ParlayProvider({ children }: { children: ReactNode }) {
   const [totalOdds, setTotalOdds] = useState(0)
   const [stake, setStake] = useState(10)
   const [potentialPayout, setPotentialPayout] = useState(0)
-  const [selectedParlayId, setSelectedParlayId] = useState<number | null>(null)
+  const [selectedParlayUuid, setSelectedParlayUuid] = useState<string | null>(null)
   const [isParlayModalOpen, setParlayModalOpen] = useState(false)
 
   // Load from localStorage on mount
@@ -52,7 +52,7 @@ export function ParlayProvider({ children }: { children: ReactNode }) {
     const saved = typeof window !== 'undefined' ? localStorage.getItem('parlaySelections') : null;
     if (saved) {
       try {
-        const parsed = JSON.parse(saved).map((s: any) => ({ ...s, id: Number(s.id) }));
+        const parsed = JSON.parse(saved).map((s: any) => ({ ...s, id: String(s.id) }));
         setSelections(parsed);
       } catch {}
     }
@@ -67,8 +67,8 @@ export function ParlayProvider({ children }: { children: ReactNode }) {
 
   // Add selection to parlay
   const addSelection = (newSelection: Partial<ParlaySelection>) => {
-    if (typeof newSelection.id !== 'number' || isNaN(newSelection.id)) {
-      // Only allow adding selections with a valid dg_id as id
+    if (typeof newSelection.id !== 'string' || newSelection.id.length === 0) {
+      // Only allow adding selections with a valid uuid as id
       return;
     }
     if (newSelection.player && newSelection.player.trim() !== "" &&
@@ -92,14 +92,14 @@ export function ParlayProvider({ children }: { children: ReactNode }) {
   }
 
   // Remove selection from parlay
-  const removeSelection = (id: number) => {
+  const removeSelection = (id: string) => {
     const updatedSelections = selections.filter((selection) => selection.id !== id)
     setSelections(updatedSelections)
     recalculate(updatedSelections, stake)
   }
 
   // Update a selection field
-  const updateSelection = (id: number, field: keyof ParlaySelection, value: string | number) => {
+  const updateSelection = (id: string, field: keyof ParlaySelection, value: string | number) => {
     const updatedSelections = selections.map((selection) =>
       (selection.id === id ? { ...selection, [field]: value } : selection)
     )
@@ -164,8 +164,8 @@ export function ParlayProvider({ children }: { children: ReactNode }) {
       setStake: handleSetStake,
       totalOdds,
       potentialPayout,
-      selectedParlayId,
-      setSelectedParlayId,
+      selectedParlayUuid,
+      setSelectedParlayUuid,
       isParlayModalOpen,
       setParlayModalOpen,
     }}>
