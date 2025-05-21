@@ -1,7 +1,12 @@
+<<<<<<< HEAD
 import 'next-logger'
 import { logger } from '@/lib/logger'
 import { createSupabaseClient, handleApiError, jsonSuccess, getQueryParams } from '@/lib/api-utils'
 import { z } from 'zod'
+=======
+import { createClient } from "@supabase/supabase-js";
+import { NextResponse } from "next/server";
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
 
 // Define interfaces for the Data Golf API response
 interface LivePlayerData {
@@ -59,6 +64,21 @@ interface SupabaseLiveStat {
   data_golf_updated_at: string;
 }
 
+<<<<<<< HEAD
+=======
+// Initialize Supabase client
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error(
+    "Supabase URL or Service Role Key is missing in environment variables.",
+  );
+}
+
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
 // Data Golf API Key
 const dataGolfApiKey = process.env.DATAGOLF_API_KEY;
 if (!dataGolfApiKey) {
@@ -78,13 +98,21 @@ async function fetchLiveStats(tour: string, round: string): Promise<DataGolfLive
   const baseUrl = getLiveStatsUrl(tour);
   const url = `${baseUrl}&round=${round}`;
   
+<<<<<<< HEAD
   logger.info(`Fetching ${tour} tour data for round ${round}`);
+=======
+  console.log(`Fetching ${tour} tour data for round ${round}`);
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
   
   try {
     const response = await fetch(url, { cache: 'no-store' });
     if (!response.ok) {
       if (response.status === 404) {
+<<<<<<< HEAD
         logger.warn(`Round ${round} data not found (404) for tour ${tour}, skipping.`);
+=======
+        console.warn(`Round ${round} data not found (404) for tour ${tour}, skipping.`);
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
         return null;
       }
       const errorText = await response.text();
@@ -123,6 +151,7 @@ function mapStatsToInsert(data: DataGolfLiveStatsResponse, timestamp: string): S
   }));
 }
 
+<<<<<<< HEAD
 // Replace legacy param validation with Zod and getQueryParams
 const tourParamSchema = z.object({ tour: z.enum(['pga', 'opp', 'euro']) });
 
@@ -137,15 +166,54 @@ export async function GET(request: Request) {
   }
   
     logger.info(`Starting multi-round live stats sync for ${tour.toUpperCase()} tour...`);
+=======
+// Helper to upsert stats into Supabase
+async function upsertStats(stats: SupabaseLiveStat[], round: string): Promise<string | null> {
+  if (!stats.length) return null;
+  // Upsert on (dg_id, round_num, event_name)
+  const { error } = await supabase
+    .from("live_tournament_stats")
+    .upsert(stats, { onConflict: "dg_id,round_num,event_name" });
+  if (error) {
+    return `Upsert failed for round ${round}: ${error.message}`;
+  }
+  return null;
+}
+
+export async function GET(request: Request) {
+  // Extract the tour parameter from query string with default 'pga'
+  const { searchParams } = new URL(request.url);
+  const tour = searchParams.get('tour') || 'pga';
+  
+  // Validate tour parameter
+  if (!['pga', 'opp', 'euro'].includes(tour)) {
+    return NextResponse.json({
+      success: false,
+      message: `Invalid tour parameter: ${tour}. Must be one of: pga, opp, euro.`,
+    }, { status: 400 });
+  }
+  
+  console.log(`Starting multi-round live stats sync for ${tour.toUpperCase()} tour...`);
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
   let totalInsertedCount = 0;
   let lastSourceTimestamp: string | null = null;
   let fetchedEventName: string | null = null;
   const errors: string[] = [];
+<<<<<<< HEAD
     const supabase = createSupabaseClient();
 
   // Only fetch Euro tour data if tour is 'euro' and handle appropriately
   if (tour === 'euro') {
       return handleApiError('Euro tour data is not supported by DataGolf API. Only PGA and Opposite Field events are supported.');
+=======
+
+  // Only fetch Euro tour data if tour is 'euro' and handle appropriately
+  if (tour === 'euro') {
+    return NextResponse.json({
+      success: false,
+      message: "Euro tour data is not supported by DataGolf API. Only PGA and Opposite Field events are supported.",
+    }, { status: 400 });
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
   }
 
   for (const round of ROUNDS_TO_FETCH) {
@@ -156,6 +224,7 @@ export async function GET(request: Request) {
       lastSourceTimestamp = currentRoundTimestamp;
       fetchedEventName = data.event_name;
       const statsToInsert = mapStatsToInsert(data, currentRoundTimestamp);
+<<<<<<< HEAD
         // Upsert on (dg_id, round_num, event_name)
         const { error } = await supabase
           .from("live_tournament_stats")
@@ -163,30 +232,51 @@ export async function GET(request: Request) {
         if (error) {
           errors.push(`Upsert failed for round ${round}: ${error.message}`);
           logger.error(`Upsert failed for round ${round}: ${error.message}`);
+=======
+      const upsertError = await upsertStats(statsToInsert, round);
+      if (upsertError) {
+        errors.push(upsertError);
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
       } else {
         totalInsertedCount += statsToInsert.length;
       }
     } catch (err: any) {
       errors.push(err.message || String(err));
+<<<<<<< HEAD
         logger.error(`Error syncing round ${round}: ${err.message || String(err)}`);
+=======
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
     }
   }
 
   const finalMessage = `${tour.toUpperCase()} tour sync complete. Total records inserted/updated: ${totalInsertedCount} across attempted rounds for ${fetchedEventName ?? 'event'}.`;
   if (errors.length > 0) {
+<<<<<<< HEAD
       logger.warn(`${tour.toUpperCase()} sync completed with errors:`, errors);
   }
 
     logger.info('Returning live-stats/sync-tour response');
   return jsonSuccess({
+=======
+    console.warn(`${tour.toUpperCase()} sync completed with errors:`, errors);
+  }
+
+  return NextResponse.json({
+    success: errors.length === 0,
+    message: finalMessage + (errors.length > 0 ? ` Errors: ${errors.join(', ')}` : ''),
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
     processedCount: totalInsertedCount,
     sourceTimestamp: lastSourceTimestamp,
     eventName: fetchedEventName,
     tour: tour,
     errors,
+<<<<<<< HEAD
   }, finalMessage + (errors.length > 0 ? ` Errors: ${errors.join(', ')}` : ''));
   } catch (error) {
     logger.error('Error in live-stats/sync-tour endpoint:', error);
     return handleApiError(error);
   }
+=======
+  });
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
 }

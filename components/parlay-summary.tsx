@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { toast } from "@/components/ui/use-toast"
+<<<<<<< HEAD
 import { useRouter } from "next/navigation"
 import { Send } from "lucide-react"
 import { useCreateParlayMutation } from '@/hooks/use-create-parlay-mutation'
@@ -16,11 +17,31 @@ type ParlayProps = {
 }
 
 export default function ParlaySummary({ selections, userId = '00000000-0000-0000-0000-000000000001' }: ParlayProps) {
+=======
+import { createParlay, addParlayPick } from "@/app/actions/matchups"
+import { useRouter } from "next/navigation"
+import { Send } from "lucide-react"
+
+type ParlayProps = {
+  selections: Array<{
+    id: string
+    odds: number
+    player: string
+    matchupId?: number
+    eventName?: string
+    roundNum?: number
+    matchupType: string
+  }>
+}
+
+export default function ParlaySummary({ selections }: ParlayProps) {
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
   const router = useRouter()
   const [stake, setStake] = useState(10)
   const [totalOdds, setTotalOdds] = useState(0)
   const [payout, setPayout] = useState(0)
   const [submitting, setSubmitting] = useState(false)
+<<<<<<< HEAD
   const createParlayMutation = useCreateParlayMutation(userId)
   
   // Add these helpers at the top of the component:
@@ -46,10 +67,21 @@ export default function ParlaySummary({ selections, userId = '00000000-0000-0000
       toast({
         title: "Cannot Submit Empty Parlay",
         description: "Add at least 2 selections to your parlay.",
+=======
+  
+  // Function to submit the parlay to the database
+  const submitParlay = async () => {
+    // Don't submit if there are no selections
+    if (selections.length === 0) {
+      toast({
+        title: "Cannot Submit Empty Parlay",
+        description: "Add at least one selection to your parlay.",
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
         variant: "destructive"
       })
       return
     }
+<<<<<<< HEAD
     // Defensive check for missing picked_player_dg_id
     const picks = selections.map(s => ({
       matchup_id: s.matchupId,
@@ -79,11 +111,45 @@ export default function ParlaySummary({ selections, userId = '00000000-0000-0000
         round_num: selections[0]?.roundNum || null,
         picks,
       })
+=======
+    
+    setSubmitting(true)
+    
+    try {
+      // Create a new parlay
+      const parlayName = `${selections[0].matchupType.toUpperCase()} Parlay - $${stake}`
+      const { parlay, error } = await createParlay(parlayName)
+      
+      if (error || !parlay) {
+        throw new Error(error || "Failed to create parlay")
+      }
+      
+      // Add each selection to the parlay
+      for (const selection of selections) {
+        await addParlayPick({
+          parlay_id: parlay.id,
+          picked_player_dg_id: Number(selection.id) || 0,
+          picked_player_name: selection.player,
+          matchup_id: selection.matchupId,
+          event_name: selection.eventName,
+          round_num: selection.roundNum || 2
+        })
+      }
+      
+      // Show success message
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
       toast({
         title: "Parlay Submitted",
         description: `Your parlay has been saved with ${selections.length} selections.`,
       })
+<<<<<<< HEAD
       router.push('/parlays')
+=======
+      
+      // Redirect to the parlays page
+      router.push('/parlays')
+      
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
     } catch (err) {
       console.error("Error submitting parlay:", err)
       toast({
@@ -105,7 +171,14 @@ export default function ParlaySummary({ selections, userId = '00000000-0000-0000
     }
     
     // Convert American odds to decimal
+<<<<<<< HEAD
     const decimalOdds = selections.map(selection => toDecimalOdds(Number(selection.odds)))
+=======
+    const decimalOdds = selections.map(selection => {
+      const odds = Number(selection.odds)
+      return odds > 0 ? (odds / 100) + 1 : (100 / Math.abs(odds)) + 1
+    })
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
     
     // Multiply to get total odds
     const totalDecimal = decimalOdds.reduce((acc, curr) => acc * curr, 1)
@@ -133,7 +206,11 @@ export default function ParlaySummary({ selections, userId = '00000000-0000-0000
             <div className="text-sm">
               {selections.map((s, i) => (
                 <div key={s.id} className="py-1">
+<<<<<<< HEAD
                   {s.player} <span className="float-right text-primary">{formatAmericanOdds(s.odds)}</span>
+=======
+                  {s.player} <span className="float-right text-primary">{s.odds > 0 ? `+${s.odds}` : s.odds}</span>
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
                 </div>
               ))}
               {selections.length === 0 && <div className="text-gray-400">No selections yet</div>}

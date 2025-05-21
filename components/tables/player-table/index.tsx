@@ -66,7 +66,34 @@ export default function PlayerTable({
     dataView,
     dataSource,
     roundFilter,
+<<<<<<< HEAD
     eventOptions
+=======
+    selectedEventId, // pass to hook
+    eventOptions     // pass eventOptions
+  })
+
+  const columns = useColumns({ dataView, getHeatmapColor })
+
+  const table = useReactTable({
+    data: displayPlayers,
+    columns,
+    initialState: {
+      get sorting() {
+        if (dataView === 'tournament') {
+          return [{ id: 'total', desc: false }]
+        } else {
+          return [{ id: 'sg_total', desc: true }]
+        }
+      }
+    },
+    state: {
+      sorting,
+    },
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
   })
   console.log('usePlayerTableQuery', { seasonSkills, liveStats, pgaTourStats });
 
@@ -168,6 +195,10 @@ export default function PlayerTable({
                   <select
                     value={selectedEventId ?? ''}
                     onChange={e => {
+<<<<<<< HEAD
+=======
+                      // When changing event, clear cache of live stats
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
                       if (typeof window !== 'undefined') {
                         try {
                           localStorage.removeItem('gpp_live_stats_cache_v1');
@@ -242,6 +273,7 @@ export default function PlayerTable({
           ) : (
             <div className="rounded-lg overflow-hidden border border-gray-800">
               {/* Super simple fixed-width table */}
+<<<<<<< HEAD
               {dataView === 'season' ? (
                 <Table 
                   style={{ 
@@ -270,6 +302,78 @@ export default function PlayerTable({
                         {headerGroup.headers.map((header) => (
                           <TableHead 
                             key={header.id}
+=======
+              <Table 
+                style={{ 
+                  borderCollapse: 'collapse', 
+                  borderSpacing: 0,
+                  tableLayout: 'fixed',
+                  width: '100%'
+                }}
+                className="border-collapse"
+              >
+                {/* Define column widths explicitly */}
+                <colgroup>
+                  {dataView === "season" ? 
+                    <>
+                      <col style={{ width: "170px" }} />
+                      <col style={{ width: "75px" }} />
+                      <col style={{ width: "75px" }} />
+                      <col style={{ width: "75px" }} />
+                      <col style={{ width: "75px" }} />
+                      <col style={{ width: "75px" }} />
+                      <col style={{ width: "75px" }} />
+                      <col style={{ width: "75px" }} />
+                      <col style={{ width: "75px" }} />
+                    </> : 
+                    <>
+                      <col style={{ width: "50px" }} />
+                      <col style={{ width: "170px" }} />
+                      <col style={{ width: "60px" }} />
+                      <col style={{ width: "50px" }} />
+                      <col style={{ width: "50px" }} />
+                      <col style={{ width: "75px" }} />
+                      <col style={{ width: "75px" }} />
+                      <col style={{ width: "75px" }} />
+                      <col style={{ width: "75px" }} />
+                      <col style={{ width: "75px" }} />
+                      <col style={{ width: "75px" }} />
+                    </>
+                  }
+                </colgroup>
+                <TableHeader className="bg-[#1e1e23]">
+                  {table.getHeaderGroups().map((headerGroup) => (
+                    <TableRow key={headerGroup.id}>
+                      {headerGroup.headers.map((header) => (
+                        <TableHead 
+                          key={header.id}
+                          style={{ 
+                            padding: "4px 8px",
+                            ...(header.column.columnDef.meta as any)?.customStyles?.header
+                          }}
+                          className={`text-white whitespace-nowrap text-xs sm:text-sm ${(header.column.columnDef.meta as any)?.headerClassName}`}
+                        >
+                          {header.isPlaceholder
+                            ? null
+                            : flexRender(header.column.columnDef.header, header.getContext())}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableHeader>
+                <TableBody>
+                  {table.getRowModel().rows?.length ? (
+                    table.getRowModel().rows.map((row) => (
+                      <TableRow
+                        key={`${row.original.dg_id || row.original.pga_player_id || row.id}-${row.index}`}
+                        data-state={row.getIsSelected() && "selected"}
+                        style={{ border: 'none', margin: 0, padding: 0 }}
+                        className="hover:bg-[#2a2a35] border-0"
+                      >
+                        {row.getVisibleCells().map((cell) => (
+                          <TableCell 
+                            key={cell.id}
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
                             style={{ 
                               padding: "4px 8px",
                               ...(header.column.columnDef.meta && (header.column.columnDef.meta as any).customStyles && (header.column.columnDef.meta as any).customStyles.header

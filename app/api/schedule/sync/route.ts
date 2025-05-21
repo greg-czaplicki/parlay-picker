@@ -57,19 +57,31 @@ function calculateEndDate(startDateStr: string): string {
 
 // Helper to fetch schedule data from a specific tour
 async function fetchTourSchedule(url: string, tourCode: string): Promise<SupabaseTournament[]> {
+<<<<<<< HEAD
   logger.info(`Fetching schedule for ${tourCode} tour...`);
+=======
+  console.log(`Fetching schedule for ${tourCode} tour...`);
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
   
   try {
     const response = await fetch(url, { cache: 'no-store' });
     
     if (!response.ok) {
       const errorText = await response.text();
+<<<<<<< HEAD
       logger.error(`Failed to fetch ${tourCode} schedule:`, response.status, errorText);
+=======
+      console.error(`Failed to fetch ${tourCode} schedule:`, response.status, errorText);
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
       return [];
     }
     
     const data: DataGolfScheduleResponse = await response.json();
+<<<<<<< HEAD
     logger.info(`Successfully fetched schedule for ${data.tour} tour, season ${data.current_season}.`);
+=======
+    console.log(`Successfully fetched schedule for ${data.tour} tour, season ${data.current_season}.`);
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
     
     // Generate a base event ID for tours that might have non-numeric IDs
     // Use 10000 for Euro tour events with non-numeric IDs to avoid conflicts
@@ -80,7 +92,11 @@ async function fetchTourSchedule(url: string, tourCode: string): Promise<Supabas
       .filter(event => {
         // Filter out events with invalid data
         if (!event.event_name || !event.course || !event.start_date) {
+<<<<<<< HEAD
           logger.info(`Skipping event with missing data: ${JSON.stringify(event)}`);
+=======
+          console.log(`Skipping event with missing data: ${JSON.stringify(event)}`);
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
           return false;
         }
         return true;
@@ -94,7 +110,11 @@ async function fetchTourSchedule(url: string, tourCode: string): Promise<Supabas
           // Generate a unique ID for this non-numeric ID event
           nonNumericIdCounter++;
           eventId = baseEventId + nonNumericIdCounter;
+<<<<<<< HEAD
           logger.info(`Replacing non-numeric event_id "${event.event_id}" with generated ID: ${eventId}`);
+=======
+          console.log(`Replacing non-numeric event_id "${event.event_id}" with generated ID: ${eventId}`);
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
         }
         
         return {
@@ -107,6 +127,7 @@ async function fetchTourSchedule(url: string, tourCode: string): Promise<Supabas
         };
       });
     
+<<<<<<< HEAD
     logger.info(`Processed ${tournaments.length} tournaments for ${tourCode} tour.`);
     return tournaments;
   } catch (error) {
@@ -114,6 +135,36 @@ async function fetchTourSchedule(url: string, tourCode: string): Promise<Supabas
     return [];
   }
 }
+=======
+    console.log(`Processed ${tournaments.length} tournaments for ${tourCode} tour.`);
+    return tournaments;
+  } catch (error) {
+    console.error(`Error fetching ${tourCode} schedule:`, error);
+    return [];
+  }
+}
+
+export async function GET() {
+  console.log("Fetching tournament schedules from Data Golf...");
+
+  try {
+    // Fetch all tour schedules in parallel
+    const [pgaTournaments, euroTournaments] = await Promise.all([
+      fetchTourSchedule(DATA_GOLF_PGA_SCHEDULE_URL, 'PGA'),
+      fetchTourSchedule(DATA_GOLF_EURO_SCHEDULE_URL, 'EURO')
+    ]);
+    
+    // Combine all tournaments
+    const allTournaments = [...pgaTournaments, ...euroTournaments];
+    
+    console.log(`Combined ${allTournaments.length} tournaments from all tours.`);
+    
+    // Track tour-specific counts for reporting
+    const tourCounts = {
+      pga: pgaTournaments.length,
+      euro: euroTournaments.length
+    };
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
 
 export async function GET(request: Request) {
   logger.info('Received schedule/sync request', { url: request.url });
@@ -146,9 +197,15 @@ export async function GET(request: Request) {
         throw new Error(`Supabase tournaments upsert failed: ${upsertError.message}`);
       }
       processedCount = allTournaments.length;
+<<<<<<< HEAD
       logger.info(`Successfully upserted ${processedCount} tournaments into Supabase.`);
     } else {
       logger.info("No tournaments found in the fetched schedules to upsert.");
+=======
+      console.log(`Successfully upserted ${processedCount} tournaments into Supabase.`);
+    } else {
+      console.log("No tournaments found in the fetched schedules to upsert.");
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
     }
     // Try to get a source timestamp if available (use the latest start_date as a proxy)
     let sourceTimestamp: string | undefined = undefined;
@@ -157,8 +214,15 @@ export async function GET(request: Request) {
       const latest = allTournaments.reduce((a, b) => a.start_date > b.start_date ? a : b);
       sourceTimestamp = new Date(latest.start_date + 'T00:00:00Z').toISOString();
     }
+<<<<<<< HEAD
     logger.info('Returning schedule/sync response');
     return jsonSuccess({
+=======
+
+    return NextResponse.json({
+      success: true,
+      message: `Synced schedules for all tours. ${processedCount} tournaments processed.`,
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
       processedCount,
       tourCounts,
       sourceTimestamp,

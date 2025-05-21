@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Trash2, Plus, Calculator } from "lucide-react"
+<<<<<<< HEAD
 import { useParlayContext } from "@/context/ParlayContext"
 import ParlaySummary from "./parlay-summary"
 import { Button } from "@/components/ui/button"
@@ -36,6 +37,65 @@ export default function ParlayBuilder({ matchupType, roundNum }: { matchupType: 
     // If already American odds, just show as is
     return odds > 0 ? `+${odds}` : odds.toString();
   };
+=======
+import { useParlay } from "@/context/ParlayContext"
+import ParlaySummary from "./parlay-summary"
+
+export default function ParlayBuilder({ matchupType }: { matchupType: string }) {
+  const {
+    selections,
+    addSelection,
+    removeSelection,
+    updateSelection,
+    calculateParlay,
+    totalOdds,
+    stake: contextStake,
+    setStake,
+    potentialPayout,
+    avgValueRating,
+    avgConfidenceScore,
+    parlayConfidence,
+    confidencePercent
+  } = useParlay()
+  
+  // Local state for stake input
+  const [localStake, setLocalStake] = useState(contextStake)
+  
+  // Update local stake when context stake changes
+  useEffect(() => {
+    setLocalStake(contextStake)
+  }, [contextStake])
+
+  // Handle adding a new selection - prompt for player name and odds
+  const handleAddSelection = () => {
+    const playerName = prompt("Enter player name:")
+    if (!playerName) return
+    
+    const oddsStr = prompt("Enter odds (e.g. +250 or -110):")
+    if (!oddsStr) return
+    
+    // Parse odds
+    let odds = 0
+    if (oddsStr.startsWith('+')) {
+      odds = parseInt(oddsStr.substring(1))
+    } else if (oddsStr.startsWith('-')) {
+      odds = parseInt(oddsStr)
+    } else {
+      odds = parseInt(oddsStr)
+    }
+    
+    // Add the player
+    addSelection({
+      id: Date.now().toString(),
+      matchupType: matchupType,
+      player: playerName,
+      odds: odds,
+      valueRating: 7.5,
+      confidenceScore: 75,
+    })
+  }
+
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -76,7 +136,11 @@ export default function ParlayBuilder({ matchupType, roundNum }: { matchupType: 
                   <div>
                     <label className="text-sm text-gray-400 mb-1 block">Odds</label>
                     <div className="bg-[#2a2a35] px-3 py-2 rounded text-sm">
+<<<<<<< HEAD
                       {formatAmericanOdds(selection.odds)}
+=======
+                      {selection.odds > 0 ? `+${selection.odds}` : selection.odds}
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
                     </div>
                   </div>
                 </div>

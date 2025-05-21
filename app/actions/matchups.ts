@@ -350,17 +350,29 @@ export type PlayerMatchupData = LatestThreeBallMatchupRow | null;
  * @param playerName - The name of the player to search for (ideally "Firstname Lastname").
  * @returns The matchup row if found, otherwise null. Includes an error string if applicable.
  */
+<<<<<<< HEAD
 export async function findPlayerMatchup(playerName: string): Promise<{ matchup: any & { opponents?: string[] }; error?: string }> {
     logger.info(`[findPlayerMatchup] Searching for player: '${playerName}'`);
     let patterns = [];
     const originalPattern = `%${playerName.trim()}%`;
     patterns.push(originalPattern);
+=======
+export async function findPlayerMatchup(playerName: string): Promise<{ matchup: PlayerMatchupData; error?: string }> {
+    console.log(`[findPlayerMatchup] Searching for player: '${playerName}'`);
+    
+    let patterns = [];
+    const originalPattern = `%${playerName.trim()}%`;
+    patterns.push(originalPattern);
+    
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
     // Try multiple name formats for better matching
     const nameParts = playerName.trim().split(/\s+/);
     if (nameParts.length >= 2) {
+        // Case 1: Last, First format
         const lastName = nameParts.pop();
         const firstName = nameParts.join(' ');
         patterns.push(`%${lastName}, ${firstName}%`);
+<<<<<<< HEAD
         patterns.push(`%${firstName} ${lastName}%`);
         patterns.push(`%${lastName} ${firstName}%`);
     }
@@ -388,9 +400,123 @@ export async function findPlayerMatchup(playerName: string): Promise<{ matchup: 
         }
         if (!matchup && matchupError) {
             logger.error(`[findPlayerMatchup] Supabase error finding latest matchup:`, matchupError);
+=======
+        
+        // Case 2: First Last format (reverse of above)
+        patterns.push(`%${firstName} ${lastName}%`);
+        
+        // Case 3: Last First (no comma)
+        patterns.push(`%${lastName} ${firstName}%`);
+    }
+    
+    console.log(`[findPlayerMatchup] Search patterns: ${patterns.join(', ')}`);
+    
+    // Build the OR query for all patterns
+    const orFilterString = patterns
+        .map(pattern => 
+            `p1_player_name.ilike."${pattern}",p2_player_name.ilike."${pattern}",p3_player_name.ilike."${pattern}"`)
+        .join(',');
+
+    const supabase = createServerClient();
+    try {
+        // First, try to find matchup in round 2 (current round)
+        // Try to find a round 2 matchup first
+        const { data: round2Matchup, error: round2MatchupError } = await supabase
+            .from('latest_three_ball_matchups')
+            .select('*')
+            .or(orFilterString)
+            .eq('round_num', 2) // Specifically look for Round 2 matchups
+            .order('data_golf_update_time', { ascending: false })
+            .limit(1)
+            .maybeSingle<LatestThreeBallMatchupRow>();
+            
+        // If we found a round 2 matchup, return it
+        if (round2Matchup && !round2MatchupError) {
+            console.log(`[findPlayerMatchup] Found round 2 matchup for ${playerName}`);
+            return { matchup: round2Matchup };
+        }
+        
+        // If not round 2, try looking for the player in any 3-ball matchup
+        console.log(`[findPlayerMatchup] No round 2 matchup found, searching any round for ${playerName}`);
+        const { data: matchup, error: matchupError } = await supabase
+            .from('latest_three_ball_matchups')
+            .select('*')
+            .or(orFilterString)
+            .order('data_golf_update_time', { ascending: false })
+            .limit(1)
+            .maybeSingle<LatestThreeBallMatchupRow>();
+        
+        // Try the historical three ball matchups table if latest table is empty
+        if (!matchup && !matchupError) {
+            console.log(`[findPlayerMatchup] No matchup in latest_three_ball_matchups, trying three_ball_matchups for ${playerName}`);
+            const { data: historicalMatchup, error: historicalError } = await supabase
+                .from('three_ball_matchups')
+                .select('*')
+                .or(orFilterString)
+                .order('data_golf_update_time', { ascending: false })
+                .limit(1)
+                .maybeSingle<LatestThreeBallMatchupRow>();
+                
+            if (historicalMatchup && !historicalError) {
+                console.log(`[findPlayerMatchup] Found historical 3-ball matchup for ${playerName}`);
+                return { matchup: historicalMatchup };
+            }
+        }
+
+        // If that still doesn't work, try 2-ball matchups
+        if (!matchup && !matchupError) {
+            console.log(`[findPlayerMatchup] No 3-ball matchup found, trying 2-ball for ${playerName}`);
+            const { data: twoBallMatchup, error: twoBallError } = await supabase
+                .from('latest_two_ball_matchups')
+                .select('*')
+                .or(`p1_player_name.ilike."${originalPattern}",p2_player_name.ilike."${originalPattern}"`)
+                .order('data_golf_update_time', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+                
+            if (twoBallMatchup && !twoBallError) {
+                // Convert 2ball to 3ball format for compatibility
+                const converted: LatestThreeBallMatchupRow = {
+                    ...twoBallMatchup,
+                    p3_player_name: null,
+                    p3_dg_id: null,
+                    fanduel_p3_odds: null,
+                    draftkings_p3_odds: null
+                };
+                console.log(`[findPlayerMatchup] Found 2-ball matchup for ${playerName}`);
+                return { matchup: converted };
+            }
+            
+            // Try the historical two ball matchups as a last resort
+            const { data: historicalTwoBall, error: historicalTwoBallError } = await supabase
+                .from('two_ball_matchups')
+                .select('*')
+                .or(`p1_player_name.ilike."${originalPattern}",p2_player_name.ilike."${originalPattern}"`)
+                .order('data_golf_update_time', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+                
+            if (historicalTwoBall && !historicalTwoBallError) {
+                // Convert 2ball to 3ball format for compatibility
+                const converted: LatestThreeBallMatchupRow = {
+                    ...historicalTwoBall,
+                    p3_player_name: null,
+                    p3_dg_id: null,
+                    fanduel_p3_odds: null,
+                    draftkings_p3_odds: null
+                };
+                console.log(`[findPlayerMatchup] Found historical 2-ball matchup for ${playerName}`);
+                return { matchup: converted };
+            }
+        }
+
+        if (matchupError) {
+            console.error(`[findPlayerMatchup] Supabase error finding latest matchup:`, matchupError);
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
             throw new Error(`Database error finding matchup: ${matchupError.message}`);
         }
         if (!matchup) {
+<<<<<<< HEAD
             logger.info(`[findPlayerMatchup] No 3-ball or 2-ball matchup found for ${playerName}`);
             return { matchup: null, error: "No matchup found for the given player" };
         } else {
@@ -400,6 +526,14 @@ export async function findPlayerMatchup(playerName: string): Promise<{ matchup: 
         const allNames = [matchup.player1_name, matchup.player2_name, matchup.player3_name].filter(Boolean);
         const opponents = allNames.filter((n: string) => n && n.toLowerCase() !== playerName.toLowerCase());
         return { matchup: { ...matchup, opponents }, error: undefined };
+=======
+            console.log(`[findPlayerMatchup] No 3-ball or 2-ball matchup found for ${playerName}`);
+            return { matchup: null };
+        } else {
+            console.log(`[findPlayerMatchup] Found matchup for ${playerName}`);
+        }
+        return { matchup };
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
     } catch (error) {
         logger.error(`[findPlayerMatchup] Error during execution for ${playerName}:`, error);
         return { matchup: null, error: error instanceof Error ? error.message : "Unknown error finding player matchup" };
@@ -425,6 +559,7 @@ export async function getLiveStatsForPlayers(
     const supabase = createServerClient();
 
     try {
+<<<<<<< HEAD
         if (roundNum) {
             // Try to get stats for the requested round
             const { data: roundStats, error: roundError } = await supabase
@@ -443,8 +578,19 @@ export async function getLiveStatsForPlayers(
             .select('*')
             .in('dg_id', playerIds)
             .eq('round_num', '2')
+=======
+        // First check the event name from the recent Truist Championship data
+        // Try to get specifically round 2 stats for the current tournament
+        const { data: round2Stats, error: round2Error } = await supabase
+            .from('live_tournament_stats')
+            .select('*')
+            .in('dg_id', playerIds)
+            .eq('round_num', '2') // Explicitly fetch Round 2 stats
+            .eq('event_name', 'Truist Championship') // Focus on current tournament
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
             .returns<LiveTournamentStat[]>();
         if (round2Stats && round2Stats.length > 0) {
+<<<<<<< HEAD
             return { stats: round2Stats };
         }
         const { data: round1Stats } = await supabase
@@ -457,11 +603,36 @@ export async function getLiveStatsForPlayers(
             return { stats: round1Stats };
         }
         // If we don't find stats for the current round, get any stats for these players
+=======
+            console.log(`Found ${round2Stats.length} Round 2 stats records for Truist Championship`);
+            return { stats: round2Stats };
+        }
+        
+        // Try to get Round 1 stats for Truist Championship
+        const { data: round1Stats, error: round1Error } = await supabase
+            .from('live_tournament_stats')
+            .select('*')
+            .in('dg_id', playerIds)
+            .eq('round_num', '1') // Try Round 1 stats
+            .eq('event_name', 'Truist Championship') // Focus on current tournament
+            .returns<LiveTournamentStat[]>();
+            
+        if (round1Stats && round1Stats.length > 0) {
+            console.log(`Found ${round1Stats.length} Round 1 stats records for Truist Championship`);
+            return { stats: round1Stats };
+        }
+            
+        // If we don't find stats for the current tournament, get any stats for these players
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
         const { data, error } = await supabase
             .from('live_tournament_stats')
             .select('*')
             .in('dg_id', playerIds)
+<<<<<<< HEAD
             .order('data_golf_updated_at', { ascending: false })
+=======
+            .order('data_golf_updated_at', { ascending: false }) // Get most recent stats first
+>>>>>>> c659d1db1816cec61d8fc390432d423803ff4e32
             .returns<LiveTournamentStat[]>();
         if (error) {
             logger.error(`[getLiveStatsForPlayers] Supabase error fetching live stats for IDs [${playerIds.join(', ')}]:`, error);
