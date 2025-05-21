@@ -93,18 +93,16 @@ interface LiveTournamentStat {
 // Combined type for both matchup types
 type MatchupRow = SupabaseMatchupRow | SupabaseMatchupRow2Ball;
 
-// Helper type guard for SupabaseMatchupRow
+// Helper type guard for SupabaseMatchupRow (3ball)
 function isSupabaseMatchupRow(matchup: MatchupRow): matchup is SupabaseMatchupRow {
-  return 'player3_dg_id' in matchup;
+  // 3ball matchups have type='3ball' and should handle as 3ball
+  return (matchup as any).type === '3ball';
 }
 
 // Helper type guard for SupabaseMatchupRow2Ball
 function isSupabaseMatchupRow2Ball(matchup: MatchupRow): matchup is SupabaseMatchupRow2Ball {
-  return (
-    !('player3_dg_id' in matchup) &&
-    typeof (matchup as SupabaseMatchupRow2Ball).player1_dg_id === 'number' &&
-    typeof (matchup as SupabaseMatchupRow2Ball).player2_dg_id === 'number'
-  );
+  // Simply check if the matchup has type '2ball'
+  return (matchup as any).type === '2ball';
 }
 
 interface MatchupsTableProps {
@@ -122,6 +120,14 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
 
   // Use React Query for matchups
   const { data: matchups, isLoading, isError, error, lastUpdateTime } = useMatchupsQuery(eventId, matchupType, roundNum);
+  
+  // Debug matchups data to diagnose event filtering issues
+  console.log('MatchupsTable - props:', { eventId, matchupType, roundNum });
+  console.log('MatchupsTable - matchups received:', matchups?.length, 'matchupType:', matchupType);
+  if (matchups?.length) {
+    console.log('First matchup event_id:', matchups[0].event_id, 'event_name:', matchups[0].event_name);
+  }
+  
 
   // Use type guards before accessing fields
   const playerIds = (matchups ?? []).flatMap(m => {
@@ -158,9 +164,17 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
     else return "-";
   };
 
-  const formatOdds = (odds: number | null): string => {
-    if (odds === null || odds === undefined || odds <= 1) return "-";
-    return decimalToAmerican(odds);
+  const formatOdds = (odds: number | null, fallbackOdds: number | null = null): string => {
+    // First try the primary odds source (typically FanDuel)
+    if (odds !== null && odds !== undefined && odds > 1) {
+      return decimalToAmerican(odds);
+    }
+    // If primary odds aren't available, try the fallback (typically DataGolf)
+    if (fallbackOdds !== null && fallbackOdds !== undefined && fallbackOdds > 1) {
+      return decimalToAmerican(fallbackOdds);
+    }
+    // If no valid odds are available
+    return "-";
   };
 
   const formatPlayerName = (name: string): string => {
@@ -225,27 +239,63 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
     );
   }
 
-  // This function is redundant since we already have isSupabaseMatchupRow
-  // Using the existing type guard throughout the code instead
 
-  // Filter matchups to only those with valid FanDuel odds for all players
+  // Filter matchups by type, event_id, and odds availability
   const filteredMatchups = (matchups ?? []).filter(matchup => {
-    if (isSupabaseMatchupRow(matchup)) {
-      return (
-        Number((matchup as SupabaseMatchupRow).odds1 ?? 0) > 1 &&
-        Number((matchup as SupabaseMatchupRow).odds2 ?? 0) > 1 &&
-        Number((matchup as SupabaseMatchupRow).odds3 ?? 0) > 1
-      );
-    } else if (isSupabaseMatchupRow2Ball(matchup)) {
-      const m2 = matchup as SupabaseMatchupRow2Ball;
-      return (
-        Number(m2.odds1 ?? 0) > 1 &&
-        Number(m2.odds2 ?? 0) > 1
-      );
+    // First, make sure we're only looking at matchups for the selected event
+    const isCorrectEvent = String(matchup.event_id) === String(eventId);
+    if (!isCorrectEvent) {
+      return false;
     }
-    return false;
-  });
     
+    // Then, ensure we're only looking at matchups of the requested type
+    const isCorrectType = 
+      (matchupType === "3ball" && (matchup as any).type === "3ball") || 
+      (matchupType === "2ball" && (matchup as any).type === "2ball");
+    
+    if (!isCorrectType) {
+      return false;
+    }
+    
+    // Now check if there are valid odds for the players
+    if ((matchup as any).type === "3ball") {
+      // For 3ball matchups, check if all three players have valid odds
+      const m3 = matchup as any;
+      const p1HasOdds = Number(m3.odds1 ?? 0) > 1 || Number(m3.dg_odds1 ?? 0) > 1;
+      const p2HasOdds = Number(m3.odds2 ?? 0) > 1 || Number(m3.dg_odds2 ?? 0) > 1;
+      const p3HasOdds = Number(m3.odds3 ?? 0) > 1 || Number(m3.dg_odds3 ?? 0) > 1;
+      
+      // For 3ball matchups, we need odds for all three players
+      return p1HasOdds && p2HasOdds && p3HasOdds;
+    } else {
+      // For 2ball matchups, check if both players have valid odds from any source
+      const m2 = matchup as any;
+      const p1HasOdds = Number(m2.odds1 ?? 0) > 1 || Number(m2.dg_odds1 ?? 0) > 1;
+      const p2HasOdds = Number(m2.odds2 ?? 0) > 1 || Number(m2.dg_odds2 ?? 0) > 1;
+      
+      // We only need odds for the two players in a 2ball matchup
+      return p1HasOdds && p2HasOdds;
+    }
+  });
+  
+  // Debug the event filtering
+  console.log(`Filtered matchups for event_id ${eventId} and type ${matchupType}: ${filteredMatchups?.length}`);
+  if (filteredMatchups?.length) {
+    console.log(`First filtered matchup: event_id=${filteredMatchups[0].event_id}, type=${filteredMatchups[0].type}, name=${filteredMatchups[0].event_name}`);
+  } else if (matchups?.length) {
+    // If we have no filtered matchups but we do have matchups, log details about the event_ids we received
+    const eventIds = [...new Set((matchups ?? []).map(m => m.event_id))];
+    console.log(`No matchups after filtering. Available event_ids: ${eventIds.join(', ')}`);
+    
+    const typeMatchups = (matchups ?? []).filter(m => (m as any).type === matchupType);
+    console.log(`Matchups of type ${matchupType}: ${typeMatchups.length}`);
+    
+    if (typeMatchups.length > 0) {
+      const typeEventIds = [...new Set(typeMatchups.map(m => m.event_id))];
+      console.log(`Event IDs for ${matchupType} matchups: ${typeEventIds.join(', ')}`);
+    }
+  }
+  
   return (
     <TooltipProvider>
       <Card className="glass-card">
@@ -676,17 +726,17 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
                           </TableCell>
                           
                           <TableCell className="text-center">
-                            {(sortedPlayers.filter((player: typeof sortedPlayers[number]) => player.odds && player.odds > 1) as typeof sortedPlayers).map((player: typeof sortedPlayers[number], idx: number) => {
-                              const formatted = formatOdds(player.odds ?? 0);
+                            {sortedPlayers.map((player: typeof sortedPlayers[number], idx: number) => {
+                              const formatted = formatOdds(player.odds ?? null, player.dgOdds ?? null);
                               return (
                                 <div key={`odds-${idx}`} className={`py-1 h-8 flex items-center justify-center ${player.hasGap ? "font-bold text-green-400" : ""}`}>{formatted}</div>
                               );
                             })}
                           </TableCell>
                           <TableCell className="text-center">
-                            {(sortedPlayers.filter((player: typeof sortedPlayers[number]) => player.dgOdds && player.dgOdds > 1) as typeof sortedPlayers).map((player: typeof sortedPlayers[number], idx: number) => (
+                            {sortedPlayers.map((player: typeof sortedPlayers[number], idx: number) => (
                               <div key={`dg-odds-${idx}`} className={`py-1 h-8 flex items-center justify-center ${player.hasDGGap ? "font-bold text-green-400" : ""}`}>
-                                {formatOdds(player.dgOdds ?? 0)}
+                                {formatOdds(player.dgOdds ?? null)}
                               </div>
                             ))}
                           </TableCell>
@@ -910,16 +960,19 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
                           </TableCell>
                           
                           <TableCell className="text-center">
-                            {(sortedPlayers.filter((player: typeof sortedPlayers[number]) => player.odds && player.odds > 1) as typeof sortedPlayers).map((player: typeof sortedPlayers[number], idx: number) => (
-                              <div key={`odds-${idx}`} className={`py-1 h-8 flex items-center justify-center ${player.hasGap ? "font-bold text-green-400" : ""}`}>
-                                {formatOdds(player.odds ?? 0)}
-                              </div>
-                            ))}
+                            {sortedPlayers.map((player: typeof sortedPlayers[number], idx: number) => {
+                              const formatted = formatOdds(player.odds ?? null, player.dkOdds ?? null);
+                              return (
+                                <div key={`odds-${idx}`} className={`py-1 h-8 flex items-center justify-center ${player.hasGap ? "font-bold text-green-400" : ""}`}>
+                                  {formatted}
+                                </div>
+                              );
+                            })}
                           </TableCell>
                           <TableCell className="text-center">
-                            {(sortedPlayers.filter((player: typeof sortedPlayers[number]) => player.dkOdds && player.dkOdds > 1) as typeof sortedPlayers).map((player: typeof sortedPlayers[number], idx: number) => (
+                            {sortedPlayers.map((player: typeof sortedPlayers[number], idx: number) => (
                               <div key={`dk-odds-${idx}`} className={`py-1 h-8 flex items-center justify-center ${player.hasDKGap ? "font-bold text-green-400" : ""}`}>
-                                {formatOdds(player.dkOdds ?? 0)}
+                                {formatOdds(player.dkOdds ?? null)}
                               </div>
                             ))}
                           </TableCell>

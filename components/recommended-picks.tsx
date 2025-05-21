@@ -246,4 +246,78 @@ export default function RecommendedPicks({
     })
     setAddedPlayers(newAddedPlayers)
   }, [filteredRecommendations, selections])
+
+  // --- Restored return block, updated for UUID/DG_ID ---
+  return (
+    <Card className="glass-card">
+      <CardContent className="p-6">
+        <h2 className="text-xl font-bold mb-4">Top {limit} Recommended Picks</h2>
+
+        {isLoading && (
+          <div className="space-y-4">
+            {[...Array(limit)].map((_, i) => (
+              <Skeleton key={i} className="h-[120px] w-full rounded-lg bg-[#1e1e23]" />
+            ))}
+          </div>
+        )}
+
+        {isError && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{error?.message || 'An unknown error occurred'} </AlertDescription>
+          </Alert>
+        )}
+
+        {!isLoading && !isError && filteredAndMatchedRecommendations.length === 0 && (
+          <p className="text-gray-400 text-center py-4">No recommendations available based on current data and filters.</p>
+        )}
+
+        {!isLoading && !isError && filteredAndMatchedRecommendations.length > 0 && (
+          <div className="space-y-3">
+            {filteredAndMatchedRecommendations.map((player, index) => {
+              const { inParlay, selectionId } = isPlayerInParlay(String(player.dg_id), player.name)
+              return (
+                <div key={player.dg_id} className="p-4 bg-[#1e1e23] rounded-lg flex flex-col gap-2">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <div className="font-medium text-lg">{player.name}</div>
+                      <div className="text-sm text-gray-400">Matchup: {player.matchupId}</div>
+                    </div>
+                    <div className="text-right flex flex-col items-end">
+                      <span className={`text-lg font-semibold px-2 py-1 rounded mb-1 ${player.valueRating >= 8 ? "bg-green-900/30 text-green-400" : player.valueRating >= 7 ? "bg-yellow-900/30 text-yellow-400" : "bg-red-900/30 text-red-400"}`}>{player.valueRating?.toFixed(1)}</span>
+                      <span className="text-base font-medium text-green-400">{formatOdds(player.odds)}</span>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant={inParlay ? "secondary" : "outline"}
+                    className="w-full mt-2 bg-[#2a2a35] border-none hover:bg-[#34343f] text-white"
+                    onClick={() => {
+                      if (inParlay && selectionId) {
+                        removeFromParlay(selectionId, String(player.dg_id), player.name)
+                      } else {
+                        addToParlay({
+                          id: `${player.matchupId}-${player.dg_id}`,
+                          player: player.name,
+                          matchupId: player.matchupId,
+                          odds: player.odds,
+                          valueRating: player.valueRating,
+                          confidenceScore: player.confidenceScore ?? 75,
+                          matchupType: matchupType,
+                          group: player.group ?? "",
+                        }, String(player.dg_id))
+                      }
+                    }}
+                  >
+                    {inParlay ? 'Remove from Parlay' : (<><Plus size={16} className="mr-1" /> Add to Parlay</>)}
+                  </Button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
 }
