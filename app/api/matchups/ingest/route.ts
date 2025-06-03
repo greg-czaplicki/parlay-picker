@@ -4,9 +4,18 @@ import { createSupabaseClient } from '@/lib/api-utils'
 const DATA_GOLF_API_KEY = process.env.DATAGOLF_API_KEY
 const INGEST_SECRET = process.env.INGEST_SECRET // Set this in your env for security
 
-const DG_3BALL_URL = `https://feeds.datagolf.com/betting-tools/matchups?market=3_balls&odds_format=decimal&file_format=json&key=${DATA_GOLF_API_KEY}`
-const DG_2BALL_URL = `https://feeds.datagolf.com/betting-tools/matchups?market=round_matchups&odds_format=decimal&file_format=json&key=${DATA_GOLF_API_KEY}`
-const DG_MODEL_URL = `https://feeds.datagolf.com/betting-tools/matchups-all-pairings?tour=pga&odds_format=decimal&file_format=json&key=${DATA_GOLF_API_KEY}`
+// Updated to support tour parameter
+function getDG3BallURL(tour: string = 'pga') {
+  return `https://feeds.datagolf.com/betting-tools/matchups?tour=${tour}&market=3_balls&odds_format=decimal&file_format=json&key=${DATA_GOLF_API_KEY}`
+}
+
+function getDG2BallURL(tour: string = 'pga') {
+  return `https://feeds.datagolf.com/betting-tools/matchups?tour=${tour}&market=round_matchups&odds_format=decimal&file_format=json&key=${DATA_GOLF_API_KEY}`
+}
+
+function getDGModelURL(tour: string = 'pga') {
+  return `https://feeds.datagolf.com/betting-tools/matchups-all-pairings?tour=${tour}&odds_format=decimal&file_format=json&key=${DATA_GOLF_API_KEY}`
+}
 
 async function fetchDG(url: string) {
   const res = await fetch(url, { cache: 'no-store' })
@@ -26,6 +35,20 @@ function findPairing(pairings: any[], playerIds: number[]) {
 }
 
 function transformMatchups(matchups: any[], pairings: any[], type: '2ball' | '3ball', event_id: number, round_num: number, created_at: string, dgIdToUuid: Record<number, string>) {
+  // Debug: Log the first few 2-ball matchups' odds structure
+  if (type === '2ball' && matchups.length > 0) {
+    console.log(`\n=== 2-BALL ODDS DEBUG (${type}) ===`);
+    matchups.slice(0, 3).forEach((m, i) => {
+      console.log(`\nMatchup ${i + 1}: ${m.p1_player_name} vs ${m.p2_player_name}`);
+      console.log('Raw odds object:', JSON.stringify(m.odds, null, 2));
+      console.log('FanDuel p1:', m.odds?.fanduel?.p1);
+      console.log('FanDuel p2:', m.odds?.fanduel?.p2);
+      console.log('DraftKings p1:', m.odds?.draftkings?.p1);
+      console.log('DraftKings p2:', m.odds?.draftkings?.p2);
+    });
+    console.log('=== END 2-BALL ODDS DEBUG ===\n');
+  }
+
   return matchups.map(m => {
     const playerIds = type === '3ball'
       ? [m.p1_dg_id, m.p2_dg_id, m.p3_dg_id]
@@ -64,13 +87,23 @@ export async function POST(req: NextRequest) {
   if (!auth || auth !== `Bearer ${INGEST_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  // Get tour parameter from query string (default to 'pga')
+  const { searchParams } = new URL(req.url)
+  const tour = searchParams.get('tour') || 'pga'
+
+  // Validate tour parameter
+  if (!['pga', 'opp', 'euro', 'alt'].includes(tour)) {
+    return NextResponse.json({ error: 'Invalid tour parameter. Must be one of: pga, opp, euro, alt' }, { status: 400 })
+  }
+
   const supabase = createSupabaseClient()
   try {
-    // Fetch from DataGolf (main + model odds)
+    // Fetch from DataGolf (main + model odds) for the specified tour
     const [dg3, dg2, dgModel] = await Promise.all([
-      fetchDG(DG_3BALL_URL),
-      fetchDG(DG_2BALL_URL),
-      fetchDG(DG_MODEL_URL),
+      fetchDG(getDG3BallURL(tour)),
+      fetchDG(getDG2BallURL(tour)),
+      fetchDG(getDGModelURL(tour)),
     ])
     // Dynamically map event_name to event_id
     const eventName = dg3.event_name;
@@ -150,8 +183,9 @@ export async function POST(req: NextRequest) {
     }
     // Debug info
     const sampleMain = matchups3[0]
-    // Collect a sample of odds for inspection
-    const oddsSamples = allMatchups.slice(0, 10).map(m => ({
+    // Collect a sample of odds for inspection - INCLUDE BOTH 3-BALL AND 2-BALL
+    const oddsSamples = allMatchups.slice(0, 15).map(m => ({
+      type: m.type, // Add type to see which are 2-ball vs 3-ball
       player1: m.player1_name,
       fanduel1: m.odds1,
       dg1: m.dg_odds1,
@@ -162,13 +196,21 @@ export async function POST(req: NextRequest) {
       fanduel3: m.odds3,
       dg3: m.dg_odds3,
     }));
+    
+    // Also add some raw 2-ball data for debugging
+    const raw2BallSample = dg2.match_list[0];
+    
     return NextResponse.json({
       inserted: allMatchups.length,
       three_ball: matchups3.length,
       two_ball: matchups2.length,
+      tour: tour,
       debug: {
         sampleMain,
         oddsSamples,
+        raw2BallSample, // Add raw 2-ball structure
+        tour: tour,
+        eventName: dg3.event_name,
       }
     })
   } catch (err: any) {

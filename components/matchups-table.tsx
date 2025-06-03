@@ -41,12 +41,13 @@ interface SupabaseMatchupRow {
   event_id: string;
   event_name?: string;
   round_num: number;
+  type: string;
   created_at: string;
-  player1_dg_id: number;
+  player1_dg_id: string;
   player1_name: string;
-  player2_dg_id: number;
+  player2_dg_id: string;
   player2_name: string;
-  player3_dg_id?: number | null;
+  player3_dg_id?: string | null;
   player3_name?: string | null;
   odds1?: number | null;
   odds2?: number | null;
@@ -65,10 +66,11 @@ interface SupabaseMatchupRow2Ball {
   event_id: string;
   event_name?: string;
   round_num: number;
+  type: string;
   created_at: string;
-  player1_dg_id: number;
+  player1_dg_id: string;
   player1_name: string;
-  player2_dg_id: number;
+  player2_dg_id: string;
   player2_name: string;
   odds1?: number | null;
   odds2?: number | null;
@@ -95,16 +97,12 @@ type MatchupRow = SupabaseMatchupRow | SupabaseMatchupRow2Ball;
 
 // Helper type guard for SupabaseMatchupRow
 function isSupabaseMatchupRow(matchup: MatchupRow): matchup is SupabaseMatchupRow {
-  return 'player3_dg_id' in matchup;
+  return (matchup as any).type === '3ball';
 }
 
 // Helper type guard for SupabaseMatchupRow2Ball
 function isSupabaseMatchupRow2Ball(matchup: MatchupRow): matchup is SupabaseMatchupRow2Ball {
-  return (
-    !('player3_dg_id' in matchup) &&
-    typeof (matchup as SupabaseMatchupRow2Ball).player1_dg_id === 'number' &&
-    typeof (matchup as SupabaseMatchupRow2Ball).player2_dg_id === 'number'
-  );
+  return (matchup as any).type === '2ball';
 }
 
 interface MatchupsTableProps {
@@ -131,13 +129,13 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
         (m as any).player2_dg_id
       ];
       if ((m as any).player3_dg_id != null) ids.push((m as any).player3_dg_id);
-      return ids.filter((id): id is number => typeof id === 'number' && !isNaN(id));
+      return ids.filter((id): id is string => typeof id === 'string' && !isNaN(id));
     } else if (isSupabaseMatchupRow2Ball(m)) {
       const ids = [
         (m as any).player1_dg_id,
         (m as any).player2_dg_id
       ];
-      return ids.filter((id): id is number => typeof id === 'number' && !isNaN(id));
+      return ids.filter((id): id is string => typeof id === 'string' && !isNaN(id));
     }
     return [];
   }).map(String);

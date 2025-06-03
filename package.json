@@ -6,7 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "ingest": "node ingest-matchups.js",
+    "ingest:pga": "node ingest-matchups.js pga",
+    "ingest:euro": "node ingest-matchups.js euro",
+    "ingest:opp": "node ingest-matchups.js opp",
+    "ingest:alt": "node ingest-matchups.js alt",
+    "ingest:all": "node ingest-matchups.js all"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
