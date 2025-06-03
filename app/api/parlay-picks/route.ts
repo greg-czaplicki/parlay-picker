@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { snapshotService } from '@/lib/snapshot-service'
+import { logger } from '@/lib/logger'
 
 // TODO: Replace with env vars or shared util
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -15,6 +17,28 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  
+  // FEATURE SNAPSHOTTING: Capture comprehensive snapshot at bet time
+  if (data && pick.matchup_id && pick.pick) {
+    try {
+      const snapshotResult = await snapshotService.captureSnapshot(
+        data.uuid,        // parlay_pick_id
+        pick.matchup_id,  // matchup_id
+        pick.pick         // picked_player_position (1, 2, or 3)
+      );
+      
+      if (!snapshotResult.success) {
+        logger.warn("[POST /api/parlay-picks] Failed to capture snapshot:", snapshotResult.error);
+        // Don't fail the response, just log the warning
+      } else {
+        logger.info("[POST /api/parlay-picks] Successfully captured feature snapshot for pick:", data.uuid);
+      }
+    } catch (snapshotError) {
+      logger.error("[POST /api/parlay-picks] Unexpected error during snapshot capture:", snapshotError);
+      // Don't fail the response for snapshot errors
+    }
+  }
+  
   return NextResponse.json({ pick: data })
 }
 

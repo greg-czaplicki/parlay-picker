@@ -3,6 +3,7 @@
 import { createServerClient } from "@/lib/supabase";
 import { LiveTournamentStat } from "@/types/definitions";
 import { logger } from '@/lib/logger'
+import { snapshotService } from '@/lib/snapshot-service'
 
 // --- Helper Functions ---
 
@@ -102,28 +103,23 @@ export interface Matchup {
 
 // Interface for Parlays table
 export interface Parlay {
-    id: number;
-    // user_id?: string; // If using auth
-    name: string | null;
+    uuid: string; // Primary key is UUID, not number
+    user_id: string;
     created_at: string;
-    // ML fields
-    outcome: 'win' | 'loss' | 'push';
-    payout_amount: string; // NUMERIC(12,2) as string for precision
+    // ML fields - using proper ENUM types
+    outcome: 'win' | 'loss' | 'push' | null;
+    payout_amount: string | null; // NUMERIC as string for precision
 }
 
-// Interface for ParlayPicks table (add parlay_id)
+// Interface for ParlayPicks table 
 export interface ParlayPick {
-    id: number;
-    parlay_id: number;
-    // user_id?: string; // If using auth
-    picked_player_dg_id: number;
-    picked_player_name: string;
-    matchup_id: number | null;
-    event_name: string | null;
-    round_num: number | null;
+    uuid: string; // Primary key is UUID
+    parlay_id: string; // Foreign key to parlays.uuid
+    matchup_id: string; // Foreign key to matchups.uuid
+    pick: number; // Player position (1, 2, or 3)
     created_at: string;
-    // ML fields
-    outcome: 'win' | 'loss' | 'push' | 'void';
+    // ML fields - using proper ENUM types
+    outcome: 'win' | 'loss' | 'push' | 'void' | null;
 }
 
 // Type for returning grouped data
@@ -587,26 +583,20 @@ export async function getParlaysAndPicks(): Promise<{ parlays: ParlayWithPicks[]
  * @param pickData - Object containing the pick details, including parlay_id.
  * @returns An object containing the newly added pick or an error message.
  */
-export async function addParlayPick(pickData: Omit<ParlayPick, 'id' | 'created_at'>): Promise<{ pick: ParlayPick | null; error?: string }> {
+export async function addParlayPick(pickData: Omit<ParlayPick, 'uuid' | 'created_at'>): Promise<{ pick: ParlayPick | null; error?: string }> {
     logger.info("[addParlayPick] Adding pick:", pickData);
     if (!pickData.parlay_id) {
          return { pick: null, error: "parlay_id is required to add a pick." };
     }
     const supabase = createServerClient();
     try {
-        // TODO: Add user_id if auth is implemented
-        // Ensure consistency check if using auth (user owns the target parlay_id)
         const { data, error } = await supabase
             .from('parlay_picks')
             .insert([{
                 parlay_id: pickData.parlay_id,
-                // user_id: userId, // If using auth
-                picked_player_dg_id: pickData.picked_player_dg_id,
-                picked_player_name: pickData.picked_player_name,
                 matchup_id: pickData.matchup_id,
-                event_name: pickData.event_name,
-                round_num: pickData.round_num,
-                outcome: 'void',
+                pick: pickData.pick,
+                outcome: pickData.outcome || null,
             }])
             .select()
             .single(); // Expecting one row back
@@ -619,7 +609,26 @@ export async function addParlayPick(pickData: Omit<ParlayPick, 'id' | 'created_a
         // Invalidate cache since we've added a pick
         invalidateParlaysCache();
         
-        logger.info("[addParlayPick] Successfully added pick ID:", data?.id);
+        // FEATURE SNAPSHOTTING: Capture comprehensive snapshot at bet time
+        try {
+            const snapshotResult = await snapshotService.captureSnapshot(
+                data.uuid,           // parlay_pick_id
+                pickData.matchup_id, // matchup_id
+                pickData.pick        // picked_player_position (1, 2, or 3)
+            );
+            
+            if (!snapshotResult.success) {
+                logger.warn("[addParlayPick] Failed to capture snapshot:", snapshotResult.error);
+                // Don't fail the pick creation, just log the warning
+            } else {
+                logger.info("[addParlayPick] Successfully captured feature snapshot for pick:", data.uuid);
+            }
+        } catch (snapshotError) {
+            logger.error("[addParlayPick] Unexpected error during snapshot capture:", snapshotError);
+            // Don't fail the pick creation for snapshot errors
+        }
+        
+        logger.info("[addParlayPick] Successfully added pick ID:", data?.uuid);
         return { pick: data as ParlayPick };
     } catch (error) {
         logger.error("[addParlayPick] Error:", error);
@@ -682,6 +691,7 @@ export async function batchLoadParlayPicksData(
     
     try {
         const picksWithData: ParlayPickWithData[] = [];
+        const supabase = createServerClient();
         
         // Process each pick sequentially to avoid rate limits
         for (const pick of picks) {
@@ -691,31 +701,36 @@ export async function batchLoadParlayPicksData(
                 liveStats: null
             };
             
-            // 1. Find matchup for this pick
-            const { matchup, error: matchupError } = await findPlayerMatchup(pick.picked_player_name);
-            pickResult.matchup = matchup;
-            pickResult.matchupError = matchupError;
-            
-            // 2. If we have a matchup, get the stats
-            if (matchup) {
+            // 1. Get the matchup data for this pick
+            const { data: matchupData, error: matchupError } = await supabase
+                .from('matchups')
+                .select('*')
+                .eq('uuid', pick.matchup_id)
+                .single();
+                
+            if (matchupError) {
+                pickResult.matchupError = `Error fetching matchup: ${matchupError.message}`;
+            } else if (matchupData) {
+                pickResult.matchup = matchupData;
+                
+                // 2. Get player IDs from the matchup for stats lookup
                 const playerIds = [
-                    matchup.p1_dg_id,
-                    matchup.p2_dg_id,
-                    matchup.p3_dg_id,
+                    matchupData.player1_dg_id,
+                    matchupData.player2_dg_id,
+                    matchupData.player3_dg_id,
                 ].filter((id): id is number => id !== null);
                 
                 if (playerIds.length > 0) {
                     const { stats, error: statsError } = await getLiveStatsForPlayers(playerIds, roundNum);
                     // Convert stats array to map for easy lookup
-                    // Group stats by player ID - prioritize round 2 stats
                     const statsMap: Record<number, LiveTournamentStat> = {};
-                    // First look for round 2 stats for each player
+                    // First look for requested round stats for each player
                     (stats || []).forEach(stat => {
                         if (stat.dg_id && String(stat.round_num) === String(roundNum ?? '2')) {
                             statsMap[stat.dg_id] = stat;
                         }
                     });
-                    // Fill in any players without round 2 stats
+                    // Fill in any players without requested round stats
                     (stats || []).forEach(stat => {
                         if (stat.dg_id && !statsMap[stat.dg_id]) {
                             statsMap[stat.dg_id] = stat;
