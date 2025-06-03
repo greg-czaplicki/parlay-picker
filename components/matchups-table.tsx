@@ -43,11 +43,11 @@ interface SupabaseMatchupRow {
   round_num: number;
   type: string;
   created_at: string;
-  player1_dg_id: string;
+  player1_dg_id: number;
   player1_name: string;
-  player2_dg_id: string;
+  player2_dg_id: number;
   player2_name: string;
-  player3_dg_id?: string | null;
+  player3_dg_id?: number | null;
   player3_name?: string | null;
   odds1?: number | null;
   odds2?: number | null;
@@ -68,9 +68,9 @@ interface SupabaseMatchupRow2Ball {
   round_num: number;
   type: string;
   created_at: string;
-  player1_dg_id: string;
+  player1_dg_id: number;
   player1_name: string;
-  player2_dg_id: string;
+  player2_dg_id: number;
   player2_name: string;
   odds1?: number | null;
   odds2?: number | null;
@@ -129,13 +129,13 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
         (m as any).player2_dg_id
       ];
       if ((m as any).player3_dg_id != null) ids.push((m as any).player3_dg_id);
-      return ids.filter((id): id is string => typeof id === 'string' && !isNaN(id));
+      return ids.filter((id): id is number => typeof id === 'number' && !isNaN(id));
     } else if (isSupabaseMatchupRow2Ball(m)) {
       const ids = [
         (m as any).player1_dg_id,
         (m as any).player2_dg_id
       ];
-      return ids.filter((id): id is string => typeof id === 'string' && !isNaN(id));
+      return ids.filter((id): id is number => typeof id === 'number' && !isNaN(id));
     }
     return [];
   }).map(String);
@@ -568,9 +568,9 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
                                         <Button size="icon" variant="secondary" disabled className="h-6 w-6 p-0"><CheckCircle className="text-green-400" size={16} /></Button>
                                       ) : (
                                         <Button size="icon" variant="outline" className="h-6 w-6 p-0" onClick={() => {
-                                          if (typeof player.dg_id !== 'string' || player.dg_id.length === 0) return;
+                                          if (typeof player.dg_id !== 'number' || isNaN(player.dg_id)) return;
                                           addSelection({
-                                            id: player.dg_id,
+                                            id: String(player.dg_id),
                                             matchupType,
                                             player: formatPlayerName(player.name),
                                             odds: Number(player.odds) || 0,
@@ -606,68 +606,14 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
                                 }
                               }
                               
-                              const positionData = formatPlayerPosition(playerId);
+                              const positionData = formatPlayerPosition(String(playerId));
                               
                               return (
                                 <div key={`position-${idx}`} className="py-1 h-8 flex items-center justify-center">
-                                    <div className="flex items-center justify-center space-x-2 w-full">
-                                      <span className={`px-2 py-0.5 text-xs rounded min-w-12 text-center font-medium ${
-                                        // Position heatmap - from gold (1st) to blue gradient (top 30) to gray (below top 30)
-                                        positionData.position === '1' 
-                                          ? 'bg-yellow-500/40 text-yellow-100' 
-                                          : positionData.position === 'T1'
-                                            ? 'bg-yellow-500/30 text-yellow-100'
-                                          : positionData.position === '2' || positionData.position === 'T2'
-                                            ? 'bg-amber-500/30 text-amber-100'
-                                          : positionData.position === '3' || positionData.position === 'T3'
-                                            ? 'bg-orange-500/30 text-orange-100'
-                                          : positionData.position?.match(/^T?[4-5]$/)
-                                            ? 'bg-red-500/30 text-red-100'
-                                          : positionData.position?.match(/^T?[6-9]$/) || positionData.position === 'T10' || positionData.position === '10'
-                                            ? 'bg-purple-500/30 text-purple-100'
-                                          : positionData.position?.match(/^T?1[1-9]$/) || positionData.position?.match(/^T?2[0-5]$/)
-                                            ? 'bg-blue-500/30 text-blue-100'
-                                          : positionData.position?.match(/^T?2[6-9]$/) || positionData.position?.match(/^T?3[0-9]$/)
-                                            ? 'bg-blue-700/30 text-blue-200' 
-                                            : positionData.position === 'CUT' || positionData.position === 'WD'
-                                              ? 'bg-rose-950/30 text-rose-300'
-                                              : 'bg-gray-500/30 text-gray-300'
-                                      }`}>
-                                        {positionData.position}
-                                      </span>
-                                      {positionData.score && (
-                                        <span className={`px-2 py-0.5 text-xs rounded min-w-12 text-center font-medium ${
-                                          // Score heatmap - from deep red (best) to green (even) to gray (over par)
-                                          positionData.score === 'E' 
-                                            ? 'bg-green-600/30 text-green-100' 
-                                            : positionData.score.startsWith('-') ? (
-                                                // Under par gradient (better scores have deeper red)
-                                                positionData.score <= '-10' 
-                                                  ? 'bg-red-900/40 text-red-100' 
-                                                  : positionData.score <= '-7'
-                                                    ? 'bg-red-800/40 text-red-100'
-                                                    : positionData.score <= '-5'
-                                                      ? 'bg-red-700/40 text-red-100'
-                                                      : positionData.score <= '-3'
-                                                        ? 'bg-red-600/40 text-red-100'
-                                                        : 'bg-red-500/40 text-red-100'
-                                              ) : (
-                                                // Over par gradient (worse scores have deeper gray)
-                                                positionData.score >= '+10'
-                                                  ? 'bg-gray-900/40 text-gray-100'
-                                                  : positionData.score >= '+7'
-                                                    ? 'bg-gray-800/40 text-gray-100'
-                                                    : positionData.score >= '+5'
-                                                      ? 'bg-gray-700/40 text-gray-100'
-                                                      : positionData.score >= '+3'
-                                                        ? 'bg-gray-600/40 text-gray-100'
-                                                        : 'bg-gray-500/40 text-gray-100'
-                                              )
-                                        }`}>
-                                          {positionData.score}
-                                        </span>
-                                      )}
-                                    </div>
+                                  <div className="text-center">
+                                    <div className="text-xs font-medium">{positionData.position}</div>
+                                    <div className="text-xs text-muted-foreground">{positionData.score}</div>
+                                  </div>
                                 </div>
                               );
                             })}
@@ -804,9 +750,9 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
                                         <Button size="icon" variant="secondary" disabled className="h-6 w-6 p-0"><CheckCircle className="text-green-400" size={16} /></Button>
                                       ) : (
                                         <Button size="icon" variant="outline" className="h-6 w-6 p-0" onClick={() => {
-                                          if (typeof player.dg_id !== 'string' || player.dg_id.length === 0) return;
+                                          if (typeof player.dg_id !== 'number' || isNaN(player.dg_id)) return;
                                           addSelection({
-                                            id: player.dg_id,
+                                            id: String(player.dg_id),
                                             matchupType,
                                             player: formatPlayerName(player.name),
                                             odds: Number(player.odds) || 0,
@@ -840,68 +786,14 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
                                 }
                               }
                               
-                              const positionData = formatPlayerPosition(playerId);
+                              const positionData = formatPlayerPosition(String(playerId));
                               
                               return (
                                 <div key={`position-${idx}`} className="py-1 h-8 flex items-center justify-center">
-                                    <div className="flex items-center justify-center space-x-2 w-full">
-                                      <span className={`px-2 py-0.5 text-xs rounded min-w-12 text-center font-medium ${
-                                        // Position heatmap - from gold (1st) to blue gradient (top 30) to gray (below top 30)
-                                        positionData.position === '1' 
-                                          ? 'bg-yellow-500/40 text-yellow-100' 
-                                          : positionData.position === 'T1'
-                                            ? 'bg-yellow-500/30 text-yellow-100'
-                                          : positionData.position === '2' || positionData.position === 'T2'
-                                            ? 'bg-amber-500/30 text-amber-100'
-                                          : positionData.position === '3' || positionData.position === 'T3'
-                                            ? 'bg-orange-500/30 text-orange-100'
-                                          : positionData.position?.match(/^T?[4-5]$/)
-                                            ? 'bg-red-500/30 text-red-100'
-                                          : positionData.position?.match(/^T?[6-9]$/) || positionData.position === 'T10' || positionData.position === '10'
-                                            ? 'bg-purple-500/30 text-purple-100'
-                                          : positionData.position?.match(/^T?1[1-9]$/) || positionData.position?.match(/^T?2[0-5]$/)
-                                            ? 'bg-blue-500/30 text-blue-100'
-                                          : positionData.position?.match(/^T?2[6-9]$/) || positionData.position?.match(/^T?3[0-9]$/)
-                                            ? 'bg-blue-700/30 text-blue-200' 
-                                            : positionData.position === 'CUT' || positionData.position === 'WD'
-                                              ? 'bg-rose-950/30 text-rose-300'
-                                              : 'bg-gray-500/30 text-gray-300'
-                                      }`}>
-                                        {positionData.position}
-                                      </span>
-                                      {positionData.score && (
-                                        <span className={`px-2 py-0.5 text-xs rounded min-w-12 text-center font-medium ${
-                                          // Score heatmap - from deep red (best) to green (even) to gray (over par)
-                                          positionData.score === 'E' 
-                                            ? 'bg-green-600/30 text-green-100' 
-                                            : positionData.score.startsWith('-') ? (
-                                                // Under par gradient (better scores have deeper red)
-                                                positionData.score <= '-10' 
-                                                  ? 'bg-red-900/40 text-red-100' 
-                                                  : positionData.score <= '-7'
-                                                    ? 'bg-red-800/40 text-red-100'
-                                                    : positionData.score <= '-5'
-                                                      ? 'bg-red-700/40 text-red-100'
-                                                      : positionData.score <= '-3'
-                                                        ? 'bg-red-600/40 text-red-100'
-                                                        : 'bg-red-500/40 text-red-100'
-                                              ) : (
-                                                // Over par gradient (worse scores have deeper gray)
-                                                positionData.score >= '+10'
-                                                  ? 'bg-gray-900/40 text-gray-100'
-                                                  : positionData.score >= '+7'
-                                                    ? 'bg-gray-800/40 text-gray-100'
-                                                    : positionData.score >= '+5'
-                                                      ? 'bg-gray-700/40 text-gray-100'
-                                                      : positionData.score >= '+3'
-                                                        ? 'bg-gray-600/40 text-gray-100'
-                                                        : 'bg-gray-500/40 text-gray-100'
-                                              )
-                                        }`}>
-                                          {positionData.score}
-                                        </span>
-                                      )}
-                                    </div>
+                                  <div className="text-center">
+                                    <div className="text-xs font-medium">{positionData.position}</div>
+                                    <div className="text-xs text-muted-foreground">{positionData.score}</div>
+                                  </div>
                                 </div>
                               );
                             })}
