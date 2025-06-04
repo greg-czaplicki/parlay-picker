@@ -24,30 +24,15 @@ export function createHeavyFavoritesFilter(): Filter<any> {
         const groupId = player.matchupId ?? 'ungrouped';
         if (!groups[groupId]) groups[groupId] = [];
         groups[groupId].push(player);
-        
-        // Log first few players to see their matchupId values
-        if (Object.keys(groups).length <= 2) {
-          console.log('HEAVY_FAVORITES_DEBUG: Sample player:', {
-            name: player.name,
-            odds: player.odds,
-            oddsType: typeof player.odds,
-            matchupId: player.matchupId
-          });
-        }
       });
 
-      console.log('HEAVY_FAVORITES_DEBUG: Number of groups:', Object.keys(groups).length);
       
       const heavyFavorites: any[] = [];
-      Object.values(groups).forEach((group, groupIndex) => {
-        console.log(`HEAVY_FAVORITES_DEBUG: Processing group ${groupIndex} with`, group.length, 'players');
-        
+      Object.values(groups).forEach((group, groupIndex) => {        
         // Filter out players with null odds
         const withOdds = group.filter((p: any) => typeof p.odds === 'number');
-        console.log('HEAVY_FAVORITES_DEBUG: Players with odds in this group:', withOdds.length);
         
         if (withOdds.length < 2) {
-          console.log('HEAVY_FAVORITES_DEBUG: Skipping group - need at least 2 players with odds');
           return; // Need at least 2 with odds to compare
         }
 
@@ -58,10 +43,7 @@ export function createHeavyFavoritesFilter(): Filter<any> {
         const [fav, next] = withOdds;
         const gap = next.odds - fav.odds;
         
-        console.log(`HEAVY_FAVORITES_DEBUG: Group ${groupIndex} - Favorite:`, fav.name, 'odds:', fav.odds, 'Next:', next.name, 'odds:', next.odds, 'Gap:', gap, 'Threshold:', oddsGap);
-        
         if (gap >= oddsGap) {
-          console.log('HEAVY_FAVORITES_DEBUG: Found heavy favorite:', fav.name);
           heavyFavorites.push({
             ...fav,
             oddsGap: gap, // legacy, used for scoring
@@ -73,8 +55,6 @@ export function createHeavyFavoritesFilter(): Filter<any> {
           console.log('HEAVY_FAVORITES_DEBUG: Gap too small, skipping');
         }
       });
-
-      console.log('HEAVY_FAVORITES_DEBUG: Found', heavyFavorites.length, 'heavy favorites total');
 
       // Sort heavy favorites by oddsGap descending, then SG Total descending, then seasonAvg ascending
       heavyFavorites.sort((a, b) => {

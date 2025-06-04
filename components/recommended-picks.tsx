@@ -437,8 +437,35 @@ export default function RecommendedPicks({
                       {/* Gap (if exists) */}
                       {(player as any).oddsGapToNext ? (
                         <div className="text-center">
-                          <div className="text-lg font-bold text-green-600">+{((player as any).oddsGapToNext).toFixed(2)}</div>
-                          <div className="text-xs text-muted-foreground">Gap</div>
+                          <div className="text-lg font-bold text-green-600">
+                            +{(() => {
+                              const favoriteAmericanOdds = convertToAmericanOdds(player.odds);
+                              const nextBestAmericanOdds = convertToAmericanOdds((player as any).nextBestOdds);
+                              
+                              // Calculate gap based on odds signs
+                              let americanGap;
+                              
+                              if (favoriteAmericanOdds < 0 && nextBestAmericanOdds > 0) {
+                                // Crossing even odds line: total distance from both even odds lines
+                                // Favorite distance from -100, next best distance from +100
+                                const favoriteDistance = Math.abs(favoriteAmericanOdds - (-100));
+                                const nextBestDistance = Math.abs(nextBestAmericanOdds - 100);
+                                americanGap = favoriteDistance + nextBestDistance;
+                              } else if (favoriteAmericanOdds > 0 && nextBestAmericanOdds > 0) {
+                                // Both positive: simple difference
+                                americanGap = nextBestAmericanOdds - favoriteAmericanOdds;
+                              } else if (favoriteAmericanOdds < 0 && nextBestAmericanOdds < 0) {
+                                // Both negative: difference of absolute values  
+                                americanGap = Math.abs(nextBestAmericanOdds) - Math.abs(favoriteAmericanOdds);
+                              } else {
+                                // Fallback to simple absolute difference
+                                americanGap = Math.abs(nextBestAmericanOdds - favoriteAmericanOdds);
+                              }
+                              
+                              return Math.round(americanGap);
+                            })()}
+                          </div>
+                          <div className="text-xs text-muted-foreground">Edge</div>
                         </div>
                       ) : (
                         <div className="text-center">
@@ -449,14 +476,24 @@ export default function RecommendedPicks({
                         </div>
                       )}
                       
-                      {/* SG Total (when gap exists) */}
-                      {(player as any).oddsGapToNext && (
+                      {/* Value Score (when composite score exists) */}
+                      {(player as any).compositeScore ? (
                         <div className="text-center">
-                          <div className={`text-sm font-semibold ${getSGColorClass(player.sgTotal)}`}>
-                            {player.sgTotal?.toFixed(2) ?? 'N/A'}
+                          <div className="text-lg font-bold text-blue-600">
+                            {((player as any).compositeScore * 9 + 1).toFixed(1)}
                           </div>
-                          <div className="text-xs text-muted-foreground">SG Total</div>
+                          <div className="text-xs text-muted-foreground">Value</div>
                         </div>
+                      ) : (
+                        /* SG Total (when gap exists but no composite score) */
+                        (player as any).oddsGapToNext && (
+                          <div className="text-center">
+                            <div className={`text-sm font-semibold ${getSGColorClass(player.sgTotal)}`}>
+                              {player.sgTotal?.toFixed(2) ?? 'N/A'}
+                            </div>
+                            <div className="text-xs text-muted-foreground">SG Total</div>
+                          </div>
+                        )
                       )}
                       
                       {/* Season SG */}
