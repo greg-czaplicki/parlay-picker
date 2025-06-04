@@ -19,6 +19,12 @@ import RecommendedPicks from "./recommended-picks"
 import { FilterService } from "@/filters/filter-service"
 import { registerCoreFilters } from "@/filters/initFilters"
 import { useCurrentRoundForEvent } from '@/hooks/use-current-round-for-event'
+import { useFilterManager } from "@/hooks/use-filter-manager"
+import { useFilteredPlayers } from "@/hooks/use-filtered-players"
+import { FilterPanel } from "@/components/ui/filter-panel"
+import { FilterChipList } from "@/components/ui/filter-chip"
+import { Badge } from "@/components/ui/badge"
+import { Filter as FilterIcon } from "lucide-react"
 
 // Register filters once at module load
 registerCoreFilters()
@@ -37,13 +43,37 @@ export default function Dashboard({
   initialPgaTourStats = [],
   defaultTab = "matchups"
 }: DashboardProps) {
-  const [activeFilter, setActiveFilter] = useState<string | null>('balanced')
   const [activeTab, setActiveTab] = useState(defaultTab)
-  const [showCustom, setShowCustom] = useState(false)
   const { data: currentEvents, isLoading: isLoadingEvents } = useCurrentWeekEventsQuery()
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null)
   const [matchupType, setMatchupType] = useState<"2ball" | "3ball">("3ball")
   const [currentRound, setCurrentRound] = useState<number>(2)
+
+  // Filter management - only for recommended picks
+  const filterManager = useFilterManager({ 
+    autoSave: true, 
+    enablePerformanceTracking: true 
+  })
+
+  // Use filtered data hook only for recommendations
+  const {
+    data: filteredRecommendations,
+    isLoading: isLoadingRecommendations,
+    isError: isErrorRecommendations,
+    error: errorRecommendations,
+    originalCount: originalRecommendationsCount,
+    filteredCount: filteredRecommendationsCount,
+    appliedFilters: appliedRecommendationFilters,
+    performance: recommendationsPerformance
+  } = useFilteredPlayers(selectedEventId, matchupType, currentRound, {
+    filterIds: filterManager.selectedFilters,
+    filterOptions: filterManager.filterOptions,
+    bookmaker: "fanduel",
+    oddsGapPercentage: 40,
+    limit: 10,
+    debounceMs: 300,
+    enableCaching: true
+  })
 
   // Fetch the current round for the selected event
   const { data: latestRound, isLoading: isLoadingRound } = useCurrentRoundForEvent(selectedEventId)
@@ -60,22 +90,9 @@ export default function Dashboard({
     setSelectedEventId(currentEvents[0].event_id);
   }, [currentEvents]);
 
-  // Get all filters from FilterService
-  const filters = useMemo(() => {
-    return FilterService.getInstance().getFilters();
-  }, [])
-
-  const handleFilterChange = (filterId: string) => {
-    setActiveFilter(filterId)
-    setShowCustom(filterId === "custom")
-  }
-
   const handleEventChange = (value: string) => {
     setSelectedEventId(Number(value));
   }
-
-  // Example: pass activeFilter and options to children (RecommendedPicks, MatchupsTable)
-  // For now, just pass the filter id; later, pass options as well
 
   return (
     <ParlayProvider>
@@ -112,92 +129,112 @@ export default function Dashboard({
 
       {activeTab === "matchups" && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          {/* Row 1: Filters (Spanning full width) */}
+          {/* Row 1: Event Selection and Recommendation Filters */}
           <div className="md:col-span-4">
             <Card className="glass-card">
               <CardContent className="p-6">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
-                  <h2 className="text-xl font-bold">Filters</h2>
-                  {currentEvents && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-400">Event:</span>
-                      <Select value={selectedEventId ? String(selectedEventId) : undefined} onValueChange={handleEventChange}>
-                        <SelectTrigger className="w-[220px] bg-[#1e1e23] border-none">
-                          <SelectValue placeholder="Select Event" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {currentEvents
-                            .sort((a: TournamentEvent, b: TournamentEvent) => {
-                              const aDate = a.start_date ?? '';
-                              const bDate = b.start_date ?? '';
-                              return aDate.localeCompare(bDate);
-                            })
-                            .map(ev => (
-                              <SelectItem key={ev.event_id} value={String(ev.event_id)}>
-                                {ev.event_name}
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
-                      <span className="text-sm text-gray-400 ml-4">Matchup Type:</span>
-                      <Select value={matchupType} onValueChange={v => setMatchupType(v as "2ball" | "3ball") }>
-                        <SelectTrigger className="w-[120px] bg-[#1e1e23] border-none">
-                          <SelectValue placeholder="Type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="3ball">3-Ball</SelectItem>
-                          <SelectItem value="2ball">2-Ball</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      {isLoadingRound && <span className="ml-4 text-xs text-gray-400">Loading round...</span>}
-                      {!isLoadingRound && latestRound && (
-                        <span className="ml-4 text-xs text-green-400">Current Round: {latestRound}</span>
-                      )}
+                <div className="flex flex-col gap-4">
+                  {/* Event and Matchup Type Selectors */}
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <h2 className="text-xl font-bold">Event Selection</h2>
+                    {currentEvents && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-400">Event:</span>
+                        <Select value={selectedEventId ? String(selectedEventId) : undefined} onValueChange={handleEventChange}>
+                          <SelectTrigger className="w-[220px] bg-[#1e1e23] border-none">
+                            <SelectValue placeholder="Select Event" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {currentEvents
+                              .sort((a: TournamentEvent, b: TournamentEvent) => {
+                                const aDate = a.start_date ?? '';
+                                const bDate = b.start_date ?? '';
+                                return aDate.localeCompare(bDate);
+                              })
+                              .map(ev => (
+                                <SelectItem key={ev.event_id} value={String(ev.event_id)}>
+                                  {ev.event_name}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                        <span className="text-sm text-gray-400 ml-4">Matchup Type:</span>
+                        <Select value={matchupType} onValueChange={v => setMatchupType(v as "2ball" | "3ball") }>
+                          <SelectTrigger className="w-[120px] bg-[#1e1e23] border-none">
+                            <SelectValue placeholder="Type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="3ball">3-Ball</SelectItem>
+                            <SelectItem value="2ball">2-Ball</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {isLoadingRound && <span className="ml-4 text-xs text-gray-400">Loading round...</span>}
+                        {!isLoadingRound && latestRound && (
+                          <span className="ml-4 text-xs text-green-400">Current Round: {latestRound}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Filter Panel for Recommendations */}
+                  <div className="border-t pt-4">
+                    <FilterPanel
+                      selectedFilters={filterManager.selectedFilters}
+                      onFiltersChange={(filterIds) => {
+                        // Clear existing filters and add new ones
+                        filterManager.clearAllFilters()
+                        filterIds.forEach(id => filterManager.addFilter(id))
+                      }}
+                      filterOptions={filterManager.filterOptions}
+                      onFilterOptionsChange={filterManager.updateFilterOptions}
+                      multiSelect={true}
+                      showResultCount={false}
+                      isLoading={isLoadingRecommendations}
+                      compact={false}
+                    />
+                  </div>
+
+                  {/* Results Summary */}
+                  {filterManager.hasFilters && (
+                    <div className="border-t pt-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Badge variant="outline" className="text-sm">
+                            Recommendations: {filteredRecommendationsCount} of {originalRecommendationsCount}
+                          </Badge>
+                          {appliedRecommendationFilters.length > 0 && (
+                            <FilterChipList
+                              filterIds={appliedRecommendationFilters}
+                              onRemove={filterManager.removeFilter}
+                              onClearAll={filterManager.clearAllFilters}
+                              size="sm"
+                              maxVisible={3}
+                            />
+                          )}
+                        </div>
+                        {recommendationsPerformance.filterTime > 0 && (
+                          <Badge variant="secondary" className="text-xs">
+                            {Math.round(recommendationsPerformance.filterTime)}ms
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {filters.map((filter) => (
-                    <Button
-                      key={filter.id}
-                      variant={activeFilter === filter.id ? "default" : "outline"}
-                      onClick={() => handleFilterChange(filter.id)}
-                      className={activeFilter === filter.id ? "filter-button-active" : "filter-button"}
-                    >
-                      {filter.name}
-                    </Button>
-                  ))}
-                </div>
-                {showCustom && (
-                  <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm text-gray-400">SG: Tee-to-Green</label>
-                      <Input type="number" placeholder="Weight" className="bg-[#1e1e23] border-none" />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm text-gray-400">SG: Approach</label>
-                      <Input type="number" placeholder="Weight" className="bg-[#1e1e23] border-none" />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm text-gray-400">SG: Around-the-Green</label>
-                      <Input type="number" placeholder="Weight" className="bg-[#1e1e23] border-none" />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm text-gray-400">SG: Putting</label>
-                      <Input type="number" placeholder="Weight" className="bg-[#1e1e23] border-none" />
-                    </div>
-                  </div>
-                )}
               </CardContent>
             </Card>
           </div>
 
-          {/* Row 2: Main Matchups Table (Left) */}
+          {/* Row 2: Main Matchups Table (Left) - No filtering */}
           <div className="md:col-span-3">
-            <MatchupsTable eventId={selectedEventId} matchupType={matchupType} roundNum={currentRound} filterId={activeFilter} />
+            <MatchupsTable 
+              eventId={selectedEventId} 
+              matchupType={matchupType} 
+              roundNum={currentRound} 
+            />
           </div>
 
-          {/* Row 2: Recommended Picks (Right) */}
+          {/* Row 2: Recommended Picks (Right) - With filtering */}
           <div className="md:col-span-1">
             <RecommendedPicks 
               eventId={selectedEventId}
@@ -206,7 +243,11 @@ export default function Dashboard({
               oddsGapPercentage={40}
               bookmaker="fanduel"
               roundNum={currentRound}
-              filterId={activeFilter}
+              showFilters={false}
+              filteredData={filteredRecommendations}
+              isLoading={isLoadingRecommendations}
+              isError={isErrorRecommendations}
+              error={errorRecommendations}
             />
           </div>
         </div>

@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Card, CardContent } from "@/components/ui/card"
+import { useState, useEffect, useMemo } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Table,
   TableBody,
@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Loader2, DollarSign, Sliders, CheckCircle, Info, PlusCircle } from "lucide-react"
+import { Loader2, DollarSign, Sliders, CheckCircle, Info, PlusCircle, Plus, AlertCircle, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Tooltip,
@@ -28,12 +28,22 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { toast } from "@/components/ui/use-toast"
 import { detect3BallDivergence } from "@/lib/utils"
 import { useMatchupsQuery } from "@/hooks/use-matchups-query"
 import { usePlayerStatsQuery, PlayerStat } from "@/hooks/use-player-stats-query"
-import { useParlayContext } from '@/context/ParlayContext'
+import { useParlayContext, ParlaySelection } from "@/context/ParlayContext"
 import { useParlaysQuery } from '@/hooks/use-parlays-query'
-import { FilterService } from "@/filters/filter-service"
 
 // Only 3-ball matchups
 interface SupabaseMatchupRow {
@@ -109,19 +119,26 @@ interface MatchupsTableProps {
   eventId: number | null;
   matchupType?: "2ball" | "3ball";
   roundNum?: number | null;
-  filterId?: string | null;
+  showFilters?: boolean;
+  compactFilters?: boolean;
 }
 
-export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum, filterId }: MatchupsTableProps) {
+export default function MatchupsTable({ 
+  eventId, 
+  matchupType = "3ball", 
+  roundNum, 
+  showFilters = true, 
+  compactFilters = false
+}: MatchupsTableProps) {
   const [selectedBookmaker, setSelectedBookmaker] = useState<"fanduel">("fanduel");
   // Odds gap filter state
   const [oddsGapThreshold, setOddsGapThreshold] = useState(40); // Default 40 points in American odds
   const [showFiltersDialog, setShowFiltersDialog] = useState(false);
 
-  // Use React Query for matchups
-  const { data: matchups, isLoading, isError, error, lastUpdateTime } = useMatchupsQuery(eventId, matchupType, roundNum);
+  // Use our matchups query directly
+  const { data: matchups, isLoading, isError, error } = useMatchupsQuery(eventId, matchupType, roundNum);
 
-  // Use type guards before accessing fields
+  // Use type guards before accessing fields to extract player IDs for stats
   const playerIds = (matchups ?? []).flatMap(m => {
     if (isSupabaseMatchupRow(m)) {
       const ids = [
@@ -572,11 +589,14 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
                                           addSelection({
                                             id: String(player.dg_id),
                                             matchupType,
+                                            group: `Event ${eventId || 'Unknown'}`,
                                             player: formatPlayerName(player.name),
                                             odds: Number(player.odds) || 0,
                                             matchupId: matchup.uuid,
-                                            eventName: matchup.event_name,
-                                            roundNum: matchup.round_num
+                                            eventName: matchup.event_name || '',
+                                            roundNum: matchup.round_num || 0,
+                                            valueRating: 7.5,
+                                            confidenceScore: 75
                                           });
                                         }}><PlusCircle className="text-primary" size={16} /></Button>
                                       )}
@@ -598,11 +618,11 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
                               
                               if (isSupabaseMatchupRow(matchup)) {
                                 if (player.id === 'p1') {
-                                  playerId = (matchup as SupabaseMatchupRow).player1_dg_id;
+                                  playerId = String((matchup as SupabaseMatchupRow).player1_dg_id);
                                 } else if (player.id === 'p2') {
-                                  playerId = (matchup as SupabaseMatchupRow).player2_dg_id;
+                                  playerId = String((matchup as SupabaseMatchupRow).player2_dg_id);
                                 } else if (player.id === 'p3' && (matchup as SupabaseMatchupRow).player3_dg_id != null) {
-                                  playerId = (matchup as SupabaseMatchupRow).player3_dg_id;
+                                  playerId = String((matchup as SupabaseMatchupRow).player3_dg_id);
                                 }
                               }
                               
@@ -754,11 +774,14 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
                                           addSelection({
                                             id: String(player.dg_id),
                                             matchupType,
+                                            group: `Event ${eventId || 'Unknown'}`,
                                             player: formatPlayerName(player.name),
                                             odds: Number(player.odds) || 0,
                                             matchupId: m2.uuid,
-                                            eventName: m2.event_name,
-                                            roundNum: m2.round_num ?? 0
+                                            eventName: m2.event_name || '',
+                                            roundNum: m2.round_num || 0,
+                                            valueRating: 7.5,
+                                            confidenceScore: 75
                                           });
                                         }}><PlusCircle className="text-primary" size={16} /></Button>
                                       )}
@@ -780,9 +803,9 @@ export default function MatchupsTable({ eventId, matchupType = "3ball", roundNum
 
                               if (isSupabaseMatchupRow2Ball(matchup)) {
                                 if (player.id === 'p1') {
-                                  playerId = (matchup as SupabaseMatchupRow2Ball).player1_dg_id;
+                                  playerId = String((matchup as SupabaseMatchupRow2Ball).player1_dg_id);
                                 } else if (player.id === 'p2') {
-                                  playerId = (matchup as SupabaseMatchupRow2Ball).player2_dg_id;
+                                  playerId = String((matchup as SupabaseMatchupRow2Ball).player2_dg_id);
                                 }
                               }
                               

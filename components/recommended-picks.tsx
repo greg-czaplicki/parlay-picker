@@ -1,19 +1,22 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Plus, AlertCircle, Info } from "lucide-react"
+import { Plus, AlertCircle, Info, Filter as FilterIcon } from "lucide-react"
 import { getMatchups, Matchup } from "@/app/actions/matchups"
 import { toast } from "@/components/ui/use-toast"
 import { useParlayContext, ParlaySelection } from "@/context/ParlayContext"
 import { useRecommendedPicksQuery, Player } from "@/hooks/use-recommended-picks-query"
+import { useFilteredPlayers } from "@/hooks/use-filtered-players"
+import { useFilterManager } from "@/hooks/use-filter-manager"
 import { useParlaysQuery } from '@/hooks/use-parlays-query'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { FilterService } from "@/filters/filter-service"
-import { useMatchupsQuery } from "@/hooks/use-matchups-query"
+import { FilterPanel } from "@/components/ui/filter-panel"
+import { FilterChipList } from "@/components/ui/filter-chip"
+import { Badge } from "@/components/ui/badge"
 
 interface RecommendedPicksProps {
   eventId: number | null;
@@ -22,7 +25,12 @@ interface RecommendedPicksProps {
   oddsGapPercentage?: number;
   bookmaker?: string;
   roundNum?: number | null;
-  filterId?: string | null;
+  showFilters?: boolean;
+  compactFilters?: boolean;
+  filteredData?: Player[];
+  isLoading?: boolean;
+  isError?: boolean;
+  error?: Error | null;
 }
 
 // Helper to format Decimal odds into American odds string
@@ -78,23 +86,69 @@ export default function RecommendedPicks({
   oddsGapPercentage = 40,
   bookmaker = "fanduel",
   roundNum,
-  filterId,
+  showFilters = true,
+  compactFilters = false,
+  filteredData,
+  isLoading: externalIsLoading,
+  isError: externalIsError,
+  error: externalError,
 }: RecommendedPicksProps) {
   // Get the parlay context
   const { addSelection, removeSelection, selections } = useParlayContext()
   // Track which players have been added to the parlay
   const [addedPlayers, setAddedPlayers] = useState<Record<string, boolean>>({})
 
-  // Use React Query for recommendations
-  const { data: recommendations, isLoading, isError, error } = useRecommendedPicksQuery(eventId, matchupType as "2ball" | "3ball", bookmaker, oddsGapPercentage, limit, roundNum)
+  // Filter management - only used if showFilters is true and no external data provided
+  const filterManager = useFilterManager({ 
+    autoSave: true, 
+    enablePerformanceTracking: true 
+  })
 
-  // Filter recommendations if filterId is provided
-  const filteredRecommendations = useMemo(() => {
-    if (filterId && recommendations) {
-      return FilterService.getInstance().getFilterById(filterId)?.applyFilter(recommendations).filtered ?? recommendations;
+  // Use external data if provided, otherwise use our own filtered hook
+  const shouldUseExternalData = filteredData !== undefined;
+
+  // Use our new filtered players hook - only when not using external data
+  const {
+    data: internalRecommendations,
+    isLoading: internalIsLoading,
+    isError: internalIsError,
+    error: internalError,
+    originalCount,
+    filteredCount,
+    appliedFilters,
+    performance
+  } = useFilteredPlayers(
+    shouldUseExternalData ? null : eventId, 
+    matchupType, 
+    roundNum, 
+    {
+      filterIds: filterManager.selectedFilters,
+      filterOptions: filterManager.filterOptions,
+      bookmaker,
+      oddsGapPercentage,
+      limit,
+      debounceMs: 300,
+      enableCaching: true
     }
-    return recommendations;
-  }, [filterId, recommendations]);
+  )
+
+  // Use external data if provided, otherwise use internal data
+  const filteredRecommendations = shouldUseExternalData ? filteredData : internalRecommendations;
+  const isLoading = shouldUseExternalData ? (externalIsLoading ?? false) : internalIsLoading;
+  const isError = shouldUseExternalData ? (externalIsError ?? false) : internalIsError;
+  const error = shouldUseExternalData ? externalError : internalError;
+
+  // Debug logging
+  console.log('RecommendedPicks Debug:', {
+    shouldUseExternalData,
+    baseDataLength: internalRecommendations?.length || 0,
+    filteredDataLength: filteredRecommendations?.length || 0,
+    originalCount,
+    filteredCount,
+    selectedFilters: filterManager.selectedFilters,
+    appliedFilters,
+    firstFewPlayers: filteredRecommendations?.slice(0, 3)
+  })
 
   // All user parlays for indicator logic
   const userId = '00000000-0000-0000-0000-000000000001';
@@ -103,54 +157,8 @@ export default function RecommendedPicks({
   const isPlayerInAnyParlay = (playerName: string) =>
     allParlayPicks.some((pick: any) => (pick.picked_player_name || '').toLowerCase() === playerName.toLowerCase());
 
-  // Fetch matchups to sync with matchups-table
-  const { data: matchups } = useMatchupsQuery(eventId, matchupType, roundNum);
-
-  // Use the same odds filtering as the table
-  const filteredMatchups = useMemo(() => {
-    return (matchups ?? []).filter(matchup => {
-      if ('player3_dg_id' in matchup) {
-        return (
-          Number(matchup.odds1 ?? 0) > 1 &&
-          Number(matchup.odds2 ?? 0) > 1 &&
-          Number(matchup.odds3 ?? 0) > 1
-        );
-      } else {
-        return (
-          Number(matchup.odds1 ?? 0) > 1 &&
-          Number(matchup.odds2 ?? 0) > 1
-        );
-      }
-    });
-  }, [matchups]);
-
-  // Build sets of valid player IDs and matchup IDs from filteredMatchups
-  const validPlayerIds = useMemo(() => {
-    const set = new Set<string>();
-    (filteredMatchups ?? []).forEach(m => {
-      if (m.player1_dg_id) set.add(String(m.player1_dg_id));
-      if (m.player2_dg_id) set.add(String(m.player2_dg_id));
-      if ('player3_dg_id' in m && m.player3_dg_id) set.add(String(m.player3_dg_id));
-    });
-    return set;
-  }, [filteredMatchups]);
-
-  const validMatchupIds = useMemo(() => {
-    const set = new Set<string>();
-    (filteredMatchups ?? []).forEach(m => {
-      if (m.uuid) set.add(String(m.uuid));
-    });
-    return set;
-  }, [filteredMatchups]);
-
-  // Filter recommendations to only those present in filteredMatchups
-  const filteredAndMatchedRecommendations = useMemo(() => {
-    return (filteredRecommendations ?? []).filter(
-      player =>
-        validPlayerIds.has(String(player.dg_id)) &&
-        validMatchupIds.has(String(player.matchupId))
-    );
-  }, [filteredRecommendations, validPlayerIds, validMatchupIds]);
+  // Use filtered recommendations directly - no cross-filtering with main matchups table
+  const finalRecommendations = filteredRecommendations;
 
   // Function to add a player to the parlay
   const addToParlay = (selection: ParlaySelection, playerId: string) => {
@@ -228,7 +236,7 @@ export default function RecommendedPicks({
   useEffect(() => {
     // Find players that are currently in recommendations and also in selections
     const newAddedPlayers: Record<string, boolean> = {};
-    (filteredRecommendations ?? []).forEach((player: Player) => {
+    (finalRecommendations ?? []).forEach((player: Player) => {
       let formattedPlayerName = player.name
       if (formattedPlayerName.includes(",")) {
         const [lastName, firstName] = formattedPlayerName.split(",").map(part => part.trim())
@@ -245,5 +253,267 @@ export default function RecommendedPicks({
       newAddedPlayers[String(player.dg_id)] = isInParlay
     })
     setAddedPlayers(newAddedPlayers)
-  }, [filteredRecommendations, selections])
+  }, [finalRecommendations, selections])
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        {showFilters && !shouldUseExternalData && (
+          <Card className="glass-card">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FilterIcon className="h-5 w-5" />
+                Recommendation Filters
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Skeleton className="h-8 w-full" />
+            </CardContent>
+          </Card>
+        )}
+        <Card className="glass-card">
+          <CardContent className="p-4">
+            <div className="space-y-4">
+              {Array.from({ length: 5 }).map((_, index) => (
+                <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-3 w-24" />
+                  </div>
+                  <Skeleton className="h-8 w-16" />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <Alert variant="destructive" className="glass-card">
+        <AlertCircle className="h-4 w-4" />
+        <AlertTitle>Error Loading Recommendations</AlertTitle>
+        <AlertDescription>
+          {error?.message || "Failed to load recommended picks. Please try again."}
+        </AlertDescription>
+      </Alert>
+    )
+  }
+
+  if (!finalRecommendations || finalRecommendations.length === 0) {
+    return (
+      <div className="space-y-4">
+        {showFilters && !shouldUseExternalData && (
+          <FilterPanel
+            selectedFilters={filterManager.selectedFilters}
+            onFiltersChange={(filterIds) => {
+              // Clear existing filters and add new ones
+              filterManager.clearAllFilters()
+              filterIds.forEach(id => filterManager.addFilter(id))
+            }}
+            filterOptions={filterManager.filterOptions}
+            onFilterOptionsChange={filterManager.updateFilterOptions}
+            multiSelect={true}
+            showResultCount={true}
+            resultCount={0}
+            isLoading={isLoading}
+            compact={compactFilters}
+          />
+        )}
+        <Alert className="glass-card">
+          <Info className="h-4 w-4" />
+          <AlertTitle>No Recommendations Available</AlertTitle>
+          <AlertDescription>
+            {!shouldUseExternalData && filterManager.hasFilters 
+              ? `No players match your current filters. Try adjusting your filter criteria.`
+              : `No recommended picks found for the selected event and criteria.`
+            }
+          </AlertDescription>
+        </Alert>
+      </div>
+    )
+  }
+
+  return (
+    <TooltipProvider>
+      <div className="space-y-4">
+        {/* Filter Section - only show if not using external data */}
+        {showFilters && !shouldUseExternalData && (
+          <FilterPanel
+            selectedFilters={filterManager.selectedFilters}
+            onFiltersChange={(filterIds) => {
+              // Clear existing filters and add new ones
+              filterManager.clearAllFilters()
+              filterIds.forEach(id => filterManager.addFilter(id))
+            }}
+            filterOptions={filterManager.filterOptions}
+            onFilterOptionsChange={filterManager.updateFilterOptions}
+            multiSelect={true}
+            showResultCount={true}
+            resultCount={finalRecommendations.length}
+            isLoading={isLoading}
+            compact={compactFilters}
+          />
+        )}
+
+        {/* Results Summary - only show if not using external data */}
+        {!shouldUseExternalData && filterManager.hasFilters && (
+          <Card className="glass-card">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Badge variant="outline" className="text-sm">
+                    {filteredCount} of {originalCount} players
+                  </Badge>
+                  {appliedFilters.length > 0 && (
+                    <FilterChipList
+                      filterIds={appliedFilters}
+                      onRemove={filterManager.removeFilter}
+                      onClearAll={filterManager.clearAllFilters}
+                      size="sm"
+                      maxVisible={3}
+                    />
+                  )}
+                </div>
+                {performance.filterTime > 0 && (
+                  <Badge variant="secondary" className="text-xs">
+                    {Math.round(performance.filterTime)}ms
+                  </Badge>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Recommendations */}
+        <Card className="glass-card">
+          <CardHeader>
+            <CardTitle className="text-lg">
+              Recommended Picks
+              {eventId && <span className="text-sm font-normal text-muted-foreground ml-2">Event {eventId}</span>}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4">
+            <div className="space-y-3">
+              {finalRecommendations.map((player: Player, index: number) => {
+                const playerId = String(player.dg_id);
+                const { inParlay, selectionId } = isPlayerInParlay(playerId, player.name);
+                const isInOtherParlay = isPlayerInAnyParlay(player.name);
+
+                return (
+                  <div
+                    key={`${player.dg_id}-${player.matchupId}-${index}`}
+                    className={`
+                      p-4 border rounded-lg transition-colors
+                      ${inParlay ? 'bg-primary/5 border-primary' : 'bg-card border-border'}
+                      ${isInOtherParlay && !inParlay ? 'bg-yellow-50 border-yellow-200' : ''}
+                    `}
+                  >
+                    {/* Player Header */}
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-semibold text-base text-foreground">{player.name}</h3>
+                      {isInOtherParlay && !inParlay && (
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <Info className="h-4 w-4 text-yellow-500" />
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Player is in another parlay</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
+
+                    {/* Stats Grid */}
+                    <div className="grid grid-cols-2 gap-3 mb-4">
+                      {/* Odds */}
+                      <div className="text-center">
+                        <div className="text-lg font-bold text-foreground">{formatOdds(player.odds)}</div>
+                        <div className="text-xs text-muted-foreground">Odds</div>
+                      </div>
+                      
+                      {/* Gap (if exists) */}
+                      {(player as any).oddsGapToNext ? (
+                        <div className="text-center">
+                          <div className="text-lg font-bold text-green-600">+{((player as any).oddsGapToNext).toFixed(2)}</div>
+                          <div className="text-xs text-muted-foreground">Gap</div>
+                        </div>
+                      ) : (
+                        <div className="text-center">
+                          <div className={`text-lg font-bold ${getSGColorClass(player.sgTotal)}`}>
+                            {player.sgTotal?.toFixed(2) ?? 'N/A'}
+                          </div>
+                          <div className="text-xs text-muted-foreground">SG Total</div>
+                        </div>
+                      )}
+                      
+                      {/* SG Total (when gap exists) */}
+                      {(player as any).oddsGapToNext && (
+                        <div className="text-center">
+                          <div className={`text-sm font-semibold ${getSGColorClass(player.sgTotal)}`}>
+                            {player.sgTotal?.toFixed(2) ?? 'N/A'}
+                          </div>
+                          <div className="text-xs text-muted-foreground">SG Total</div>
+                        </div>
+                      )}
+                      
+                      {/* Season SG */}
+                      {player.seasonSgTotal && (
+                        <div className="text-center">
+                          <div className="text-sm font-semibold text-blue-600">
+                            {player.seasonSgTotal.toFixed(2)}
+                          </div>
+                          <div className="text-xs text-muted-foreground">Season</div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action Button */}
+                    <div className="flex justify-center">
+                      {inParlay ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => selectionId && removeFromParlay(selectionId, playerId, player.name)}
+                          className="text-destructive hover:text-destructive w-full"
+                        >
+                          Remove from Parlay
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={() => {
+                            const selection: ParlaySelection = {
+                              id: `${player.dg_id}-${player.matchupId}`,
+                              matchupType: matchupType,
+                              group: `Event ${eventId || 'Unknown'}`,
+                              player: player.name,
+                              odds: player.odds,
+                              matchupId: String(player.matchupId),
+                              eventName: player.eventName || '',
+                              roundNum: player.roundNum || roundNum || 1,
+                              valueRating: player.valueRating || 7.5,
+                              confidenceScore: player.confidenceScore || 75
+                            }
+                            addToParlay(selection, playerId)
+                          }}
+                          className="w-full"
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add to Parlay
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </TooltipProvider>
+  )
 }

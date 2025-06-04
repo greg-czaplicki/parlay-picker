@@ -67,9 +67,23 @@ export function useRecommendedPicksQuery(
   // Flatten matchups to player array
   const players: Player[] = useMemo(() => {
     const matchupsData = matchupsQuery.data || [];
+    console.log('RECOMMENDED_PICKS_DEBUG: Raw matchups data length:', matchupsData.length);
+    
     let result: Player[] = [];
     for (const apiMatchup of matchupsData) {
       if (!apiMatchup || typeof apiMatchup !== 'object') continue;
+      
+      console.log('RECOMMENDED_PICKS_DEBUG: Processing matchup:', {
+        id: apiMatchup.id,
+        type: matchupType,
+        player1: apiMatchup.player1_name,
+        player2: apiMatchup.player2_name,
+        player3: apiMatchup.player3_name,
+        odds1: apiMatchup.odds1,
+        odds2: apiMatchup.odds2,
+        odds3: apiMatchup.odds3
+      });
+      
       if (matchupType === "3ball") {
         if (!apiMatchup.player1_name || !apiMatchup.player2_name || !apiMatchup.player3_name) continue;
         result.push(
@@ -81,7 +95,7 @@ export function useRecommendedPicksQuery(
             valueRating: 0,
             confidenceScore: 0,
             isRecommended: false,
-            matchupId: apiMatchup.id,
+            matchupId: apiMatchup.uuid,
             eventName: apiMatchup.event_name,
             roundNum: apiMatchup.round_num
           },
@@ -93,7 +107,7 @@ export function useRecommendedPicksQuery(
             valueRating: 0,
             confidenceScore: 0,
             isRecommended: false,
-            matchupId: apiMatchup.id,
+            matchupId: apiMatchup.uuid,
             eventName: apiMatchup.event_name,
             roundNum: apiMatchup.round_num
           },
@@ -105,7 +119,7 @@ export function useRecommendedPicksQuery(
             valueRating: 0,
             confidenceScore: 0,
             isRecommended: false,
-            matchupId: apiMatchup.id,
+            matchupId: apiMatchup.uuid,
             eventName: apiMatchup.event_name,
             roundNum: apiMatchup.round_num
           }
@@ -122,7 +136,7 @@ export function useRecommendedPicksQuery(
             valueRating: 0,
             confidenceScore: 0,
             isRecommended: false,
-            matchupId: apiMatchup.id,
+            matchupId: apiMatchup.uuid,
             eventName: apiMatchup.event_name,
             roundNum: apiMatchup.round_num
           },
@@ -134,13 +148,17 @@ export function useRecommendedPicksQuery(
             valueRating: 0,
             confidenceScore: 0,
             isRecommended: false,
-            matchupId: apiMatchup.id,
+            matchupId: apiMatchup.uuid,
             eventName: apiMatchup.event_name,
             roundNum: apiMatchup.round_num
           }
         );
       }
     }
+    
+    console.log('RECOMMENDED_PICKS_DEBUG: Final players array length:', result.length);
+    console.log('RECOMMENDED_PICKS_DEBUG: Sample players:', result.slice(0, 3));
+    
     return result;
   }, [matchupsQuery.data, matchupType]);
 
