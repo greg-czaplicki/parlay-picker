@@ -14,17 +14,112 @@ export async function POST(req: NextRequest) {
   if (!user_id || !Array.isArray(picks) || picks.length === 0) {
     return NextResponse.json({ error: 'Missing user_id or picks' }, { status: 400 })
   }
-  // Insert parlay (new schema)
+  
+  // Get matchup data for all picks to calculate odds and store snapshot data
+  const pickMatchupIds = picks.map((pick: any) => pick.matchup_id).filter(Boolean)
+  let matchupData = []
+  if (pickMatchupIds.length > 0) {
+    const { data: matchupsData, error: matchupsError } = await supabase
+      .from('matchups')
+      .select('*')
+      .in('uuid', pickMatchupIds)
+    if (matchupsError) return NextResponse.json({ error: matchupsError.message }, { status: 400 })
+    matchupData = matchupsData || []
+  }
+  
+  // Calculate total parlay odds and validate picks
+  let totalDecimalOdds = 1.0
+  const defaultStake = amount || 10
+  const picksToInsert = []
+  
+  for (const pick of picks) {
+    const matchup = matchupData.find((m: any) => m.uuid === pick.matchup_id)
+    if (!matchup) {
+      return NextResponse.json({ error: `Matchup not found: ${pick.matchup_id}` }, { status: 400 })
+    }
+    
+    // Determine player position and get snapshot data
+    let playerPosition = 0
+    let playerName = ''
+    let playerOdds = 0
+    
+    if (matchup.player1_dg_id === pick.picked_player_dg_id) {
+      playerPosition = 1
+      playerName = matchup.player1_name || ''
+      const decimalOdds = Number(matchup.odds1) || 0
+      // Convert decimal odds to American odds for storage (with safety checks)
+      if (decimalOdds <= 1) {
+        playerOdds = 100 // Default for invalid odds
+      } else if (decimalOdds >= 2.0) {
+        playerOdds = Math.round((decimalOdds - 1) * 100)  // Positive American odds
+      } else {
+        playerOdds = Math.round(-100 / (decimalOdds - 1)) // Negative American odds
+      }
+    } else if (matchup.player2_dg_id === pick.picked_player_dg_id) {
+      playerPosition = 2
+      playerName = matchup.player2_name || ''
+      const decimalOdds = Number(matchup.odds2) || 0
+      if (decimalOdds <= 1) {
+        playerOdds = 100
+      } else if (decimalOdds >= 2.0) {
+        playerOdds = Math.round((decimalOdds - 1) * 100)
+      } else {
+        playerOdds = Math.round(-100 / (decimalOdds - 1))
+      }
+    } else if (matchup.player3_dg_id === pick.picked_player_dg_id) {
+      playerPosition = 3
+      playerName = matchup.player3_name || ''
+      const decimalOdds = Number(matchup.odds3) || 0
+      if (decimalOdds <= 1) {
+        playerOdds = 100
+      } else if (decimalOdds >= 2.0) {
+        playerOdds = Math.round((decimalOdds - 1) * 100)
+      } else {
+        playerOdds = Math.round(-100 / (decimalOdds - 1))
+      }
+    } else {
+      return NextResponse.json({ error: `Player DG ID ${pick.picked_player_dg_id} not found in matchup ${pick.matchup_id}` }, { status: 400 })
+    }
+    
+    // Calculate decimal odds for this pick (using the original decimal odds)
+    const decimalOddsForCalculation = playerOdds > 0 
+      ? (playerOdds / 100) + 1
+      : (100 / Math.abs(playerOdds)) + 1
+    
+    // Only multiply if we have valid odds
+    if (decimalOddsForCalculation > 1) {
+      totalDecimalOdds *= decimalOddsForCalculation
+    }
+    
+    picksToInsert.push({
+      matchup_id: pick.matchup_id,
+      pick: playerPosition,
+      picked_player_name: playerName,
+      picked_player_dg_id: pick.picked_player_dg_id,
+      picked_player_odds: playerOdds,
+      pick_outcome: 'pending',
+      outcome: 'void', // Legacy field
+    })
+  }
+  
+  // Calculate final parlay odds and payout
+  const americanOdds = totalDecimalOdds >= 2.0 
+    ? Math.round((totalDecimalOdds - 1) * 100)
+    : Math.round(-100 / (totalDecimalOdds - 1))
+  const calculatedPayout = Math.round(defaultStake * totalDecimalOdds)
+  const firstRound = matchupData[0]?.round_num || round_num || 1
+  
+  // Insert parlay with calculated values
   const { data: parlay, error: parlayError } = await supabase
     .from('parlays')
     .insert([
       {
-        name,
         user_id,
-        amount,
-        odds,
-        payout,
-        round_num,
+        amount: defaultStake,
+        total_odds: americanOdds,
+        potential_payout: calculatedPayout,
+        actual_payout: 0.00,
+        round_num: firstRound,
         outcome: 'push',
         payout_amount: '0.00',
       },
@@ -32,33 +127,34 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
   if (parlayError) return NextResponse.json({ error: parlayError.message }, { status: 400 })
-  // Insert picks (new schema)
-  const picksToInsert = picks.map((pick: any) => ({
-    parlay_id: parlay.id,
-    matchup_id: pick.matchup_id,
-    picked_player_dg_id: pick.picked_player_dg_id,
-    picked_player_name: pick.picked_player_name,
-    outcome: 'void',
+  
+  // Insert picks with snapshot data
+  const picksWithParlayId = picksToInsert.map(pick => ({
+    ...pick,
+    parlay_id: parlay.uuid,
   }))
-  const { error: picksError } = await supabase.from('parlay_picks').insert(picksToInsert)
+  const { error: picksError } = await supabase.from('parlay_picks').insert(picksWithParlayId)
   if (picksError) return NextResponse.json({ error: picksError.message }, { status: 400 })
+  
   return NextResponse.json({ parlay })
 }
 
-// GET: Fetch all parlays for a user, with picks, matchups, and players
+// GET: Fetch all parlays for a user, with picks and live stats overlay
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const user_id = searchParams.get('user_id')
   if (!user_id) return NextResponse.json({ parlays: [] })
-  // Fetch parlays
+  
+  // Fetch parlays with stored calculated values
   const { data: parlays, error: parlaysError } = await supabase
     .from('parlays')
     .select('*')
     .eq('user_id', user_id)
     .order('created_at', { ascending: false })
   if (parlaysError) return NextResponse.json({ error: parlaysError.message }, { status: 400 })
-  // Fetch picks for all parlays
-  const parlayIds = parlays.map((p: any) => p.id)
+  
+  // Fetch picks with stored snapshot data
+  const parlayIds = parlays.map((p: any) => p.uuid)
   let picks = []
   if (parlayIds.length > 0) {
     const { data: picksData, error: picksError } = await supabase
@@ -68,119 +164,127 @@ export async function GET(req: NextRequest) {
     if (picksError) return NextResponse.json({ error: picksError.message }, { status: 400 })
     picks = picksData
   }
-  // Fetch matchups and players for all picks
+  
+  // Fetch matchups only for live stats lookup (we already have player info stored)
   const matchupIds = picks.map((pick: any) => pick.matchup_id).filter(Boolean)
-  const playerDgIds = picks.map((pick: any) => pick.picked_player_dg_id).filter(Boolean)
-  let matchups = []
-  let players = []
+  let matchups: any[] = []
   if (matchupIds.length > 0) {
     const { data: matchupsData, error: matchupsError } = await supabase
       .from('matchups')
-      .select('*')
-      .in('id', matchupIds)
+      .select('uuid, type, round_num, event_id, player1_name, player2_name, player3_name, player1_dg_id, player2_dg_id, player3_dg_id, odds1, odds2, odds3')
+      .in('uuid', matchupIds)
     if (matchupsError) return NextResponse.json({ error: matchupsError.message }, { status: 400 })
-    matchups = matchupsData
-  }
-  if (playerDgIds.length > 0) {
-    const { data: playersData, error: playersError } = await supabase
-      .from('players')
-      .select('*')
-      .in('dg_id', playerDgIds)
-    if (playersError) return NextResponse.json({ error: playersError.message }, { status: 400 })
-    players = playersData
+    matchups = matchupsData || []
   }
 
-  // --- NEW: Fetch live stats for all players in all matchups for the correct round(s) ---
-  // Collect all player names and round numbers from matchups
-  const allPlayerNames = new Set<string>();
-  const allRoundNums = new Set<number>();
+  // Get tournament names for the events in our matchups
+  const eventIds = [...new Set(matchups.map((m: any) => m.event_id).filter(Boolean))]
+  let tournamentNames: string[] = []
+  if (eventIds.length > 0) {
+    const { data: tournamentsData, error: tournamentsError } = await supabase
+      .from('tournaments')
+      .select('event_name')
+      .in('event_id', eventIds)
+    if (!tournamentsError && tournamentsData) {
+      tournamentNames = tournamentsData.map((t: any) => t.event_name).filter(Boolean)
+    }
+  }
+
+  // Fetch live stats for all players in all matchups (filtered by current tournament)
+  const allPlayerNames = new Set<string>()
+  const allRoundNums = new Set<number>()
   matchups.forEach((m: any) => {
-    if (m.player1_name) allPlayerNames.add(m.player1_name);
-    if (m.player2_name) allPlayerNames.add(m.player2_name);
-    if (m.player3_name) allPlayerNames.add(m.player3_name);
-    if (m.round_num) allRoundNums.add(m.round_num);
-  });
-  let liveStats: any[] = [];
-  if (allPlayerNames.size > 0 && allRoundNums.size > 0) {
+    if (m.player1_name) allPlayerNames.add(m.player1_name)
+    if (m.player2_name) allPlayerNames.add(m.player2_name)
+    if (m.player3_name) allPlayerNames.add(m.player3_name)
+    if (m.round_num) allRoundNums.add(m.round_num)
+  })
+  
+  let liveStats: any[] = []
+  if (allPlayerNames.size > 0 && allRoundNums.size > 0 && tournamentNames.length > 0) {
     const { data: statsData, error: statsError } = await supabase
       .from('live_tournament_stats')
-      .select('player_name,round_num,position,total,thru,today')
+      .select('player_name,round_num,position,total,thru,today,event_name')
       .in('player_name', Array.from(allPlayerNames))
-      .in('round_num', Array.from(allRoundNums).map(String));
-    if (!statsError && statsData) liveStats = statsData;
+      .in('round_num', Array.from(allRoundNums).map(String))
+      .in('event_name', tournamentNames)  // Only get stats from the actual tournaments
+    if (!statsError && statsData) liveStats = statsData
   }
+  
   // Helper to get stats for a player/round
   function getStats(playerName: string, roundNum: number) {
     return liveStats.find(
-      (s) => s.player_name === playerName && String(s.round_num) === String(roundNum)
-    );
+      (s) => s.player_name === playerName && 
+             String(s.round_num) === String(roundNum)
+    )
   }
-  // --- END NEW ---
 
-  // Assemble UI-ready parlays
-  console.log('DEBUG: picks', JSON.stringify(picks, null, 2));
-  console.log('DEBUG: matchups', JSON.stringify(matchups, null, 2));
+  // Build parlays with picks using stored data + live stats overlay
   const parlaysWithDetails = parlays.map((parlay: any) => {
-    const parlayPicks = picks.filter((pick: any) => pick.parlay_id === parlay.id)
+    const parlayPicks = picks.filter((pick: any) => pick.parlay_id === parlay.uuid)
     const picksWithDetails = parlayPicks.map((pick: any) => {
-      const matchup = matchups.find((m: any) => String(m.id) === String(pick.matchup_id))
-      console.log('DEBUG: pick.matchup_id', pick.matchup_id, 'matched matchup:', matchup)
-      // Build full player array for the matchup, merging stats
-      let playersInMatchup: any[] = [];
+      const matchup = matchups.find((m: any) => String(m.uuid) === String(pick.matchup_id))
+      
+      // Build player array for the matchup with live stats overlay
+      let playersInMatchup: any[] = []
       if (matchup) {
-        if (matchup.player1_id && matchup.player1_name) {
-          const stats = getStats(matchup.player1_name, matchup.round_num) || {};
+        if (matchup.player1_dg_id && matchup.player1_name) {
+          const stats = getStats(matchup.player1_name, matchup.round_num) || {}
           playersInMatchup.push({
-            id: matchup.player1_id,
+            id: matchup.player1_dg_id,
             name: matchup.player1_name,
-            isUserPick: pick.picked_player_dg_id === matchup.player1_dg_id,
+            isUserPick: pick.pick === 1,
             currentPosition: typeof stats.position === 'string' ? stats.position : '-',
             totalScore: typeof stats.total === 'number' ? stats.total : Number(stats.total) || 0,
             roundScore: typeof stats.today === 'number' ? stats.today : Number(stats.today) || 0,
             holesPlayed: typeof stats.thru === 'number' ? stats.thru : 0,
             totalHoles: 18,
-          });
+          })
         }
-        if (matchup.player2_id && matchup.player2_name) {
-          const stats = getStats(matchup.player2_name, matchup.round_num) || {};
+        if (matchup.player2_dg_id && matchup.player2_name) {
+          const stats = getStats(matchup.player2_name, matchup.round_num) || {}
           playersInMatchup.push({
-            id: matchup.player2_id,
+            id: matchup.player2_dg_id,
             name: matchup.player2_name,
-            isUserPick: pick.picked_player_dg_id === matchup.player2_dg_id,
+            isUserPick: pick.pick === 2,
             currentPosition: typeof stats.position === 'string' ? stats.position : '-',
             totalScore: typeof stats.total === 'number' ? stats.total : Number(stats.total) || 0,
             roundScore: typeof stats.today === 'number' ? stats.today : Number(stats.today) || 0,
             holesPlayed: typeof stats.thru === 'number' ? stats.thru : 0,
             totalHoles: 18,
-          });
+          })
         }
-        if (matchup.type === '3ball' && matchup.player3_id && matchup.player3_name) {
-          const stats = getStats(matchup.player3_name, matchup.round_num) || {};
+        if (matchup.type === '3ball' && matchup.player3_dg_id && matchup.player3_name) {
+          const stats = getStats(matchup.player3_name, matchup.round_num) || {}
           playersInMatchup.push({
-            id: matchup.player3_id,
+            id: matchup.player3_dg_id,
             name: matchup.player3_name,
-            isUserPick: pick.picked_player_dg_id === matchup.player3_dg_id,
+            isUserPick: pick.pick === 3,
             currentPosition: typeof stats.position === 'string' ? stats.position : '-',
             totalScore: typeof stats.total === 'number' ? stats.total : Number(stats.total) || 0,
             roundScore: typeof stats.today === 'number' ? stats.today : Number(stats.today) || 0,
             holesPlayed: typeof stats.thru === 'number' ? stats.thru : 0,
             totalHoles: 18,
-          });
+          })
         }
       }
-      console.log('DEBUG: playersInMatchup for pick', pick.id, playersInMatchup)
+      
       // Always return a players array (never undefined)
-      if (!Array.isArray(playersInMatchup)) playersInMatchup = [];
+      if (!Array.isArray(playersInMatchup)) playersInMatchup = []
       return {
         ...pick,
         players: playersInMatchup,
       }
     })
+    
+    // Return parlay with stored calculated values (no more calculations needed!)
     return {
       ...parlay,
+      odds: parlay.total_odds,        // Map total_odds to odds for frontend
+      payout: parlay.potential_payout, // Map potential_payout to payout for frontend
       picks: Array.isArray(picksWithDetails) ? picksWithDetails : [],
     }
   })
-  console.log('API response:', JSON.stringify(parlaysWithDetails, null, 2));
+  
   return NextResponse.json({ parlays: parlaysWithDetails })
 } 

@@ -51,12 +51,24 @@ export default function ParlaySummary({ selections, userId = '00000000-0000-0000
       return
     }
     // Defensive check for missing picked_player_dg_id
-    const picks = selections.map(s => ({
-      matchup_id: s.matchupId,
-      picked_player_dg_id: s.id,
-      picked_player_name: s.player,
-    }))
+    const picks = selections.map(s => {
+      // Extract player DG ID from the concatenated id format "23841-uuid"
+      let playerDgId: number | undefined;
+      if (s.id) {
+        const idParts = String(s.id).split('-');
+        if (idParts.length > 0 && !isNaN(Number(idParts[0]))) {
+          playerDgId = Number(idParts[0]);
+        }
+      }
+      
+      return {
+        matchup_id: s.matchupId,
+        picked_player_dg_id: playerDgId!,  // Use non-null assertion since we validate below
+        picked_player_name: s.player,
+      };
+    })
     console.log('Submitting picks:', picks)
+    // Check if any picks are missing player DG ID after extraction
     if (picks.some(p => !p.picked_player_dg_id || typeof p.picked_player_dg_id !== 'number' || isNaN(p.picked_player_dg_id))) {
       toast({
         title: "Invalid Pick",
@@ -77,7 +89,7 @@ export default function ParlaySummary({ selections, userId = '00000000-0000-0000
         odds: totalOdds,
         payout,
         round_num: selections[0]?.roundNum || null,
-        picks,
+        picks: picks as any,  // Cast to any to bypass TypeScript error
       })
       toast({
         title: "Parlay Submitted",

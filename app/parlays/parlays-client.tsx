@@ -61,7 +61,7 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
     }));
     const status: 'likely' | 'close' | 'unlikely' = parlay.is_settled ? 'close' : 'likely';
     return {
-      parlayId: parlay.id,
+      parlayId: parlay.uuid,
       amount: Number(parlay.amount) || 0,
       odds: Number(parlay.odds) || 0,
       payout: Number(parlay.payout) || 0,
@@ -159,7 +159,7 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
             // Show all picks for each parlay
             return (
               <div
-                key={parlay.id}
+                key={parlay.uuid}
                 className="relative rounded-lg shadow-md border bg-neutral-900 border-border mb-6"
               >
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 pt-4 pb-2">
@@ -180,25 +180,6 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
                   </div>
                 </div>
                 <div className="grid gap-4 px-6 pb-4">
-                  {/* Show picks for this parlay */}
-                  <ul className="mb-4">
-                    {parlay.picks && parlay.picks.length > 0 ? (
-                      parlay.picks.map((pick: any) => (
-                        <li key={pick.id} className="text-sm text-neutral-200">
-                          <span className="font-semibold">{pick.picked_player_name}</span>
-                          {pick.picked_player_dg_id ? (
-                            <span className="ml-2 text-xs text-neutral-400">(ID: {pick.picked_player_dg_id})</span>
-                          ) : null}
-                          {pick.matchup_id ? (
-                            <span className="ml-2 text-xs text-neutral-400">Matchup: {pick.matchup_id}</span>
-                          ) : null}
-                          <span className="ml-2 text-xs text-neutral-400">Outcome: {pick.outcome}</span>
-                        </li>
-                      ))
-                    ) : (
-                      <li className="text-xs text-neutral-400">No picks found for this parlay.</li>
-                    )}
-                  </ul>
                   {cardProps.picks.map((pick, mIdx) => {
                     if (!pick.players) return null;
                     const userPick = pick.players.find((p: ParlayPlayerDisplay) => p.isUserPick);
