@@ -130,7 +130,7 @@ export function useColumns<T>({ dataView, getHeatmapColor }: UseColumnsProps<T>)
             cell: ({ row }: { row: Row<T> }) => {
               // @ts-expect-error: dynamic property access
               const value = row.original.driving_accuracy
-              const colorClass = getHeatmapColor(value, "driving_accuracy", false)
+              const colorClass = getHeatmapColor(value, "driving_accuracy", true)
               return <StatCell value={value} colorClass={colorClass} precision={1} isPercentage={true} />
             },
           },

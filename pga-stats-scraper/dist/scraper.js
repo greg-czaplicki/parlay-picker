@@ -330,7 +330,7 @@ async function scrapeStatsCategory(category, debugMode = false) {
                     valueHeaderPatterns.push('PUTT', 'SG:PUTT', 'SG: PUTT', 'SG PUTT', 'PUTTING');
                     break;
                 case 'DRIVING_ACCURACY':
-                    valueHeaderPatterns.push('ACCURACY', 'DRIVING ACC', 'FAIRWAY', 'FAIRWAYS HIT', 'ACC');
+                    valueHeaderPatterns.push('ACCURACY', 'DRIVING ACC', 'FAIRWAY', 'FAIRWAYS HIT', 'ACC', 'PERCENTAGE', '%', 'PCT', 'DRIVING ACCURACY PERCENTAGE', 'FAIRWAY PCT');
                     break;
                 case 'DRIVING_DISTANCE':
                     valueHeaderPatterns.push('DISTANCE', 'DRIVING DIST', 'DRIVE DIST', 'DIST', 'YARDS');
@@ -522,21 +522,34 @@ async function scrapeStatsCategory(category, debugMode = false) {
                         player.sgPutt = statValue;
                         break;
                     case 'DRIVING_ACCURACY':
-                        // PGA Tour shows this as a percentage already, but if it's a raw value over 100, divide by 100
-                        if (typeof statValue === 'number') {
-                            if (statValue > 100) {
+                        // PGA Tour driving accuracy should be a percentage (e.g., 64.52%, 73.43%)
+                        logDebug(`Processing DRIVING_ACCURACY for ${playerName}: raw value = "${statValue}" (type: ${typeof statValue})`);
+                        if (typeof statValue === 'string' && statValue.includes('%')) {
+                            // For percentage format (e.g., "73.43%"), remove % and convert to decimal
+                            const percentageValue = parseFloat(statValue.replace('%', ''));
+                            player.drivingAccuracy = percentageValue / 100; // Convert to decimal (0.7343)
+                            logDebug(`Converted percentage string "${statValue}" to decimal: ${player.drivingAccuracy}`);
+                        }
+                        else if (typeof statValue === 'number') {
+                            if (statValue > 1.0 && statValue <= 100) {
+                                // If it's a number between 1-100, treat as percentage and convert to decimal
                                 player.drivingAccuracy = statValue / 100;
+                                logDebug(`Converted percentage number ${statValue} to decimal: ${player.drivingAccuracy}`);
+                            }
+                            else if (statValue > 0 && statValue <= 1.0) {
+                                // If it's already a decimal between 0-1, use as is
+                                player.drivingAccuracy = statValue;
+                                logDebug(`Using decimal value as-is: ${player.drivingAccuracy}`);
                             }
                             else {
-                                player.drivingAccuracy = statValue;
+                                // Unexpected value - might be wrong column
+                                logDebug(`Unexpected driving accuracy value: ${statValue} - might be wrong column`);
+                                player.drivingAccuracy = null;
                             }
                         }
-                        else if (typeof statValue === 'string' && statValue.includes('%')) {
-                            // For percentage format (e.g., "67.5%"), remove % and convert to number
-                            player.drivingAccuracy = parseFloat(statValue.replace('%', '')) / 100;
-                        }
                         else {
-                            player.drivingAccuracy = statValue;
+                            logDebug(`Could not parse driving accuracy value: ${statValue}`);
+                            player.drivingAccuracy = null;
                         }
                         break;
                     case 'DRIVING_DISTANCE':
