@@ -6,6 +6,7 @@ import { getCoreRowModel, getSortedRowModel, useReactTable } from '@tanstack/rea
 import { PlayerTablePresentation } from './player-table-presentation'
 import { PlayerTableFilters } from './player-table-filters'
 import { PlayerTableSkeleton } from './player-table-skeleton'
+import { generateHeatmapColors, GOLF_STAT_CONFIGS } from '@/lib/utils/heatmap'
 
 /**
  * SeasonPlayerTableContainer
@@ -30,9 +31,31 @@ function SeasonPlayerTableContainerComponent() {
     offset 
   })
 
+  // Prepare data 
+  const displayPlayers = seasonStats ?? []
+
+  // Simple heatmap color function that calculates on demand
+  const getHeatmapColor = useCallback((value: number | null, statKey: string): string => {
+    if (!displayPlayers.length || value === null) return ''
+    
+    // Get all values for this stat from current data
+    const values = displayPlayers.map(player => player[statKey as keyof typeof player] as number | null)
+    const config = GOLF_STAT_CONFIGS[statKey] || GOLF_STAT_CONFIGS.higher_better
+    const colors = generateHeatmapColors(values, config)
+    
+    // Find the index of this value
+    const playerIndex = displayPlayers.findIndex(player => 
+      player[statKey as keyof typeof player] === value
+    )
+    
+    if (playerIndex >= 0 && colors[playerIndex]) {
+      return JSON.stringify(colors[playerIndex])
+    }
+    
+    return ''
+  }, [displayPlayers])
+
   // Simple callbacks
-  const getHeatmapColor = useCallback(() => '', [])
-  
   const handleDataSourceChange = useCallback((newDataSource: 'data_golf' | 'pga_tour') => {
     setDataSource(newDataSource)
     setCurrentPage(0)
@@ -48,9 +71,8 @@ function SeasonPlayerTableContainerComponent() {
     }
   }, [seasonStats, limit])
 
-  // Simple memoized values
+  // Simple columns call
   const columns = useColumns({ dataView: 'season', getHeatmapColor })
-  const displayPlayers = seasonStats ?? []
 
   // Direct useReactTable call - no complex memoization
   const table = useReactTable({

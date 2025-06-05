@@ -21,18 +21,30 @@ interface StatCellProps {
 }
 
 export const StatCell = React.memo(function StatCell({ value, colorClass, trend, precision = 2, isPercentage = false }: StatCellProps) {
-  // Debug: log render and props
-  // console.log('[StatCell] render', { value, colorClass, trend });
-  // Only use inline style for non-heatmap cases
-  let dynamicStyle: React.CSSProperties = {};
-  let className = colorClass;
+  // Parse heatmap style information if provided
+  let dynamicStyle: React.CSSProperties = {}
+  let className = colorClass
+
+  // Check if colorClass contains heatmap style information (JSON format)
+  if (colorClass.startsWith('{') && colorClass.endsWith('}')) {
+    try {
+      const styleInfo = JSON.parse(colorClass)
+      if (styleInfo.style) {
+        dynamicStyle = styleInfo.style
+        className = styleInfo.className || ''
+      }
+    } catch (e) {
+      // If parsing fails, treat as regular className
+      className = colorClass
+    }
+  }
 
   // If no trend, render a simple cell (no tooltip, no event handlers, no state)
   if (!trend) {
     return (
       <div 
         style={dynamicStyle}
-        className={`font-medium truncate ${className} w-full flex justify-center items-center`}
+        className={`font-medium truncate ${className} w-full flex justify-center items-center rounded px-1`}
       >
         <div className="flex items-center justify-center">
           <span className="inline-block min-w-[32px] text-center">
@@ -42,7 +54,6 @@ export const StatCell = React.memo(function StatCell({ value, colorClass, trend,
                 : value.toFixed(precision)
               : 'N/A'}
           </span>
-          {/* Remove the placeholder since we're using fixed-width cells */}
         </div>
       </div>
     )
@@ -53,7 +64,7 @@ export const StatCell = React.memo(function StatCell({ value, colorClass, trend,
     <div className="relative group">
       <div 
         style={dynamicStyle}
-        className={`font-medium truncate ${className} w-full flex justify-center items-center`}
+        className={`font-medium truncate ${className} w-full flex justify-center items-center rounded px-1`}
         role="button"
         tabIndex={0}
         aria-label={trend.title || undefined}
