@@ -523,7 +523,7 @@ export async function scrapeStatsCategory(
         
         // Extract player name and SG value using the dynamically determined columns
         let playerName = '';
-        let statValue = null;
+        let statValue: number | string | null = null;
         
         // Add detailed cell debugging for the first few rows
         if (rowIndex < 3) {
@@ -622,15 +622,17 @@ export async function scrapeStatsCategory(
             break;
           case 'DRIVING_ACCURACY':
             // PGA Tour shows this as a percentage already, but if it's a raw value over 100, divide by 100
-            if (statValue && statValue > 100) {
-              player.drivingAccuracy = statValue / 100;
-            } else {
-              // For percentage format (e.g., "67.5%"), remove % and convert to number
-              if (typeof statValue === 'string' && statValue.includes('%')) {
-                player.drivingAccuracy = parseFloat(statValue.replace('%', '')) / 100;
+            if (typeof statValue === 'number') {
+              if (statValue > 100) {
+                player.drivingAccuracy = statValue / 100;
               } else {
                 player.drivingAccuracy = statValue;
               }
+            } else if (typeof statValue === 'string' && statValue.includes('%')) {
+              // For percentage format (e.g., "67.5%"), remove % and convert to number
+              player.drivingAccuracy = parseFloat(statValue.replace('%', '')) / 100;
+            } else {
+              player.drivingAccuracy = statValue as number | null;
             }
             break;
           case 'DRIVING_DISTANCE':

@@ -76,7 +76,8 @@ async function storePlayerSeasonStats(playerStats) {
         // Convert scraped stats to database format
         const dbFormatStats = playerStats.map(player => {
             // Skip players with no useful data or invalid names
-            if (player.playerName === 'Measured Rounds' || player.playerName === '-') {
+            if (player.playerName === 'Measured Rounds' || player.playerName === '-' ||
+                player.playerName === 'Tour Average' || player.playerName.includes('Average')) {
                 return null;
             }
             // Get DataGolf ID if available

@@ -27,7 +27,97 @@ export function useColumns<T>({ dataView, getHeatmapColor }: UseColumnsProps<T>)
             },
           },
           {
-            accessorKey: "driving_acc",
+            accessorKey: "sg_total",
+            header: ({ column }: { column: Column<T, unknown> }) => (
+              <button 
+                onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+                className="flex items-center cursor-pointer w-full"
+              >
+                SG: Total <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" />
+              </button>
+            ),
+            meta: { headerClassName: 'pl-3', cellClassName: 'pl-3' },
+            cell: ({ row }: { row: Row<T> }) => {
+              // @ts-expect-error: dynamic property access
+              const value = row.original.sg_total
+              const colorClass = getHeatmapColor(value, "sg_total")
+              return <StatCell value={value} colorClass={colorClass} precision={3} />
+            },
+          },
+          {
+            accessorKey: "sg_ott",
+            header: ({ column }: { column: Column<T, unknown> }) => (
+              <button 
+                onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+                className="flex items-center cursor-pointer w-full"
+              >
+                SG: OTT <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" />
+              </button>
+            ),
+            meta: { headerClassName: 'pl-3', cellClassName: 'pl-3' },
+            cell: ({ row }: { row: Row<T> }) => {
+              // @ts-expect-error: dynamic property access
+              const value = row.original.sg_ott
+              const colorClass = getHeatmapColor(value, "sg_ott")
+              return <StatCell value={value} colorClass={colorClass} precision={3} />
+            },
+          },
+          {
+            accessorKey: "sg_app",
+            header: ({ column }: { column: Column<T, unknown> }) => (
+              <button 
+                onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+                className="flex items-center cursor-pointer w-full"
+              >
+                SG: APP <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" />
+              </button>
+            ),
+            meta: { headerClassName: 'pl-3', cellClassName: 'pl-3' },
+            cell: ({ row }: { row: Row<T> }) => {
+              // @ts-expect-error: dynamic property access
+              const value = row.original.sg_app
+              const colorClass = getHeatmapColor(value, "sg_app")
+              return <StatCell value={value} colorClass={colorClass} precision={3} />
+            },
+          },
+          {
+            accessorKey: "sg_arg",
+            header: ({ column }: { column: Column<T, unknown> }) => (
+              <button 
+                onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+                className="flex items-center cursor-pointer w-full"
+              >
+                SG: ARG <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" />
+              </button>
+            ),
+            meta: { headerClassName: 'pl-3', cellClassName: 'pl-3' },
+            cell: ({ row }: { row: Row<T> }) => {
+              // @ts-expect-error: dynamic property access
+              const value = row.original.sg_arg
+              const colorClass = getHeatmapColor(value, "sg_arg")
+              return <StatCell value={value} colorClass={colorClass} precision={3} />
+            },
+          },
+          {
+            accessorKey: "sg_putt",
+            header: ({ column }: { column: Column<T, unknown> }) => (
+              <button 
+                onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+                className="flex items-center cursor-pointer w-full"
+              >
+                SG: PUTT <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" />
+              </button>
+            ),
+            meta: { headerClassName: 'pl-3', cellClassName: 'pl-3' },
+            cell: ({ row }: { row: Row<T> }) => {
+              // @ts-expect-error: dynamic property access
+              const value = row.original.sg_putt
+              const colorClass = getHeatmapColor(value, "sg_putt")
+              return <StatCell value={value} colorClass={colorClass} precision={3} />
+            },
+          },
+          {
+            accessorKey: "driving_accuracy",
             header: ({ column }: { column: Column<T, unknown> }) => (
               <button 
                 onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
@@ -36,16 +126,16 @@ export function useColumns<T>({ dataView, getHeatmapColor }: UseColumnsProps<T>)
                 Driving Acc <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" />
               </button>
             ),
-            meta: { headerClassName: 'pl-3', cellClassName: 'pl-3', customStyles: { cell: { backgroundColor: '#2a2a38' }, header: { backgroundColor: '#2a2a38' } } },
+            meta: { headerClassName: 'pl-3', cellClassName: 'pl-3' },
             cell: ({ row }: { row: Row<T> }) => {
               // @ts-expect-error: dynamic property access
-              const value = (row.original as PlayerSkillRating).driving_acc
-              const colorClass = getHeatmapColor(value, "driving_acc", false)
+              const value = row.original.driving_accuracy
+              const colorClass = getHeatmapColor(value, "driving_accuracy", false)
               return <StatCell value={value} colorClass={colorClass} precision={1} isPercentage={true} />
             },
           },
           {
-            accessorKey: "driving_dist",
+            accessorKey: "driving_distance",
             header: ({ column }: { column: Column<T, unknown> }) => (
               <button 
                 onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
@@ -54,11 +144,11 @@ export function useColumns<T>({ dataView, getHeatmapColor }: UseColumnsProps<T>)
                 Driving Dist <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" />
               </button>
             ),
-            meta: { headerClassName: 'pl-3', cellClassName: 'pl-3', customStyles: { cell: { backgroundColor: '#2a2a38' }, header: { backgroundColor: '#2a2a38' } } },
+            meta: { headerClassName: 'pl-3', cellClassName: 'pl-3' },
             cell: ({ row }: { row: Row<T> }) => {
               // @ts-expect-error: dynamic property access
-              const value = (row.original as PlayerSkillRating).driving_dist
-              const colorClass = getHeatmapColor(value, "driving_dist")
+              const value = row.original.driving_distance
+              const colorClass = getHeatmapColor(value, "driving_distance")
               return <StatCell value={value} colorClass={colorClass} precision={1} />
             },
           },
