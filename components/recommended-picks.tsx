@@ -408,7 +408,7 @@ export default function RecommendedPicks({
                     className={`
                       p-4 border rounded-lg transition-colors
                       ${inParlay ? 'bg-primary/5 border-primary' : 'bg-card border-border'}
-                      ${isInOtherParlay && !inParlay ? 'bg-yellow-50 border-yellow-200' : ''}
+                      ${isInOtherParlay && !inParlay ? 'bg-yellow-50/5 border-yellow-200' : ''}
                     `}
                   >
                     {/* Player Header */}
