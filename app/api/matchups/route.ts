@@ -5,11 +5,32 @@ import { createSupabaseClient } from '@/lib/api-utils'
 export async function GET(req: NextRequest) {
   const supabase = createSupabaseClient()
   const { searchParams } = new URL(req.url)
-  const type = searchParams.get('type')
-  const event_id = searchParams.get('event_id')
-  const round_num = searchParams.get('round_num')
+  const type = searchParams.get('matchupType') || searchParams.get('type')
+  const event_id = searchParams.get('eventId') || searchParams.get('event_id')
+  const round_num = searchParams.get('roundNum') || searchParams.get('round_num')
+  const checkOnly = searchParams.get('checkOnly') === 'true'
 
-  let query = supabase
+  // Handle checkOnly requests separately
+  if (checkOnly) {
+    const baseCountQuery = supabase
+      .from('latest_matchups')
+      .select('*', { count: 'exact', head: true })
+
+    const countQuery = type ? baseCountQuery.eq('type', type) : baseCountQuery
+    const finalCountQuery = event_id ? countQuery.eq('event_id', event_id) : countQuery
+    const completeCountQuery = round_num ? finalCountQuery.eq('round_num', round_num) : finalCountQuery
+
+    const { error, count } = await completeCountQuery
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+    return NextResponse.json({ 
+      matchups: (count ?? 0) > 0 ? [{ available: true }] : [], 
+      count: count ?? 0
+    })
+  }
+
+  // Handle regular data requests
+  const baseQuery = supabase
     .from('latest_matchups')
     .select(`
       uuid,
@@ -33,11 +54,14 @@ export async function GET(req: NextRequest) {
       tee_time,
       created_at
     `)
-  if (type) query = query.eq('type', type)
-  if (event_id) query = query.eq('event_id', event_id)
-  if (round_num) query = query.eq('round_num', round_num)
-  const { data, error } = await query
+
+  const query = type ? baseQuery.eq('type', type) : baseQuery
+  const finalQuery = event_id ? query.eq('event_id', event_id) : query
+  const completeQuery = round_num ? finalQuery.eq('round_num', round_num) : finalQuery
+
+  const { data, error } = await completeQuery
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
   return NextResponse.json({ matchups: data })
 }
 

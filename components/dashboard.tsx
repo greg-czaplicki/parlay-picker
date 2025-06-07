@@ -24,7 +24,7 @@ import { useFilteredPlayers } from "@/hooks/use-filtered-players"
 import { FilterPanel } from "@/components/ui/filter-panel"
 import { FilterChipList } from "@/components/ui/filter-chip"
 import { Badge } from "@/components/ui/badge"
-import { Filter as FilterIcon } from "lucide-react"
+import { Filter as FilterIcon, CloudRain } from "lucide-react"
 
 // Register filters once at module load
 registerCoreFilters()
@@ -48,6 +48,10 @@ export default function Dashboard({
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null)
   const [matchupType, setMatchupType] = useState<"2ball" | "3ball">("3ball")
   const [currentRound, setCurrentRound] = useState<number>(2)
+  const [userSelectedType, setUserSelectedType] = useState(false) // Track if user manually selected
+
+  // Auto-detect available matchup types for the selected event
+  const { data: availableMatchupTypes } = useMatchupTypeQuery(selectedEventId)
 
   // Filter management - only for recommended picks
   const filterManager = useFilterManager({ 
@@ -87,12 +91,100 @@ export default function Dashboard({
 
   useEffect(() => {
     if (!currentEvents || currentEvents.length === 0) return;
-    setSelectedEventId(currentEvents[0].event_id);
-  }, [currentEvents]);
+    
+    // Smart event selection: prioritize events with 3-ball availability for current round
+    const selectBestEvent = async () => {
+      try {
+        // Check each event for 3-ball availability in the current round
+        const eventChecks = await Promise.all(
+          currentEvents.map(async (event) => {
+            try {
+              const response = await fetch(`/api/matchups?eventId=${event.event_id}&matchupType=3ball&roundNum=${currentRound}&checkOnly=true`);
+              const data = await response.json();
+              const hasThreeBalls = data.count > 0;
+              return { event, hasThreeBalls, count: data.count };
+            } catch (error) {
+              return { event, hasThreeBalls: false, count: 0 };
+            }
+          })
+        );
+
+        // Prioritize events with 3-ball matchups for current round
+        const eventsWithThreeBalls = eventChecks.filter(check => check.hasThreeBalls);
+        
+        if (eventsWithThreeBalls.length > 0) {
+          // If multiple events have 3-balls, prefer the one with most matchups
+          const bestEvent = eventsWithThreeBalls.sort((a, b) => b.count - a.count)[0];
+          setSelectedEventId(bestEvent.event.event_id);
+          
+          // Show celebration for weekend 3-balls (weather-induced)
+          if (currentRound >= 3) {
+            toast({
+              title: "🌧️ Weather 3-Balls Found!",
+              description: `Auto-selected ${bestEvent.event.event_name} - Round ${currentRound} has ${bestEvent.count} 3-ball matchups! Perfect for your betting strategy! 🎯`,
+              duration: 4000,
+            });
+          }
+        } else {
+          // Fallback to first event by date
+          setSelectedEventId(currentEvents[0].event_id);
+        }
+      } catch (error) {
+        console.warn("Failed to check event 3-ball availability:", error);
+        // Fallback to first event
+        setSelectedEventId(currentEvents[0].event_id);
+      }
+    };
+
+    selectBestEvent();
+  }, [currentEvents, currentRound]);
+
+  // Auto-detection logic: Always prefer 3-ball when available (unless user manually selected)
+  useEffect(() => {
+    if (!selectedEventId || userSelectedType) return;
+    
+    // Check for 3-ball availability for the selected event and round
+    const checkThreeBallAvailability = async () => {
+      try {
+        const response = await fetch(`/api/matchups?eventId=${selectedEventId}&matchupType=3ball&roundNum=${currentRound}&checkOnly=true`);
+        const data = await response.json();
+        const hasThreeBalls = data.count > 0;
+        
+        if (hasThreeBalls && matchupType !== "3ball") {
+          setMatchupType("3ball");
+          
+          // Show notification for weekend 3-balls (weather-induced) - only if not already shown
+          if (currentRound >= 3 && !userSelectedType) {
+            toast({
+              title: "🏌️‍♂️ 3-Ball Matchups Detected!",
+              description: `Round ${currentRound} has 3-ball matchups (likely due to weather delays). Auto-switched to 3-ball view - your bread and butter! 🎯`,
+              duration: 4000,
+            });
+          }
+        } else if (!hasThreeBalls && matchupType === "3ball") {
+          // Fallback to 2-ball if no 3-balls available
+          setMatchupType("2ball");
+        }
+      } catch (error) {
+        console.warn("Failed to check 3-ball availability:", error);
+      }
+    };
+
+    checkThreeBallAvailability();
+  }, [selectedEventId, currentRound, matchupType, userSelectedType]);
 
   const handleEventChange = (value: string) => {
     setSelectedEventId(Number(value));
+    setUserSelectedType(false); // Reset user selection when changing events
   }
+
+  const handleMatchupTypeChange = (value: "2ball" | "3ball") => {
+    setMatchupType(value);
+    setUserSelectedType(true); // Mark as manually selected
+  }
+
+  // Check if current selection is weekend 3-balls (weather-induced)
+  const isWeatherThreeBalls = matchupType === "3ball" && currentRound >= 3;
 
   return (
     <ParlayProvider>
@@ -159,15 +251,23 @@ export default function Dashboard({
                           </SelectContent>
                         </Select>
                         <span className="text-sm text-gray-400 ml-4">Matchup Type:</span>
-                        <Select value={matchupType} onValueChange={v => setMatchupType(v as "2ball" | "3ball") }>
-                          <SelectTrigger className="w-[120px] bg-[#1e1e23] border-none">
-                            <SelectValue placeholder="Type" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="3ball">3-Ball</SelectItem>
-                            <SelectItem value="2ball">2-Ball</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <div className="flex items-center gap-2">
+                          <Select value={matchupType} onValueChange={handleMatchupTypeChange}>
+                            <SelectTrigger className="w-[120px] bg-[#1e1e23] border-none">
+                              <SelectValue placeholder="Type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="3ball">3-Ball</SelectItem>
+                              <SelectItem value="2ball">2-Ball</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          {isWeatherThreeBalls && (
+                            <Badge variant="secondary" className="flex items-center gap-1 text-xs">
+                              <CloudRain className="h-3 w-3" />
+                              Weather 3-Ball
+                            </Badge>
+                          )}
+                        </div>
                         {isLoadingRound && <span className="ml-4 text-xs text-gray-400">Loading round...</span>}
                         {!isLoadingRound && latestRound && (
                           <span className="ml-4 text-xs text-green-400">Current Round: {latestRound}</span>
