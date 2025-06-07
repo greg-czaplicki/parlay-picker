@@ -26,6 +26,7 @@ import { FilterChipList } from "@/components/ui/filter-chip"
 import { Badge } from "@/components/ui/badge"
 import { Filter as FilterIcon, CloudRain } from "lucide-react"
 import { OddsFreshnessIndicator } from "@/components/odds-freshness-indicator"
+import { ManualIngestButton } from "@/components/manual-ingest-button"
 
 // Register filters once at module load
 registerCoreFilters()
@@ -193,7 +194,10 @@ export default function Dashboard({
         <div className="mt-6 mb-8 flex items-center justify-between">
           <div className="flex flex-col gap-2">
             <h1 className="text-3xl font-bold">Golf Parlay Picker</h1>
-            <OddsFreshnessIndicator />
+            <div className="flex items-center gap-3">
+              <OddsFreshnessIndicator />
+              <ManualIngestButton />
+            </div>
           </div>
           <div className="flex items-center gap-4">
             <div className="relative">

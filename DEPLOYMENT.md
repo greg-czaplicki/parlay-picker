@@ -104,16 +104,20 @@ DRAFTKINGS_API_KEY=your-draftkings-key-if-needed
 
 ## 🤖 Automated Odds Ingestion
 
-- **Runs every 30 minutes** automatically via Vercel Cron
-- **Keeps odds fresh** without manual intervention
+- **Runs daily at 6 AM** automatically via Vercel Cron (Hobby plan limit)
+- **Manual refresh button** available for on-demand updates
 - **Ingests from all tours** (PGA, EURO, ALT, LIV)
 - **Secure cron endpoint** protected by `CRON_SECRET`
 
 ### How it works:
-1. Vercel Cron triggers `/api/cron/ingest-matchups` every 30 minutes
-2. Cron job calls the existing ingestion API with "all" tours
+1. **Daily Auto-Update**: Vercel Cron triggers `/api/cron/ingest-matchups` at 6 AM daily
+2. **Manual Refresh**: Users can click "Refresh Odds" button anytime
 3. Fresh odds and matchups are automatically updated
 4. No manual `pnpm run ingest:all` needed!
+
+### Vercel Plan Considerations:
+- **Hobby (Free)**: Daily cron + manual refresh button (current setup)
+- **Pro ($20/month)**: Can change to every 30 minutes in `vercel.json`
 
 ## 🌐 Post-Deployment Checklist
 
