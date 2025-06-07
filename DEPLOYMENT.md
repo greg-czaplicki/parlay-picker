@@ -30,6 +30,12 @@ SUPABASE_ANON_KEY=your-supabase-anon-key
 DATAGOLF_API_KEY=your-datagolf-api-key
 ```
 
+### **Automated Ingestion (Required for Auto-Updates)**
+```
+INGEST_SECRET=some-secure-random-string
+CRON_SECRET=another-secure-random-string
+```
+
 ### **Optional - Other APIs**
 ```
 DRAFTKINGS_API_KEY=your-draftkings-key-if-needed
@@ -96,6 +102,19 @@ DRAFTKINGS_API_KEY=your-draftkings-key-if-needed
 4. On success, cookie is set and user is redirected to main app
 5. Cookie persists for 30 days
 
+## 🤖 Automated Odds Ingestion
+
+- **Runs every 30 minutes** automatically via Vercel Cron
+- **Keeps odds fresh** without manual intervention
+- **Ingests from all tours** (PGA, EURO, ALT, LIV)
+- **Secure cron endpoint** protected by `CRON_SECRET`
+
+### How it works:
+1. Vercel Cron triggers `/api/cron/ingest-matchups` every 30 minutes
+2. Cron job calls the existing ingestion API with "all" tours
+3. Fresh odds and matchups are automatically updated
+4. No manual `pnpm run ingest:all` needed!
+
 ## 🌐 Post-Deployment Checklist
 
 - [ ] App loads at your Vercel URL
@@ -105,6 +124,8 @@ DRAFTKINGS_API_KEY=your-draftkings-key-if-needed
 - [ ] DataGolf integration works
 - [ ] Position data displays correctly
 - [ ] Toast notifications work
+- [ ] Automated ingestion running (check Vercel Function logs)
+- [ ] Fresh odds updating every 30 minutes
 
 ## 🚨 Troubleshooting
 
