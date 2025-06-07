@@ -6,7 +6,13 @@ const { createClient } = require('@supabase/supabase-js');
 const https = require('https');
 
 // Replace with your actual API key if needed
-const apiKey = process.env.DATAGOLF_API_KEY || "fb03cadc312c2f0015bc8c5354ea";
+const apiKey = process.env.DATAGOLF_API_KEY;
+
+if (!apiKey) {
+    console.error('❌ DATAGOLF_API_KEY environment variable is required');
+    console.error('   Add DATAGOLF_API_KEY=your-api-key to your .env.local file');
+    process.exit(1);
+}
 
 // Initialize Supabase client
 const supabaseUrl = process.env.SUPABASE_URL;
