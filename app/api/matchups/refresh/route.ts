@@ -4,33 +4,70 @@ export async function POST(request: NextRequest) {
   try {
     console.log('🔄 Manual odds refresh requested...')
     
-    // Use the existing ingest API endpoint internally
-    const baseUrl = process.env.VERCEL_URL 
-      ? `https://${process.env.VERCEL_URL}` 
-      : 'http://localhost:3000'
+    // Get the base URL from the current request
+    const url = new URL(request.url)
+    const baseUrl = `${url.protocol}//${url.host}`
     
-    const ingestResponse = await fetch(`${baseUrl}/api/matchups/ingest`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.INGEST_SECRET}`
-      },
-      body: JSON.stringify({ tour: 'all' })
-    })
+    console.log('Using base URL:', baseUrl)
+    console.log('INGEST_SECRET available:', !!process.env.INGEST_SECRET)
+    
+    // Tours to refresh - 'all' means all tours
+    const tours = ['pga', 'euro', 'opp', 'alt']
+    const results: any[] = []
+    let totalInserted = 0
+    
+    // Call each tour individually
+    for (const tour of tours) {
+      try {
+        console.log(`Refreshing ${tour} tour...`)
+        
+        const ingestResponse = await fetch(`${baseUrl}/api/matchups/ingest?tour=${tour}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.INGEST_SECRET}`
+          }
+        })
 
-    if (!ingestResponse.ok) {
-      throw new Error(`Ingestion failed: ${ingestResponse.statusText}`)
+        console.log(`${tour} response status:`, ingestResponse.status)
+        
+        if (!ingestResponse.ok) {
+          const errorText = await ingestResponse.text()
+          console.error(`${tour} failed:`, errorText)
+          throw new Error(`${tour.toUpperCase()} tour failed: ${ingestResponse.statusText}`)
+        }
+
+        const result = await ingestResponse.json()
+        console.log(`${tour} result:`, result)
+        
+        results.push({
+          tour,
+          inserted: result.inserted || 0,
+          three_ball: result.three_ball || 0,
+          two_ball: result.two_ball || 0,
+          message: result.message
+        })
+        
+        totalInserted += result.inserted || 0
+        
+      } catch (tourError: any) {
+        console.error(`Error refreshing ${tour}:`, tourError.message)
+        results.push({
+          tour,
+          error: tourError.message,
+          inserted: 0
+        })
+      }
     }
-
-    const result = await ingestResponse.json()
     
-    console.log('✅ Manual refresh completed:', result)
+    console.log('✅ Manual refresh completed. Total inserted:', totalInserted)
     
     return NextResponse.json({
       success: true,
       message: 'Odds refreshed successfully',
       timestamp: new Date().toISOString(),
-      result
+      totalInserted,
+      results
     })
 
   } catch (error: any) {
