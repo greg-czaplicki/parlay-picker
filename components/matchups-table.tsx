@@ -379,9 +379,7 @@ export default function MatchupsTable({
                     <TableHead className="text-white text-center">Players</TableHead>
                     <TableHead className="text-white text-center">Position</TableHead>
                     <TableHead className="text-white text-center">FanDuel Odds</TableHead>
-                    <TableHead className="text-white text-center">
-                      {matchupType === "3ball" ? "Data Golf Odds" : "DraftKings Odds"}
-                    </TableHead>
+                    <TableHead className="text-white text-center">Data Golf Odds</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -559,15 +557,62 @@ export default function MatchupsTable({
                       const formatPlayerPosition = (playerId: string | number) => {
                         const playerStat = playerStatsMap[String(playerId)];
                         if (!playerStat) return { position: '-', score: '-' };
+                        
+                        // Position should be leaderboard position (T5, 1, etc.)
                         const position = playerStat.position || '-';
+                        
+                        // Score should be from the last completed round
                         let score: string = '-';
-                        if (playerStat.total === 0) {
-                          score = 'E';
-                        } else if (typeof playerStat.total === 'number' && playerStat.total > 0) {
-                          score = `+${playerStat.total}`;
-                        } else if (typeof playerStat.total === 'number' && playerStat.total < 0) {
-                          score = playerStat.total.toString();
+                        
+                        // Check if we have round-specific data available
+                        if (playerStat.current_round && playerStat.round_scores) {
+                          const currentRound = playerStat.current_round;
+                          const thru = playerStat.thru || 0;
+                          const roundScores = playerStat.round_scores;
+                          
+                          // Determine the last completed round
+                          let lastCompletedRound = currentRound - 1;
+                          
+                          // If they've completed all holes in the current round, it's completed
+                          if (thru >= 18) {
+                            lastCompletedRound = currentRound;
+                          }
+                          
+                          // Get the score for the last completed round
+                          let roundScore: number | null = null;
+                          if (lastCompletedRound === 1) roundScore = roundScores.R1;
+                          else if (lastCompletedRound === 2) roundScore = roundScores.R2;
+                          else if (lastCompletedRound === 3) roundScore = roundScores.R3;
+                          else if (lastCompletedRound === 4) roundScore = roundScores.R4;
+                          
+                          // Format the round score
+                          if (roundScore !== null && typeof roundScore === 'number') {
+                            // This is a raw score (like 66, 68, etc.)
+                            // We could show it as raw score or convert to relative par
+                            // For now, showing as raw score since that's most common
+                            score = roundScore.toString();
+                          }
                         }
+                        
+                        // Fallback to today's score if round data isn't available
+                        if (score === '-') {
+                          const scoreValue = playerStat.today ?? playerStat.total;
+                          
+                          if (scoreValue === 0) {
+                            score = 'E';
+                          } else if (typeof scoreValue === 'number') {
+                            // Check if this looks like a raw stroke count (typically 60-90 for golf)
+                            // If so, it's likely bad data and we should show a dash
+                            if (scoreValue > 30 || scoreValue < -30) {
+                              score = '-';
+                            } else if (scoreValue > 0) {
+                              score = `+${scoreValue}`;
+                            } else {
+                              score = scoreValue.toString();
+                            }
+                          }
+                        }
+                        
                         return { position, score };
                       };
                       
@@ -660,8 +705,8 @@ export default function MatchupsTable({
                       const m2 = matchup as SupabaseMatchupRow2Ball;
                       const fdP1Odds = Number(m2.odds1 ?? 0);
                       const fdP2Odds = Number(m2.odds2 ?? 0);
-                      const dkP1Odds = Number(m2.draftkings_p1_odds ?? 0);
-                      const dkP2Odds = Number(m2.draftkings_p2_odds ?? 0);
+                      const dgP1Odds = Number(m2.dg_odds1 ?? 0);
+                      const dgP2Odds = Number(m2.dg_odds2 ?? 0);
 
                       // Check if at least one player has odds from FanDuel
                       const hasAnyValidOdds = (fdP1Odds > 1) || (fdP2Odds > 1);
@@ -669,11 +714,11 @@ export default function MatchupsTable({
                         return null; // Skip this matchup
                       }
                       
-                      // Initialize gap flags for both FanDuel and DraftKings
+                      // Initialize gap flags for both FanDuel and DataGolf
                       let p1HasFDGap = false;
                       let p2HasFDGap = false;
-                      let p1HasDKGap = false;
-                      let p2HasDKGap = false;
+                      let p1HasDGGap = false;
+                      let p2HasDGGap = false;
                       
                       // Check for FanDuel gaps
                       // Check if player 1 is the favorite with a significant gap in FanDuel
@@ -695,21 +740,21 @@ export default function MatchupsTable({
                           p2HasFDGap = true;
                         }
                       }
-                      // Check for DraftKings gaps
-                      if (dkP1Odds > 1 && dkP2Odds > 1 && dkP1Odds < dkP2Odds) {
-                        const americanP1 = parseInt(decimalToAmerican(dkP1Odds));
-                        const americanP2 = parseInt(decimalToAmerican(dkP2Odds));
+                      // Check for DataGolf gaps
+                      if (dgP1Odds > 1 && dgP2Odds > 1 && dgP1Odds < dgP2Odds) {
+                        const americanP1 = parseInt(decimalToAmerican(dgP1Odds));
+                        const americanP2 = parseInt(decimalToAmerican(dgP2Odds));
                         const gap = Math.abs(americanP1 - americanP2);
                         if (gap >= oddsGapThreshold) {
-                          p1HasDKGap = true;
+                          p1HasDGGap = true;
                         }
                       }
-                      if (dkP1Odds > 1 && dkP2Odds > 1 && dkP2Odds < dkP1Odds) {
-                        const americanP1 = parseInt(decimalToAmerican(dkP1Odds));
-                        const americanP2 = parseInt(decimalToAmerican(dkP2Odds));
+                      if (dgP1Odds > 1 && dgP2Odds > 1 && dgP2Odds < dgP1Odds) {
+                        const americanP1 = parseInt(decimalToAmerican(dgP1Odds));
+                        const americanP2 = parseInt(decimalToAmerican(dgP2Odds));
                         const gap = Math.abs(americanP1 - americanP2);
                         if (gap >= oddsGapThreshold) {
-                          p2HasDKGap = true;
+                          p2HasDGGap = true;
                         }
                       }
                       
@@ -720,18 +765,18 @@ export default function MatchupsTable({
                           dg_id: m2.player1_dg_id,
                           odds: m2.odds1,
                           name: m2.player1_name,
-                          dkOdds: dkP1Odds,
+                          dgOdds: dgP1Odds,
                           hasGap: p1HasFDGap,
-                          hasDKGap: p1HasDKGap,
+                          hasDGGap: p1HasDGGap,
                         },
                         {
                           id: 'p2',
                           dg_id: m2.player2_dg_id,
                           odds: m2.odds2,
                           name: m2.player2_name,
-                          dkOdds: dkP2Odds,
+                          dgOdds: dgP2Odds,
                           hasGap: p2HasFDGap,
-                          hasDKGap: p2HasDKGap,
+                          hasDGGap: p2HasDGGap,
                         },
                       ].filter(p => p.dg_id !== null && p.dg_id !== undefined)
                        .sort((a, b) => {
@@ -744,15 +789,62 @@ export default function MatchupsTable({
                       const formatPlayerPosition = (playerId: string | number) => {
                         const playerStat = playerStatsMap[String(playerId)];
                         if (!playerStat) return { position: '-', score: '-' };
+                        
+                        // Position should be leaderboard position (T5, 1, etc.)
                         const position = playerStat.position || '-';
+                        
+                        // Score should be from the last completed round
                         let score: string = '-';
-                        if (playerStat.total === 0) {
-                          score = 'E';
-                        } else if (typeof playerStat.total === 'number' && playerStat.total > 0) {
-                          score = `+${playerStat.total}`;
-                        } else if (typeof playerStat.total === 'number' && playerStat.total < 0) {
-                          score = playerStat.total.toString();
+                        
+                        // Check if we have round-specific data available
+                        if (playerStat.current_round && playerStat.round_scores) {
+                          const currentRound = playerStat.current_round;
+                          const thru = playerStat.thru || 0;
+                          const roundScores = playerStat.round_scores;
+                          
+                          // Determine the last completed round
+                          let lastCompletedRound = currentRound - 1;
+                          
+                          // If they've completed all holes in the current round, it's completed
+                          if (thru >= 18) {
+                            lastCompletedRound = currentRound;
+                          }
+                          
+                          // Get the score for the last completed round
+                          let roundScore: number | null = null;
+                          if (lastCompletedRound === 1) roundScore = roundScores.R1;
+                          else if (lastCompletedRound === 2) roundScore = roundScores.R2;
+                          else if (lastCompletedRound === 3) roundScore = roundScores.R3;
+                          else if (lastCompletedRound === 4) roundScore = roundScores.R4;
+                          
+                          // Format the round score
+                          if (roundScore !== null && typeof roundScore === 'number') {
+                            // This is a raw score (like 66, 68, etc.)
+                            // We could show it as raw score or convert to relative par
+                            // For now, showing as raw score since that's most common
+                            score = roundScore.toString();
+                          }
                         }
+                        
+                        // Fallback to today's score if round data isn't available
+                        if (score === '-') {
+                          const scoreValue = playerStat.today ?? playerStat.total;
+                          
+                          if (scoreValue === 0) {
+                            score = 'E';
+                          } else if (typeof scoreValue === 'number') {
+                            // Check if this looks like a raw stroke count (typically 60-90 for golf)
+                            // If so, it's likely bad data and we should show a dash
+                            if (scoreValue > 30 || scoreValue < -30) {
+                              score = '-';
+                            } else if (scoreValue > 0) {
+                              score = `+${scoreValue}`;
+                            } else {
+                              score = scoreValue.toString();
+                            }
+                          }
+                        }
+                        
                         return { position, score };
                       };
                       
@@ -830,9 +922,9 @@ export default function MatchupsTable({
                             ))}
                           </TableCell>
                           <TableCell className="text-center">
-                            {(sortedPlayers.filter((player: typeof sortedPlayers[number]) => player.dkOdds && player.dkOdds > 1) as typeof sortedPlayers).map((player: typeof sortedPlayers[number], idx: number) => (
-                              <div key={`dk-odds-${idx}`} className={`py-1 h-8 flex items-center justify-center ${player.hasDKGap ? "font-bold text-green-400" : ""}`}>
-                                {formatOdds(player.dkOdds ?? 0)}
+                            {(sortedPlayers.filter((player: typeof sortedPlayers[number]) => player.dgOdds && player.dgOdds > 1) as typeof sortedPlayers).map((player: typeof sortedPlayers[number], idx: number) => (
+                              <div key={`dg-odds-${idx}`} className={`py-1 h-8 flex items-center justify-center ${player.hasDGGap ? "font-bold text-green-400" : ""}`}>
+                                {formatOdds(player.dgOdds ?? 0)}
                               </div>
                             ))}
                           </TableCell>

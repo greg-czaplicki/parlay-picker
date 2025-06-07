@@ -15,6 +15,14 @@ export interface PlayerStat {
   total?: number | null;
   today?: number | null;
   thru?: number | null;
+  // Round-specific data
+  current_round?: number | null;
+  round_scores?: {
+    R1: number | null;
+    R2: number | null;
+    R3: number | null;
+    R4: number | null;
+  } | null;
   sg_total?: number | null;
   sg_ott?: number | null;
   sg_app?: number | null;
