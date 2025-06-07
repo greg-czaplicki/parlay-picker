@@ -63,24 +63,33 @@ export function ParlayCard({
         <div className={clsx('w-3 h-3 rounded-full', statusColors[status])} title={status} />
       </CardHeader>
       <CardContent className="flex-grow overflow-y-auto p-4 space-y-4">
-        <table className="w-full">
+        <table className="w-full table-fixed">
+          <colgroup>
+            <col className="w-[60%]" />
+            <col className="w-[20%]" />
+            <col className="w-[20%]" />
+          </colgroup>
           <thead>
             <tr>
               <th className="py-2 px-3 text-left font-semibold">Player</th>
-              <th className="py-2 px-3 text-left font-semibold">Pos</th>
-              <th className="py-2 px-3 text-left font-semibold">Total</th>
-              <th className="py-2 px-3 text-left font-semibold">Today</th>
-              <th className="py-2 px-3 text-left font-semibold">Holes</th>
+              <th className="py-2 px-3 text-right font-semibold">Score</th>
+              <th className="py-2 px-3 text-right font-semibold">Holes</th>
             </tr>
           </thead>
           <tbody>
             {picks.map((pick, i) => (
               <tr key={i}>
-                <td className="py-2 px-3 font-mono">{pick.players?.map((player) => player.name).join(', ')}</td>
-                <td className="py-2 px-3 font-mono">{pick.players?.map((player) => player.currentPosition).join(', ')}</td>
-                <td className="py-2 px-3 font-mono">{pick.players?.map((player) => player.totalScore).join(', ')}</td>
-                <td className="py-2 px-3 font-mono">{pick.players?.map((player) => player.roundScore).join(', ')}</td>
-                <td className="py-2 px-3 font-mono">{pick.players?.map((player) => player.holesPlayed).join('/') + '/' + pick.players?.map((player) => player.totalHoles).join('/')}</td>
+                <td className="py-2 px-3 font-mono truncate">{pick.players?.map((player) => player.name).join(', ')}</td>
+                <td className="py-2 px-3 font-mono text-right">
+                  {pick.players?.map((player) => 
+                    player.currentPosition === 'WD' ? 'WD' : player.roundScore
+                  ).join(', ')}
+                </td>
+                <td className="py-2 px-3 font-mono text-right">
+                  {pick.players?.map((player) => 
+                    player.currentPosition === 'WD' ? 'WD' : player.holesPlayed
+                  ).join('/') + '/' + pick.players?.map((player) => player.totalHoles).join('/')}
+                </td>
               </tr>
             ))}
           </tbody>

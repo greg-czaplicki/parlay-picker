@@ -177,7 +177,7 @@ export async function GET(req: NextRequest) {
     matchups = matchupsData || []
   }
 
-  // Get tournament names for the events in our matchups
+  // Get tournament names for the events in our matchups using exact same lookup as sync
   const eventIds = [...new Set(matchups.map((m: any) => m.event_id).filter(Boolean))]
   let tournamentNames: string[] = []
   if (eventIds.length > 0) {
@@ -190,7 +190,7 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Fetch live stats for all players in all matchups (filtered by current tournament)
+  // Fetch live stats for all players in all matchups (filtered by tournament name)
   const allPlayerNames = new Set<string>()
   const allRoundNums = new Set<number>()
   matchups.forEach((m: any) => {
@@ -207,7 +207,7 @@ export async function GET(req: NextRequest) {
       .select('player_name,round_num,position,total,thru,today,event_name')
       .in('player_name', Array.from(allPlayerNames))
       .in('round_num', Array.from(allRoundNums).map(String))
-      .in('event_name', tournamentNames)  // Only get stats from the actual tournaments
+      .in('event_name', tournamentNames)  // Use same tournament names as stored by sync
     if (!statsError && statsData) liveStats = statsData
   }
   

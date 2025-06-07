@@ -63,95 +63,187 @@ if (!dataGolfApiKey) {
     throw new Error("Data Golf API Key is missing in environment variables.");
 }
 
-const LIVE_STATS_BASE_URL = `https://feeds.datagolf.com/preds/live-tournament-stats?tour=pga&stats=sg_app,sg_ott,sg_putt,sg_arg,sg_t2g,sg_total,accuracy,distance,gir,prox_fw,scrambling,position,thru,today,total&display=value&file_format=json&key=${dataGolfApiKey}`;
+// Tours to sync
+const TOURS_TO_SYNC = ['pga', 'euro'];
 
-// Rounds we want to fetch data for
-const ROUNDS_TO_FETCH = ["1", "2", "3", "4", "event_avg"];
-
-// Helper to fetch live stats for a round
-async function fetchLiveStats(round: string): Promise<DataGolfLiveStatsResponse | null> {
-  const url = `${LIVE_STATS_BASE_URL}&round=${round}`;
+// Helper to fetch in-play predictions for a tour
+async function fetchInPlayPredictions(tour: string): Promise<any | null> {
+  const url = `https://feeds.datagolf.com/preds/in-play?tour=${tour}&dead_heat=no&odds_format=percent&key=${dataGolfApiKey}`;
+  
+  logger.info(`Fetching ${tour.toUpperCase()} in-play predictions`);
+  
   try {
     const response = await fetch(url, { cache: 'no-store' });
     if (!response.ok) {
       if (response.status === 404) {
-        logger.warn(`Round ${round} data not found (404), skipping.`);
+        logger.warn(`${tour.toUpperCase()} tour data not found (404), skipping.`);
         return null;
       }
       const errorText = await response.text();
-      throw new Error(`Fetch failed for round ${round}: ${response.status} - ${errorText}`);
+      throw new Error(`Fetch failed for ${tour} tour: ${response.status} - ${errorText}`);
     }
-    return await response.json();
+    const apiResponse = await response.json();
+    logger.info(`${tour.toUpperCase()} API response keys:`, Object.keys(apiResponse));
+    return {
+      data: apiResponse.data || [],
+      info: apiResponse.info || null,
+      last_updated: new Date().toISOString() // In-play doesn't provide last_updated, use current time
+    };
   } catch (err) {
-    throw new Error(`Error fetching round ${round}: ${err instanceof Error ? err.message : String(err)}`);
+    throw new Error(`Error fetching ${tour} tour: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
-// Helper to map DataGolf player data to Supabase insert format
-function mapStatsToInsert(data: DataGolfLiveStatsResponse, timestamp: string): SupabaseLiveStat[] {
-  return (data.live_stats || []).map((player) => ({
-    dg_id: player.dg_id,
-    player_name: player.player_name,
-    event_name: data.event_name,
-    course_name: data.course_name,
-    round_num: data.stat_round,
-    sg_app: player.sg_app,
-    sg_ott: player.sg_ott,
-    sg_putt: player.sg_putt,
-    sg_arg: player.sg_arg ?? null,
-    sg_t2g: player.sg_t2g ?? null,
-    sg_total: player.sg_total ?? null,
-    accuracy: player.accuracy ?? null,
-    distance: player.distance ?? null,
-    gir: player.gir ?? null,
-    prox_fw: player.prox_fw ?? null,
-    scrambling: player.scrambling ?? null,
-    position: player.position ?? null,
-    thru: player.thru ?? null,
-    today: player.round ?? null,
-    total: player.total ?? null,
-    data_golf_updated_at: timestamp,
-  }));
+// Helper to map in-play predictions data to Supabase insert format
+function mapInPlayDataToInsert(players: any[], tournament: string, timestamp: string, eventId?: number): SupabaseLiveStat[] {
+  const allStats: SupabaseLiveStat[] = [];
+  const uniqueKeys = new Set<string>(); // Track unique combinations to avoid duplicates
+
+  for (const player of players) {
+    // Add historical round data first (R1, R2, R3, R4)
+    ['R1', 'R2', 'R3', 'R4'].forEach((roundKey, index) => {
+      const roundScore = player[roundKey];
+      if (roundScore !== null && roundScore !== undefined) {
+        const roundNum = (index + 1).toString();
+        const uniqueKey = `${player.dg_id}-${roundNum}-${tournament}`;
+        
+        if (!uniqueKeys.has(uniqueKey)) {
+          uniqueKeys.add(uniqueKey);
+          allStats.push({
+            dg_id: player.dg_id,
+            player_name: player.player_name,
+            event_name: tournament,
+            course_name: player.course || '',
+            round_num: roundNum,
+            sg_app: null,
+            sg_ott: null,
+            sg_putt: null,
+            sg_arg: null,
+            sg_t2g: null,
+            sg_total: null,
+            accuracy: null,
+            distance: null,
+            gir: null,
+            prox_fw: null,
+            scrambling: null,
+            position: null,
+            thru: 18,
+            today: roundScore,
+            total: roundScore,
+            data_golf_updated_at: timestamp,
+          });
+        }
+      }
+    });
+
+    // Add current round state (only if not already added as historical data)
+    const currentRound = (player.round || 1).toString();
+    const currentUniqueKey = `${player.dg_id}-${currentRound}-${tournament}`;
+    
+    if (!uniqueKeys.has(currentUniqueKey)) {
+      uniqueKeys.add(currentUniqueKey);
+      allStats.push({
+        dg_id: player.dg_id,
+        player_name: player.player_name,
+        event_name: tournament,
+        course_name: player.course || '',
+        round_num: currentRound,
+        sg_app: null, // In-play predictions don't include detailed stats
+        sg_ott: null,
+        sg_putt: null,
+        sg_arg: null,
+        sg_t2g: null,
+        sg_total: null,
+        accuracy: null,
+        distance: null,
+        gir: null,
+        prox_fw: null,
+        scrambling: null,
+        position: player.current_pos || player.position || null,
+        thru: player.thru || 0,
+        today: player.today || 0,
+        total: player.current_score || player.total || 0,
+        data_golf_updated_at: timestamp,
+      });
+    }
+  }
+
+  return allStats;
 }
 
 export async function GET() {
-  logger.info("Starting multi-round live stats sync...");
+  logger.info("Starting multi-tour in-play predictions sync...");
   let totalInsertedCount = 0;
   let lastSourceTimestamp: string | null = null;
-  let fetchedEventName: string | null = null;
+  let fetchedEventNames: string[] = [];
   const errors: string[] = [];
   const supabase = createSupabaseClient();
-  for (const round of ROUNDS_TO_FETCH) {
+
+  for (const tour of TOURS_TO_SYNC) {
     try {
-      const data = await fetchLiveStats(round);
-      if (!data) continue;
-      const currentRoundTimestamp = new Date(data.last_updated.replace(" UTC", "Z")).toISOString();
-      lastSourceTimestamp = currentRoundTimestamp;
-      fetchedEventName = data.event_name;
-      const statsToInsert = mapStatsToInsert(data, currentRoundTimestamp);
+      const response = await fetchInPlayPredictions(tour);
+      if (!response || !response.data || response.data.length === 0) {
+        logger.info(`No data available for ${tour.toUpperCase()} tour, skipping.`);
+        continue;
+      }
+
+      logger.info(`${tour.toUpperCase()} response structure:`, Object.keys(response));
+
+      const { data: players, info, last_updated } = response;
+      lastSourceTimestamp = last_updated;
+      
+      // Extract tournament name from info object
+      const eventName = info?.event_name || `${tour.toUpperCase()} Tournament`;
+      logger.info(`${tour.toUpperCase()} extracted event name: ${eventName}`);
+      fetchedEventNames.push(eventName);
+
+      // Look up event_id from tournament name for more reliable querying
+      let eventId: number | undefined;
+      const { data: tournamentData } = await supabase
+        .from('tournaments')
+        .select('event_id')
+        .eq('event_name', eventName)
+        .single();
+      
+      if (tournamentData) {
+        eventId = tournamentData.event_id;
+        logger.info(`${tour.toUpperCase()} mapped to event_id: ${eventId}`);
+      } else {
+        logger.warn(`No event_id found for tournament: ${eventName}`);
+      }
+
+      const statsToInsert = mapInPlayDataToInsert(players, eventName, last_updated, eventId);
+      
+      logger.info(`Upserting ${statsToInsert.length} records for ${tour.toUpperCase()} tour (${eventName})`);
+
       // Upsert on (dg_id, round_num, event_name)
       const { error } = await supabase
         .from("live_tournament_stats")
         .upsert(statsToInsert, { onConflict: "dg_id,round_num,event_name" });
+
       if (error) {
-        errors.push(`Upsert failed for round ${round}: ${error.message}`);
-        logger.error(`Upsert failed for round ${round}: ${error.message}`);
+        errors.push(`Upsert failed for ${tour} tour: ${error.message}`);
+        logger.error(`Upsert failed for ${tour} tour: ${error.message}`);
       } else {
         totalInsertedCount += statsToInsert.length;
+        logger.info(`Successfully synced ${statsToInsert.length} records for ${tour.toUpperCase()} tour`);
       }
     } catch (err: any) {
       errors.push(err.message || String(err));
-      logger.error(`Error syncing round ${round}: ${err.message || String(err)}`);
+      logger.error(`Error syncing ${tour} tour: ${err.message || String(err)}`);
     }
   }
-  const finalMessage = `Sync complete. Total records inserted/updated: ${totalInsertedCount} across attempted rounds for ${fetchedEventName ?? 'event'}.`;
+
+  const finalMessage = `In-play predictions sync complete. Total records inserted/updated: ${totalInsertedCount} across ${TOURS_TO_SYNC.length} tours.`;
+  
   if (errors.length > 0) {
     logger.warn("Sync completed with errors:", errors);
   }
+
   return jsonSuccess({
     processedCount: totalInsertedCount,
     sourceTimestamp: lastSourceTimestamp,
-    eventName: fetchedEventName,
+    eventNames: fetchedEventNames,
     errors,
   }, finalMessage + (errors.length > 0 ? ` Errors: ${errors.join(', ')}` : ''));
 }

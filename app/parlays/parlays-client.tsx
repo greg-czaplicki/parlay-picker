@@ -5,7 +5,7 @@ import { ParlayCardProps, ParlayPickDisplay, ParlayPlayerDisplay } from '@/compo
 import { toast } from '@/components/ui/use-toast';
 import { useParlaysQuery } from '@/hooks/use-parlays-query';
 import { Loader2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+
 
 export default function ParlaysClient({ currentRound }: { currentRound: number | null }) {
   // Use the seeded test user until real auth is implemented
@@ -22,7 +22,7 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
     }
   }, [isError, error]);
 
-  const [syncing, setSyncing] = useState(false);
+  const [autoProcessing, setAutoProcessing] = useState(false);
   const { refetch } = useParlaysQuery(userId);
 
   // Last sync timestamp state
@@ -34,24 +34,62 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
     if (t) setLastSync(new Date(t));
   }, []);
 
-  const handleSync = async () => {
-    setSyncing(true);
-    try {
-      const res = await fetch('http://localhost:3000/api/live-stats/sync', { method: 'GET' });
-      if (!res.ok) throw new Error('Failed to sync live stats');
-      const now = new Date();
-      setLastSync(now);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('lastSync', now.toISOString());
+  // Auto-sync and settle on page load
+  useEffect(() => {
+    const autoSyncAndSettle = async () => {
+      if (autoProcessing) return; // Prevent multiple simultaneous runs
+      
+      setAutoProcessing(true);
+      try {
+        // First sync the latest stats
+        const syncRes = await fetch('http://localhost:3000/api/live-stats/sync', { method: 'GET' });
+        if (!syncRes.ok) throw new Error('Failed to sync live stats');
+        
+        // Then settle any unsettled parlays
+        const settleRes = await fetch('/api/settle', { 
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ autoDetect: true })
+        });
+        
+        if (!settleRes.ok) throw new Error('Failed to settle parlays');
+        
+        const settleData = await settleRes.json();
+        
+        // Update last sync timestamp
+        const now = new Date();
+        setLastSync(now);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('lastSync', now.toISOString());
+        }
+        
+        // Show success message only if settlements were made
+        if (settleData.total_settlements > 0) {
+          toast({ 
+            title: 'Auto-Settlement Complete', 
+            description: `Settled ${settleData.total_settlements} picks across ${settleData.events_checked || 0} events`,
+            variant: 'default' 
+          });
+        }
+        
+        // Refresh parlay data
+        await refetch();
+      } catch (err: any) {
+        toast({ 
+          title: 'Auto-Process Failed', 
+          description: err.message || 'Could not auto-sync and settle',
+          variant: 'destructive' 
+        });
+      } finally {
+        setAutoProcessing(false);
       }
-      toast({ title: 'Sync Complete', description: 'Live stats refreshed!', variant: 'default' });
-      await refetch();
-    } catch (err: any) {
-      toast({ title: 'Sync Failed', description: err.message || 'Could not sync live stats', variant: 'destructive' });
-    } finally {
-      setSyncing(false);
-    }
-  };
+    };
+
+    // Run auto-sync and settle on mount
+    autoSyncAndSettle();
+  }, []); // Empty dependency array means this runs once on mount
+
+
 
   // Helper to map API parlay to ParlayCardProps
   function mapParlayToCardProps(parlay: any): ParlayCardProps | null {
@@ -76,6 +114,14 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
     userPick: ParlayPlayerDisplay,
     others: ParlayPlayerDisplay[]
   ): 'likely' | 'unlikely' | 'close' {
+    // Check if any player withdrew - if so, the pick should be void (show as close/pending)
+    const allPlayers = [userPick, ...others];
+    const hasWithdrawal = allPlayers.some(p => p.currentPosition === 'WD');
+    
+    if (hasWithdrawal) {
+      return 'close'; // Show as neutral/pending since pick should be void
+    }
+
     const userScore = userPick.roundScore;
     const bestOtherScore = Math.min(...others.map(p => p.roundScore));
     const holesPlayed = userPick.holesPlayed;
@@ -115,7 +161,15 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
   function getMatchupFinalStatus(
     userPick: ParlayPlayerDisplay,
     others: ParlayPlayerDisplay[]
-  ): 'won' | 'lost' | 'tied' | null {
+  ): 'won' | 'lost' | 'tied' | 'void' | null {
+    // Check if any player withdrew - if so, no final status badge (should be void)
+    const allPlayers = [userPick, ...others];
+    const hasWithdrawal = allPlayers.some(p => p.currentPosition === 'WD');
+    
+    if (hasWithdrawal) {
+      return 'void'; // Return void status for withdrawal
+    }
+
     // Validate that all players have played the same number of holes
     const holesPlayed = userPick.holesPlayed;
 
@@ -141,11 +195,13 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
     <div className="mx-auto px-2 sm:px-4 space-y-6 max-w-4xl">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-2xl font-bold">My Active Parlays</h1>
-        <div className="flex flex-col items-end gap-1">
-          <Button onClick={handleSync} disabled={syncing} variant="outline" className="flex items-center gap-2">
-            {syncing && <Loader2 className="animate-spin w-4 h-4" />}
-            Sync
-          </Button>
+        <div className="flex flex-col items-end gap-2">
+          {autoProcessing && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="animate-spin w-4 h-4" />
+              Auto-syncing and settling...
+            </div>
+          )}
           <span className="text-xs text-muted-foreground">
             {lastSync ? `Last sync: ${lastSync.toLocaleTimeString()}` : 'Not yet synced'}
           </span>
@@ -194,6 +250,8 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
                         ? 'bg-red-800/10 border-red-500'
                         : finalStatus === 'tied'
                         ? 'bg-yellow-800/10 border-yellow-500'
+                        : finalStatus === 'void'
+                        ? 'bg-gray-800/10 border-gray-500'
                         : 'bg-muted border-border';
                     const statusBarColor =
                       finalStatus === 'won'
@@ -202,6 +260,8 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
                         ? 'bg-red-500'
                         : finalStatus === 'tied'
                         ? 'bg-yellow-500'
+                        : finalStatus === 'void'
+                        ? 'bg-gray-500'
                         : matchupStatus === 'likely'
                         ? 'bg-green-500'
                         : matchupStatus === 'unlikely'
@@ -231,20 +291,24 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
                               ${finalStatus === 'won' ? 'bg-green-100 text-green-700' : ''}
                               ${finalStatus === 'lost' ? 'bg-red-100 text-red-700' : ''}
                               ${finalStatus === 'tied' ? 'bg-yellow-100 text-yellow-700' : ''}
+                              ${finalStatus === 'void' ? 'bg-gray-100 text-gray-700' : ''}
                             `}>
                               {finalStatus.toUpperCase()}
                             </span>
                           )}
                         </div>
                         <div className="overflow-x-auto">
-                          <table className="min-w-full text-sm table-fixed">
+                          <table className="w-full text-sm table-fixed">
+                            <colgroup>
+                              <col className="w-[60%]" />
+                              <col className="w-[20%]" />
+                              <col className="w-[20%]" />
+                            </colgroup>
                             <thead>
                               <tr className="bg-muted">
-                                <th className="py-2 px-3 text-left font-semibold w-40">Player</th>
-                                <th className="py-2 px-3 text-right font-semibold w-16">Pos</th>
-                                <th className="py-2 px-3 text-right font-semibold w-16">Total</th>
-                                <th className="py-2 px-3 text-right font-semibold w-16">Today</th>
-                                <th className="py-2 px-3 text-right font-semibold w-16">Thru</th>
+                                <th className="py-2 px-3 text-left font-semibold">Player</th>
+                                <th className="py-2 px-3 text-right font-semibold">Score</th>
+                                <th className="py-2 px-3 text-right font-semibold">Thru</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -257,11 +321,28 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
                                       : 'hover:bg-accent/10 transition'
                                   }
                                 >
-                                  <td className="py-2 px-3 truncate w-40">{player.name}</td>
-                                  <td className="py-2 px-3 text-right font-mono">{player.currentPosition}</td>
-                                  <td className="py-2 px-3 text-right font-mono">{typeof player.totalScore === 'number' && player.totalScore !== 0 ? (player.totalScore > 0 ? `+${player.totalScore}` : player.totalScore) : 'E'}</td>
-                                  <td className="py-2 px-3 text-right font-mono">{typeof player.roundScore === 'number' && player.roundScore !== 0 ? (player.roundScore > 0 ? `+${player.roundScore}` : player.roundScore) : 'E'}</td>
-                                  <td className="py-2 px-3 text-right font-mono">{getHolesDisplay(player.holesPlayed)}</td>
+                                  <td className="py-2 px-3 truncate">{player.name}</td>
+                                  <td className="py-2 px-3 text-right font-mono">
+                                    {(() => {
+                                      // Check if player withdrew
+                                      if (player.currentPosition === 'WD') return 'WD'
+                                      
+                                      if (typeof player.roundScore !== 'number') return '-'
+                                      
+                                      // For historical completed rounds, show raw stroke count
+                                      // We can detect this by: holesPlayed === 18 AND roundScore > 18 (typical golf scores are 60-80)
+                                      if (player.holesPlayed >= 18 && player.roundScore > 18) {
+                                        return player.roundScore
+                                      }
+                                      
+                                      // For live rounds or relative-to-par scores, show with +/- formatting
+                                      if (player.roundScore === 0) return 'E'
+                                      return player.roundScore > 0 ? `+${player.roundScore}` : player.roundScore
+                                    })()}
+                                  </td>
+                                  <td className="py-2 px-3 text-right font-mono">
+                                    {player.currentPosition === 'WD' ? 'WD' : getHolesDisplay(player.holesPlayed)}
+                                  </td>
                                 </tr>
                               ))}
                             </tbody>

@@ -10,7 +10,7 @@ import { Check, X, Loader2 } from 'lucide-react';
 export interface PlayerRowProps {
   player: ParlayPlayer;
   selectedRound: number | null;
-  removePlayer: (pickId?: number) => void;
+  removePlayer: (pickId?: string) => void;
 }
 
 /**
@@ -69,12 +69,15 @@ export const PlayerRow: React.FC<PlayerRowProps> = ({ player, selectedRound, rem
             <div className="text-xs">Tee Time: {player.matchup.tee_time || 'N/A'}</div>
           </div>
           {/* Group Table */}
-          <table className="w-full text-xs border-collapse">
+          <table className="w-full text-xs border-collapse table-fixed">
+            <colgroup>
+              <col className="w-[70%]" />
+              <col className="w-[30%]" />
+            </colgroup>
             <thead>
               <tr className="border-b border-border/30">
                 <th className="text-left py-1">Player</th>
                 <th className="text-center py-1">Score</th>
-                <th className="text-center py-1">Pos</th>
               </tr>
             </thead>
             <tbody>
@@ -91,9 +94,10 @@ export const PlayerRow: React.FC<PlayerRowProps> = ({ player, selectedRound, rem
                         : ''
                     }
                   >
-                    <td className="py-1 pl-1 rounded-l">{name}</td>
-                    <td className="text-center py-1">{stat && stat.total !== undefined && stat.total !== null ? String(stat.total) : '-'}</td>
-                    <td className="text-center py-1 rounded-r">{stat ? stat.position ?? '-' : '-'}</td>
+                    <td className="py-1 pl-1 rounded-l truncate">{name}</td>
+                    <td className="text-center py-1 rounded-r">
+                      {stat && stat.position === 'WD' ? 'WD' : (stat && stat.total !== undefined && stat.total !== null ? String(stat.total) : '-')}
+                    </td>
                   </tr>
                 );
               })}
