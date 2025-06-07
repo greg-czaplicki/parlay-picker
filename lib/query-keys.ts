@@ -48,6 +48,8 @@ export const queryKeys = {
   currentWeekEvents: () => ["tournaments", "currentWeek"] as const,
   // Matchup type detection
   matchupType: (eventId: number | null) => ["matchupType", eventId] as const,
+  // Odds freshness
+  oddsFreshness: () => ["odds", "freshness"] as const,
 }
 
 // Helper type for inferring query key types
@@ -77,6 +79,7 @@ type QueryKey =
   | ReturnType<typeof queryKeys.tournamentSchedule>
   | ReturnType<typeof queryKeys.currentWeekEvents>
   | ReturnType<typeof queryKeys.matchupType>
+  | ReturnType<typeof queryKeys.oddsFreshness>
 
 export type { QueryKey }
 

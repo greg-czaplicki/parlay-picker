@@ -25,6 +25,7 @@ import { FilterPanel } from "@/components/ui/filter-panel"
 import { FilterChipList } from "@/components/ui/filter-chip"
 import { Badge } from "@/components/ui/badge"
 import { Filter as FilterIcon, CloudRain } from "lucide-react"
+import { OddsFreshnessIndicator } from "@/components/odds-freshness-indicator"
 
 // Register filters once at module load
 registerCoreFilters()
@@ -190,7 +191,10 @@ export default function Dashboard({
     <ParlayProvider>
       <div className="w-full">
         <div className="mt-6 mb-8 flex items-center justify-between">
-          <h1 className="text-3xl font-bold">Golf Parlay Picker</h1>
+          <div className="flex flex-col gap-2">
+            <h1 className="text-3xl font-bold">Golf Parlay Picker</h1>
+            <OddsFreshnessIndicator />
+          </div>
           <div className="flex items-center gap-4">
             <div className="relative">
               <Input placeholder="Search players..." className="pl-10 w-64 bg-[#1e1e23] border-none rounded-xl" />
