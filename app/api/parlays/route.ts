@@ -179,16 +179,24 @@ export async function GET(req: NextRequest) {
 
   // Get tournament names for the events in our matchups using exact same lookup as sync
   const eventIds = [...new Set(matchups.map((m: any) => m.event_id).filter(Boolean))]
-  let tournamentNames: string[] = []
+  let tournamentsByEventId: { [key: number]: string } = {}
   if (eventIds.length > 0) {
     const { data: tournamentsData, error: tournamentsError } = await supabase
       .from('tournaments')
-      .select('event_name')
+      .select('event_id, event_name')
       .in('event_id', eventIds)
     if (!tournamentsError && tournamentsData) {
-      tournamentNames = tournamentsData.map((t: any) => t.event_name).filter(Boolean)
+      // Create a mapping of event_id to tournament name
+      tournamentsData.forEach((t: any) => {
+        if (t.event_id && t.event_name) {
+          tournamentsByEventId[t.event_id] = t.event_name
+        }
+      })
     }
   }
+  
+  // Also get tournament names as array for live stats filtering
+  const tournamentNames = Object.values(tournamentsByEventId)
 
   // Fetch live stats for all players in all matchups (filtered by tournament name)
   const allPlayerNames = new Set<string>()
@@ -222,6 +230,17 @@ export async function GET(req: NextRequest) {
   // Build parlays with picks using stored data + live stats overlay
   const parlaysWithDetails = parlays.map((parlay: any) => {
     const parlayPicks = picks.filter((pick: any) => pick.parlay_id === parlay.uuid)
+    
+    // Get tournament name from the first matchup's event_id
+    let tournamentName = 'Unknown Tournament'
+    if (parlayPicks.length > 0) {
+      const firstPick = parlayPicks[0]
+      const firstMatchup = matchups.find((m: any) => String(m.uuid) === String(firstPick.matchup_id))
+      if (firstMatchup?.event_id && tournamentsByEventId[firstMatchup.event_id]) {
+        tournamentName = tournamentsByEventId[firstMatchup.event_id]
+      }
+    }
+    
     const picksWithDetails = parlayPicks.map((pick: any) => {
       const matchup = matchups.find((m: any) => String(m.uuid) === String(pick.matchup_id))
       
@@ -282,6 +301,7 @@ export async function GET(req: NextRequest) {
       ...parlay,
       odds: parlay.total_odds,        // Map total_odds to odds for frontend
       payout: parlay.potential_payout, // Map potential_payout to payout for frontend
+      tournament_name: tournamentName, // Add tournament name for display
       picks: Array.isArray(picksWithDetails) ? picksWithDetails : [],
     }
   })

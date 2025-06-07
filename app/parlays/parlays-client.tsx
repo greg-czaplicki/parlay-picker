@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { ParlayCardProps, ParlayPickDisplay, ParlayPlayerDisplay } from '@/components/parlay-card/parlay-card';
 import { toast } from '@/components/ui/use-toast';
 import { useParlaysQuery } from '@/hooks/use-parlays-query';
@@ -23,6 +23,9 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
   }, [isError, error]);
 
   const [autoProcessing, setAutoProcessing] = useState(false);
+  const [showSettled, setShowSettled] = useState(false);
+  const [pageSize, setPageSize] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
   const { refetch } = useParlaysQuery(userId);
 
   // Last sync timestamp state
@@ -33,6 +36,123 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
     const t = typeof window !== 'undefined' ? localStorage.getItem('lastSync') : null;
     if (t) setLastSync(new Date(t));
   }, []);
+
+  // Helper to organize and filter parlays
+  const organizedParlays = useMemo(() => {
+    if (!Array.isArray(parlays)) return { active: [], settled: [], activeTotal: 0, settledTotal: 0 };
+    
+    // A parlay is settled if all its picks have been settled
+    const active = parlays.filter((parlay: any) => {
+      if (!Array.isArray(parlay.picks)) return true;
+      return parlay.picks.some((pick: any) => 
+        !pick.settlement_status || pick.settlement_status === 'pending'
+      );
+    });
+    
+    const settled = parlays.filter((parlay: any) => {
+      if (!Array.isArray(parlay.picks) || parlay.picks.length === 0) return false;
+      return parlay.picks.every((pick: any) => 
+        pick.settlement_status === 'settled'
+      );
+    });
+    
+    // Enhanced sort function: tournament name, then round number, then date
+    const sortParlays = (a: any, b: any) => {
+      // Helper to extract tournament name from picks
+      const getTournamentName = (parlay: any) => {
+        if (!parlay.picks?.[0]?.players?.[0]) return 'Unknown Tournament';
+        // Look for eventName in the player data structure
+        const firstPlayer = parlay.picks[0].players[0];
+        return firstPlayer.eventName || parlay.tournament_name || 'Unknown Tournament';
+      };
+      
+      const aTournament = getTournamentName(a);
+      const bTournament = getTournamentName(b);
+      
+      if (aTournament !== bTournament) {
+        return aTournament.localeCompare(bTournament);
+      }
+      
+      // Then by round number
+      if (a.round_num !== b.round_num) {
+        return (a.round_num || 0) - (b.round_num || 0);
+      }
+      
+      // Finally by creation date (newest first)
+      return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+    };
+    
+    const sortedActive = active.sort(sortParlays);
+    const sortedSettled = settled.sort(sortParlays);
+    
+    // Apply pagination to active parlays (most important)
+    const startIndex = (currentPage - 1) * pageSize;
+    const paginatedActive = sortedActive.slice(startIndex, startIndex + pageSize);
+    
+    return {
+      active: paginatedActive,
+      settled: showSettled ? sortedSettled.slice(0, pageSize) : [], // Limit settled too
+      activeTotal: sortedActive.length,
+      settledTotal: sortedSettled.length
+    };
+  }, [parlays, currentPage, pageSize, showSettled]);
+
+  // Helper to extract tournament name from parlay
+  const getTournamentName = (parlay: any): string => {
+    return parlay.tournament_name || 'Unknown Tournament';
+  };
+
+  // Helper to determine overall parlay outcome
+  const getParlayOutcome = (parlay: any): { status: string; color: string } => {
+    if (!parlay.picks || parlay.picks.length === 0) {
+      return { status: 'Pending', color: 'bg-gray-100 text-gray-700' };
+    }
+
+    const outcomes = parlay.picks.map((pick: any) => pick.pick_outcome).filter(Boolean);
+    
+    if (outcomes.length === 0) {
+      return { status: 'Pending', color: 'bg-gray-100 text-gray-700' };
+    }
+
+    // Check if any pick was a loss
+    if (outcomes.includes('loss')) {
+      return { status: 'Lost', color: 'bg-red-100 text-red-700' };
+    }
+
+    // Check if any pick is void
+    if (outcomes.includes('void')) {
+      // If all non-void picks are wins, treat as void (refund)
+      const nonVoidOutcomes = outcomes.filter((o: string) => o !== 'void');
+      if (nonVoidOutcomes.length === 0 || nonVoidOutcomes.every((o: string) => o === 'win')) {
+        return { status: 'Void', color: 'bg-gray-100 text-gray-700' };
+      }
+      // If there are losses among non-void picks, it's still a loss
+      if (nonVoidOutcomes.includes('loss')) {
+        return { status: 'Lost', color: 'bg-red-100 text-red-700' };
+      }
+    }
+
+    // Check if any pick is a push
+    if (outcomes.includes('push')) {
+      // If all picks are wins or pushes, it's a push
+      if (outcomes.every((o: string) => o === 'win' || o === 'push')) {
+        return { status: 'Push', color: 'bg-yellow-100 text-yellow-700' };
+      }
+    }
+
+    // If all picks are wins, parlay wins
+    if (outcomes.every((o: string) => o === 'win')) {
+      return { status: 'Won', color: 'bg-green-100 text-green-700' };
+    }
+
+    // Default to pending if we can't determine
+    return { status: 'Pending', color: 'bg-gray-100 text-gray-700' };
+  };
+
+  // Pagination helpers
+  const totalPages = Math.ceil(organizedParlays.activeTotal / pageSize);
+  const canPrevPage = currentPage > 1;
+  const canNextPage = currentPage < totalPages;
 
   // Auto-sync and settle on page load
   useEffect(() => {
@@ -194,7 +314,22 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
   return (
     <div className="mx-auto px-2 sm:px-4 space-y-6 max-w-4xl">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h1 className="text-2xl font-bold">My Active Parlays</h1>
+        <div className="flex flex-col gap-2">
+          <h1 className="text-2xl font-bold">My Parlays</h1>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-muted-foreground">
+              {organizedParlays.activeTotal} active • {organizedParlays.settledTotal} settled
+            </span>
+            {organizedParlays.settledTotal > 0 && (
+              <button
+                onClick={() => setShowSettled(!showSettled)}
+                className="text-sm text-primary hover:text-primary/80 underline"
+              >
+                {showSettled ? 'Hide Settled' : 'Show Settled'}
+              </button>
+            )}
+          </div>
+        </div>
         <div className="flex flex-col items-end gap-2">
           {autoProcessing && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -207,158 +342,386 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
           </span>
         </div>
       </div>
-      {parlays.length > 0 ? (
+
+      {/* Pagination Controls */}
+      {organizedParlays.activeTotal > pageSize && (
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 py-4 border-b border-border">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span>Page {currentPage} of {totalPages}</span>
+            <span>•</span>
+            <span>Showing {Math.min(pageSize, organizedParlays.activeTotal - (currentPage - 1) * pageSize)} of {organizedParlays.activeTotal} active parlays</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <select 
+              value={pageSize} 
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1); // Reset to first page
+              }}
+              className="text-sm border border-border rounded px-2 py-1 bg-background"
+            >
+              <option value={5}>5 per page</option>
+              <option value={10}>10 per page</option>
+              <option value={25}>25 per page</option>
+              <option value={50}>50 per page</option>
+            </select>
+            <button
+              onClick={() => setCurrentPage(1)}
+              disabled={!canPrevPage}
+              className="px-3 py-1 text-sm border border-border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent"
+            >
+              First
+            </button>
+            <button
+              onClick={() => setCurrentPage(currentPage - 1)}
+              disabled={!canPrevPage}
+              className="px-3 py-1 text-sm border border-border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent"
+            >
+              Prev
+            </button>
+            <button
+              onClick={() => setCurrentPage(currentPage + 1)}
+              disabled={!canNextPage}
+              className="px-3 py-1 text-sm border border-border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent"
+            >
+              Next
+            </button>
+            <button
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={!canNextPage}
+              className="px-3 py-1 text-sm border border-border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent"
+            >
+              Last
+            </button>
+          </div>
+        </div>
+      )}
+      {organizedParlays.active.length > 0 || (showSettled && organizedParlays.settled.length > 0) ? (
         <div className="space-y-8">
-          {parlays.map((parlay: any, idx: number) => {
-            const cardProps = mapParlayToCardProps(parlay);
-            if (!cardProps) return null;
-            // Show all picks for each parlay
-            return (
-              <div
-                key={parlay.uuid}
-                className="relative rounded-lg shadow-md border bg-neutral-900 border-border mb-6"
-              >
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 pt-4 pb-2">
-                  <div className="text-lg font-bold tracking-tight flex items-center gap-2">
-                    <span>Parlay #{idx + 1}</span>
-                    {cardProps.isSettled && (
-                      <span className="ml-2 px-2 py-0.5 rounded bg-green-100 text-green-700 text-xs font-semibold">Settled</span>
-                    )}
-                  </div>
-                  <div className="text-sm text-neutral-200 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-6">
-                    <span>Round {cardProps.round}</span>
-                    <span className="hidden sm:inline text-base text-neutral-500">•</span>
-                    <span>
-                      <span className="font-semibold">${cardProps.amount.toLocaleString()}</span> to win <span className="font-semibold">${cardProps.payout.toLocaleString()}</span>
-                    </span>
-                    <span className="hidden sm:inline text-base text-neutral-500">•</span>
-                    <span>Odds: <span className="font-mono">+{cardProps.odds}</span></span>
-                  </div>
-                </div>
-                <div className="grid gap-4 px-6 pb-4">
-                  {cardProps.picks.map((pick, mIdx) => {
-                    if (!pick.players) return null;
-                    const userPick = pick.players.find((p: ParlayPlayerDisplay) => p.isUserPick);
-                    const others = pick.players.filter((p: ParlayPlayerDisplay) => !p.isUserPick);
-                    if (!userPick) return null;
-                    const matchupStatus = getMatchupStatus(userPick, others);
-                    const finalStatus = getMatchupFinalStatus(userPick, others);
-                    const cardBg =
-                      finalStatus === 'won'
-                        ? 'bg-green-800/10 border-green-500'
-                        : finalStatus === 'lost'
-                        ? 'bg-red-800/10 border-red-500'
-                        : finalStatus === 'tied'
-                        ? 'bg-yellow-800/10 border-yellow-500'
-                        : finalStatus === 'void'
-                        ? 'bg-gray-800/10 border-gray-500'
-                        : 'bg-muted border-border';
-                    const statusBarColor =
-                      finalStatus === 'won'
-                        ? 'bg-green-500'
-                        : finalStatus === 'lost'
-                        ? 'bg-red-500'
-                        : finalStatus === 'tied'
-                        ? 'bg-yellow-500'
-                        : finalStatus === 'void'
-                        ? 'bg-gray-500'
-                        : matchupStatus === 'likely'
-                        ? 'bg-green-500'
-                        : matchupStatus === 'unlikely'
-                        ? 'bg-red-500'
-                        : 'bg-gray-500';
-                    const getHolesDisplay = (holesPlayed: number): string | number => {
-                      if (holesPlayed === 0) return 1;
-                      if (holesPlayed === 18) return 'F';
-                      return holesPlayed;
-                    };
-                    return (
-                      <div
-                        key={mIdx}
-                        className={`relative rounded-md border ${cardBg} px-0 py-0 overflow-hidden`}
-                      >
-                        {/* Status bar */}
-                        <div className={`absolute left-0 top-0 h-full w-1 ${statusBarColor}`} />
-                        <div className="flex items-center gap-2 px-4 pt-3 pb-1">
-                          <span className="font-semibold text-primary text-base">
-                            Matchup {mIdx + 1}
-                            <span className="ml-2 text-xs text-muted-foreground">
-                              ({pick.players.length === 2 ? '2-ball' : '3-ball'})
-                            </span>
-                          </span>
-                          {finalStatus && (
-                            <span className={`ml-2 px-2 py-0.5 rounded text-xs font-semibold
-                              ${finalStatus === 'won' ? 'bg-green-100 text-green-700' : ''}
-                              ${finalStatus === 'lost' ? 'bg-red-100 text-red-700' : ''}
-                              ${finalStatus === 'tied' ? 'bg-yellow-100 text-yellow-700' : ''}
-                              ${finalStatus === 'void' ? 'bg-gray-100 text-gray-700' : ''}
-                            `}>
-                              {finalStatus.toUpperCase()}
-                            </span>
-                          )}
-                        </div>
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm table-fixed">
-                            <colgroup>
-                              <col className="w-[60%]" />
-                              <col className="w-[20%]" />
-                              <col className="w-[20%]" />
-                            </colgroup>
-                            <thead>
-                              <tr className="bg-muted">
-                                <th className="py-2 px-3 text-left font-semibold">Player</th>
-                                <th className="py-2 px-3 text-right font-semibold">Score</th>
-                                <th className="py-2 px-3 text-right font-semibold">Thru</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {pick.players.map((player, pIdx) => (
-                                <tr
-                                  key={pIdx}
-                                  className={
-                                    player.isUserPick
-                                      ? 'font-semibold text-primary bg-accent/30 border-l-4 border-primary'
-                                      : 'hover:bg-accent/10 transition'
-                                  }
-                                >
-                                  <td className="py-2 px-3 truncate">{player.name}</td>
-                                  <td className="py-2 px-3 text-right font-mono">
-                                    {(() => {
-                                      // Check if player withdrew
-                                      if (player.currentPosition === 'WD') return 'WD'
-                                      
-                                      if (typeof player.roundScore !== 'number') return '-'
-                                      
-                                      // For historical completed rounds, show raw stroke count
-                                      // We can detect this by: holesPlayed === 18 AND roundScore > 18 (typical golf scores are 60-80)
-                                      if (player.holesPlayed >= 18 && player.roundScore > 18) {
-                                        return player.roundScore
-                                      }
-                                      
-                                      // For live rounds or relative-to-par scores, show with +/- formatting
-                                      if (player.roundScore === 0) return 'E'
-                                      return player.roundScore > 0 ? `+${player.roundScore}` : player.roundScore
-                                    })()}
-                                  </td>
-                                  <td className="py-2 px-3 text-right font-mono">
-                                    {player.currentPosition === 'WD' ? 'WD' : getHolesDisplay(player.holesPlayed)}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
+          {/* Active Parlays */}
+          {organizedParlays.active.length > 0 && (
+            <div className="space-y-6">
+              <h2 className="text-lg font-semibold text-primary">Active Parlays</h2>
+              {organizedParlays.active.map((parlay: any, idx: number) => {
+                const cardProps = mapParlayToCardProps(parlay);
+                if (!cardProps) return null;
+                return (
+                  <div
+                    key={parlay.uuid}
+                    className="relative rounded-lg shadow-md border bg-neutral-900 border-border mb-6"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 pt-4 pb-2">
+                      <div className="text-lg font-bold tracking-tight flex items-center gap-2">
+                        <span>Parlay #{idx + 1}</span>
+                        {(() => {
+                          const outcome = getParlayOutcome(parlay);
+                          if (outcome.status !== 'Pending') {
+                            return (
+                              <span className={`ml-2 px-2 py-0.5 rounded text-xs font-semibold ${outcome.color}`}>
+                                {outcome.status}
+                              </span>
+                            );
+                          }
+                          return null;
+                        })()}
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
+                      <div className="text-sm text-neutral-200 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-6">
+                        <span className="text-xs font-medium text-primary">{getTournamentName(parlay)}</span>
+                        <span className="hidden sm:inline text-base text-neutral-500">•</span>
+                        <span>Round {cardProps.round}</span>
+                        <span className="hidden sm:inline text-base text-neutral-500">•</span>
+                        <span>
+                          <span className="font-semibold">${cardProps.amount.toLocaleString()}</span> to win <span className="font-semibold">${cardProps.payout.toLocaleString()}</span>
+                        </span>
+                        <span className="hidden sm:inline text-base text-neutral-500">•</span>
+                        <span>Odds: <span className="font-mono">+{cardProps.odds}</span></span>
+                      </div>
+                    </div>
+                    <div className="grid gap-4 px-6 pb-4">
+                      {cardProps.picks.map((pick, mIdx) => {
+                        if (!pick.players) return null;
+                        const userPick = pick.players.find((p: ParlayPlayerDisplay) => p.isUserPick);
+                        const others = pick.players.filter((p: ParlayPlayerDisplay) => !p.isUserPick);
+                        if (!userPick) return null;
+                        const matchupStatus = getMatchupStatus(userPick, others);
+                        const finalStatus = getMatchupFinalStatus(userPick, others);
+                        const cardBg =
+                          finalStatus === 'won'
+                            ? 'bg-green-800/10 border-green-500'
+                            : finalStatus === 'lost'
+                            ? 'bg-red-800/10 border-red-500'
+                            : finalStatus === 'tied'
+                            ? 'bg-yellow-800/10 border-yellow-500'
+                            : finalStatus === 'void'
+                            ? 'bg-gray-800/10 border-gray-500'
+                            : 'bg-muted border-border';
+                        const statusBarColor =
+                          finalStatus === 'won'
+                            ? 'bg-green-500'
+                            : finalStatus === 'lost'
+                            ? 'bg-red-500'
+                            : finalStatus === 'tied'
+                            ? 'bg-yellow-500'
+                            : finalStatus === 'void'
+                            ? 'bg-gray-500'
+                            : matchupStatus === 'likely'
+                            ? 'bg-green-500'
+                            : matchupStatus === 'unlikely'
+                            ? 'bg-red-500'
+                            : 'bg-gray-500';
+                        const getHolesDisplay = (holesPlayed: number): string | number => {
+                          if (holesPlayed === 0) return 1;
+                          if (holesPlayed === 18) return 'F';
+                          return holesPlayed;
+                        };
+                        return (
+                          <div
+                            key={mIdx}
+                            className={`relative rounded-md border ${cardBg} px-0 py-0 overflow-hidden`}
+                          >
+                            {/* Status bar */}
+                            <div className={`absolute left-0 top-0 h-full w-1 ${statusBarColor}`} />
+                            <div className="flex items-center gap-2 px-4 pt-3 pb-1">
+                              <span className="font-semibold text-primary text-base">
+                                Matchup {mIdx + 1}
+                                <span className="ml-2 text-xs text-muted-foreground">
+                                  ({pick.players.length === 2 ? '2-ball' : '3-ball'})
+                                </span>
+                              </span>
+                              {finalStatus && (
+                                <span className={`ml-2 px-2 py-0.5 rounded text-xs font-semibold
+                                  ${finalStatus === 'won' ? 'bg-green-100 text-green-700' : ''}
+                                  ${finalStatus === 'lost' ? 'bg-red-100 text-red-700' : ''}
+                                  ${finalStatus === 'tied' ? 'bg-yellow-100 text-yellow-700' : ''}
+                                  ${finalStatus === 'void' ? 'bg-gray-100 text-gray-700' : ''}
+                                `}>
+                                  {finalStatus.toUpperCase()}
+                                </span>
+                              )}
+                            </div>
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-sm table-fixed">
+                                <colgroup>
+                                  <col className="w-[60%]" />
+                                  <col className="w-[20%]" />
+                                  <col className="w-[20%]" />
+                                </colgroup>
+                                <thead>
+                                  <tr className="bg-muted">
+                                    <th className="py-2 px-3 text-left font-semibold">Player</th>
+                                    <th className="py-2 px-3 text-right font-semibold">Score</th>
+                                    <th className="py-2 px-3 text-right font-semibold">Thru</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {pick.players.map((player, pIdx) => (
+                                    <tr
+                                      key={pIdx}
+                                      className={
+                                        player.isUserPick
+                                          ? 'font-semibold text-primary bg-accent/30 border-l-4 border-primary'
+                                          : 'hover:bg-accent/10 transition'
+                                      }
+                                    >
+                                      <td className="py-2 px-3 truncate">{player.name}</td>
+                                      <td className="py-2 px-3 text-right font-mono">
+                                        {(() => {
+                                          // Check if player withdrew
+                                          if (player.currentPosition === 'WD') return 'WD'
+                                          
+                                          if (typeof player.roundScore !== 'number') return '-'
+                                          
+                                          // For historical completed rounds, show raw stroke count
+                                          // We can detect this by: holesPlayed === 18 AND roundScore > 18 (typical golf scores are 60-80)
+                                          if (player.holesPlayed >= 18 && player.roundScore > 18) {
+                                            return player.roundScore
+                                          }
+                                          
+                                          // For live rounds or relative-to-par scores, show with +/- formatting
+                                          if (player.roundScore === 0) return 'E'
+                                          return player.roundScore > 0 ? `+${player.roundScore}` : player.roundScore
+                                        })()}
+                                      </td>
+                                      <td className="py-2 px-3 text-right font-mono">
+                                        {player.currentPosition === 'WD' ? 'WD' : getHolesDisplay(player.holesPlayed)}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Settled Parlays */}
+          {showSettled && organizedParlays.settled.length > 0 && (
+            <div className="space-y-6">
+              <h2 className="text-lg font-semibold text-muted-foreground">Settled Parlays</h2>
+              {organizedParlays.settled.map((parlay: any, idx: number) => {
+                const cardProps = mapParlayToCardProps(parlay);
+                if (!cardProps) return null;
+                return (
+                  <div
+                    key={parlay.uuid}
+                    className="relative rounded-lg shadow-md border bg-neutral-900/50 border-border/50 mb-6 opacity-75"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 pt-4 pb-2">
+                      <div className="text-lg font-bold tracking-tight flex items-center gap-2">
+                        <span>Parlay #{organizedParlays.active.length + idx + 1}</span>
+                        {(() => {
+                          const outcome = getParlayOutcome(parlay);
+                          return (
+                            <span className={`ml-2 px-2 py-0.5 rounded text-xs font-semibold ${outcome.color}`}>
+                              {outcome.status}
+                            </span>
+                          );
+                        })()}
+                      </div>
+                      <div className="text-sm text-neutral-200 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-6">
+                        <span className="text-xs font-medium text-primary">{getTournamentName(parlay)}</span>
+                        <span className="hidden sm:inline text-base text-neutral-500">•</span>
+                        <span>Round {cardProps.round}</span>
+                        <span className="hidden sm:inline text-base text-neutral-500">•</span>
+                        <span>
+                          <span className="font-semibold">${cardProps.amount.toLocaleString()}</span> to win <span className="font-semibold">${cardProps.payout.toLocaleString()}</span>
+                        </span>
+                        <span className="hidden sm:inline text-base text-neutral-500">•</span>
+                        <span>Odds: <span className="font-mono">+{cardProps.odds}</span></span>
+                      </div>
+                    </div>
+                    <div className="grid gap-4 px-6 pb-4">
+                      {cardProps.picks.map((pick, mIdx) => {
+                        if (!pick.players) return null;
+                        const userPick = pick.players.find((p: ParlayPlayerDisplay) => p.isUserPick);
+                        const others = pick.players.filter((p: ParlayPlayerDisplay) => !p.isUserPick);
+                        if (!userPick) return null;
+                        const matchupStatus = getMatchupStatus(userPick, others);
+                        const finalStatus = getMatchupFinalStatus(userPick, others);
+                        const cardBg =
+                          finalStatus === 'won'
+                            ? 'bg-green-800/10 border-green-500'
+                            : finalStatus === 'lost'
+                            ? 'bg-red-800/10 border-red-500'
+                            : finalStatus === 'tied'
+                            ? 'bg-yellow-800/10 border-yellow-500'
+                            : finalStatus === 'void'
+                            ? 'bg-gray-800/10 border-gray-500'
+                            : 'bg-muted border-border';
+                        const statusBarColor =
+                          finalStatus === 'won'
+                            ? 'bg-green-500'
+                            : finalStatus === 'lost'
+                            ? 'bg-red-500'
+                            : finalStatus === 'tied'
+                            ? 'bg-yellow-500'
+                            : finalStatus === 'void'
+                            ? 'bg-gray-500'
+                            : matchupStatus === 'likely'
+                            ? 'bg-green-500'
+                            : matchupStatus === 'unlikely'
+                            ? 'bg-red-500'
+                            : 'bg-gray-500';
+                        const getHolesDisplay = (holesPlayed: number): string | number => {
+                          if (holesPlayed === 0) return 1;
+                          if (holesPlayed === 18) return 'F';
+                          return holesPlayed;
+                        };
+                        return (
+                          <div
+                            key={mIdx}
+                            className={`relative rounded-md border ${cardBg} px-0 py-0 overflow-hidden`}
+                          >
+                            {/* Status bar */}
+                            <div className={`absolute left-0 top-0 h-full w-1 ${statusBarColor}`} />
+                            <div className="flex items-center gap-2 px-4 pt-3 pb-1">
+                              <span className="font-semibold text-primary text-base">
+                                Matchup {mIdx + 1}
+                                <span className="ml-2 text-xs text-muted-foreground">
+                                  ({pick.players.length === 2 ? '2-ball' : '3-ball'})
+                                </span>
+                              </span>
+                              {finalStatus && (
+                                <span className={`ml-2 px-2 py-0.5 rounded text-xs font-semibold
+                                  ${finalStatus === 'won' ? 'bg-green-100 text-green-700' : ''}
+                                  ${finalStatus === 'lost' ? 'bg-red-100 text-red-700' : ''}
+                                  ${finalStatus === 'tied' ? 'bg-yellow-100 text-yellow-700' : ''}
+                                  ${finalStatus === 'void' ? 'bg-gray-100 text-gray-700' : ''}
+                                `}>
+                                  {finalStatus.toUpperCase()}
+                                </span>
+                              )}
+                            </div>
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-sm table-fixed">
+                                <colgroup>
+                                  <col className="w-[60%]" />
+                                  <col className="w-[20%]" />
+                                  <col className="w-[20%]" />
+                                </colgroup>
+                                <thead>
+                                  <tr className="bg-muted">
+                                    <th className="py-2 px-3 text-left font-semibold">Player</th>
+                                    <th className="py-2 px-3 text-right font-semibold">Score</th>
+                                    <th className="py-2 px-3 text-right font-semibold">Thru</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {pick.players.map((player, pIdx) => (
+                                    <tr
+                                      key={pIdx}
+                                      className={
+                                        player.isUserPick
+                                          ? 'font-semibold text-primary bg-accent/30 border-l-4 border-primary'
+                                          : 'hover:bg-accent/10 transition'
+                                      }
+                                    >
+                                      <td className="py-2 px-3 truncate">{player.name}</td>
+                                      <td className="py-2 px-3 text-right font-mono">
+                                        {(() => {
+                                          // Check if player withdrew
+                                          if (player.currentPosition === 'WD') return 'WD'
+                                          
+                                          if (typeof player.roundScore !== 'number') return '-'
+                                          
+                                          // For historical completed rounds, show raw stroke count
+                                          // We can detect this by: holesPlayed === 18 AND roundScore > 18 (typical golf scores are 60-80)
+                                          if (player.holesPlayed >= 18 && player.roundScore > 18) {
+                                            return player.roundScore
+                                          }
+                                          
+                                          // For live rounds or relative-to-par scores, show with +/- formatting
+                                          if (player.roundScore === 0) return 'E'
+                                          return player.roundScore > 0 ? `+${player.roundScore}` : player.roundScore
+                                        })()}
+                                      </td>
+                                      <td className="py-2 px-3 text-right font-mono">
+                                        {player.currentPosition === 'WD' ? 'WD' : getHolesDisplay(player.holesPlayed)}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       ) : (
         <div className="text-center py-10 border border-dashed border-border/50">
-          <p className="text-muted-foreground">No parlays found.</p>
+          <p className="text-muted-foreground">No active parlays found.</p>
         </div>
       )}
     </div>
