@@ -3,6 +3,9 @@ import PlayerTable from "@/components/player-table"
 import { createClient } from "@supabase/supabase-js"
 import { PlayerSkillRating, LiveTournamentStat, PgaTourPlayerStats } from "@/types/definitions"
 
+// Force dynamic rendering - don't pre-render during build
+export const dynamic = 'force-dynamic'
+
 export const metadata: Metadata = {
   title: "Golf Parlay Picker - Players",
   description: "View and analyze player statistics and performance data",
