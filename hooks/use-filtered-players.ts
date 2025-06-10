@@ -13,6 +13,7 @@ interface UseFilteredPlayersOptions {
   bookmaker?: string
   oddsGapPercentage?: number
   limit?: number
+  sharedMatchupsData?: any[]
 }
 
 interface FilteredPlayersResult {
@@ -43,21 +44,109 @@ export function useFilteredPlayers(
     bookmaker = "fanduel",
     oddsGapPercentage = 40,
     limit = 10,
+    sharedMatchupsData,
   } = options
 
   // Debounce filter changes to prevent excessive processing
   const debouncedFilterIds = useDebounce(filterIds, debounceMs)
   const debouncedFilterOptions = useDebounce(filterOptions, debounceMs)
 
-  // Get base player recommendations data
+  // Get base player recommendations data - ALWAYS call this hook, but disable when we have shared data
   const baseQuery = useRecommendedPicksQuery(
-    eventId, 
+    sharedMatchupsData ? null : eventId, // Pass null when we have shared data to disable the query
     matchupType, 
     bookmaker, 
     oddsGapPercentage, 
     limit, 
     roundNum
   )
+
+  // Use shared data if provided, otherwise use the query result
+  // Always call useMemo to avoid Rules of Hooks violations
+  const basePlayersData = useMemo(() => {
+    // If we have shared data, transform it to Player format
+    if (sharedMatchupsData && sharedMatchupsData.length > 0) {
+      let result: Player[] = [];
+      for (const matchup of sharedMatchupsData) {
+        if (!matchup || typeof matchup !== 'object') continue;
+        
+        if (matchupType === "3ball") {
+          if (!matchup.player1_name || !matchup.player2_name || !matchup.player3_name) continue;
+          result.push(
+            {
+              dg_id: matchup.player1_dg_id || 0,
+              name: matchup.player1_name,
+              odds: matchup.odds1,
+              sgTotal: 0,
+              valueRating: 0,
+              confidenceScore: 0,
+              isRecommended: false,
+              matchupId: matchup.uuid,
+              eventName: matchup.event_name,
+              roundNum: matchup.round_num
+            },
+            {
+              dg_id: matchup.player2_dg_id || 0,
+              name: matchup.player2_name,
+              odds: matchup.odds2,
+              sgTotal: 0,
+              valueRating: 0,
+              confidenceScore: 0,
+              isRecommended: false,
+              matchupId: matchup.uuid,
+              eventName: matchup.event_name,
+              roundNum: matchup.round_num
+            },
+            {
+              dg_id: matchup.player3_dg_id || 0,
+              name: matchup.player3_name,
+              odds: matchup.odds3,
+              sgTotal: 0,
+              valueRating: 0,
+              confidenceScore: 0,
+              isRecommended: false,
+              matchupId: matchup.uuid,
+              eventName: matchup.event_name,
+              roundNum: matchup.round_num
+            }
+          );
+        } else {
+          // 2ball
+          if (!matchup.player1_name || !matchup.player2_name) continue;
+          result.push(
+            {
+              dg_id: matchup.player1_dg_id || 0,
+              name: matchup.player1_name,
+              odds: matchup.odds1,
+              sgTotal: 0,
+              valueRating: 0,
+              confidenceScore: 0,
+              isRecommended: false,
+              matchupId: matchup.uuid,
+              eventName: matchup.event_name,
+              roundNum: matchup.round_num
+            },
+            {
+              dg_id: matchup.player2_dg_id || 0,
+              name: matchup.player2_name,
+              odds: matchup.odds2,
+              sgTotal: 0,
+              valueRating: 0,
+              confidenceScore: 0,
+              isRecommended: false,
+              matchupId: matchup.uuid,
+              eventName: matchup.event_name,
+              roundNum: matchup.round_num
+            }
+          );
+        }
+      }
+      return result;
+    }
+    
+    // Otherwise use query data
+    return baseQuery.data || [];
+  }, [sharedMatchupsData, matchupType, baseQuery.data]);
 
   // Create cache key for filtered results
   const cacheKey = useMemo(() => {
@@ -83,108 +172,68 @@ export function useFilteredPlayers(
     debouncedFilterOptions
   ])
 
-  // Query for filtered results with caching
-  const filteredQuery = useQuery({
-    queryKey: cacheKey,
-    queryFn: async () => {
-      const startTime = performance.now()
-      const filterService = FilterService.getInstance()
-
-      if (!baseQuery.data || debouncedFilterIds.length === 0) {
-        return {
-          data: baseQuery.data || [],
-          originalCount: baseQuery.data?.length || 0,
-          filteredCount: baseQuery.data?.length || 0,
-          appliedFilters: [],
-          performance: {
-            filterTime: 0,
-            cacheHit: false,
-          },
-        }
-      }
-
-      let filteredData = baseQuery.data
-      let appliedFilters: string[] = []
-
-      // Apply filters sequentially
-      for (const filterId of debouncedFilterIds) {
-        const filter = filterService.getFilterById(filterId)
-        if (filter) {
-          const options = debouncedFilterOptions[filterId] || {}
-          const result = filter.applyFilter(filteredData, options)
-          filteredData = result.filtered
-          appliedFilters.push(filterId)
-        }
-      }
-
-      const endTime = performance.now()
-
+  // Apply filters with performance tracking
+  const { data: filteredPlayers, performance: filterPerformance } = useMemo((): {
+    data: Player[]
+    performance: { filterTime: number; cacheHit: boolean }
+  } => {
+    const startTime = typeof window !== 'undefined' ? window.performance.now() : Date.now()
+    
+    // Use basePlayersData instead of baseQuery.data
+    if (!basePlayersData || basePlayersData.length === 0) {
       return {
-        data: filteredData,
-        originalCount: baseQuery.data.length,
-        filteredCount: filteredData.length,
-        appliedFilters,
-        performance: {
-          filterTime: endTime - startTime,
-          cacheHit: false,
-        },
-      }
-    },
-    enabled: !!baseQuery.data && !baseQuery.isLoading,
-    staleTime: enableCaching ? 1000 * 60 * 2 : 0, // 2 minutes cache
-    gcTime: enableCaching ? 1000 * 60 * 10 : 0, // 10 minutes garbage collection
-  })
-
-  // Memoize the final result
-  const result = useMemo(() => {
-    if (baseQuery.isLoading) {
-      return {
-        data: undefined,
-        isLoading: true,
-        isError: false,
-        error: null,
-        originalCount: 0,
-        filteredCount: 0,
-        appliedFilters: [],
-        performance: { filterTime: 0, cacheHit: false },
+        data: [],
+        performance: { filterTime: 0, cacheHit: false }
       }
     }
 
-    if (baseQuery.isError) {
+    // If no filters, return original data
+    if (debouncedFilterIds.length === 0) {
       return {
-        data: undefined,
-        isLoading: false,
-        isError: true,
-        error: baseQuery.error,
-        originalCount: 0,
-        filteredCount: 0,
-        appliedFilters: [],
-        performance: { filterTime: 0, cacheHit: false },
+        data: basePlayersData,
+        performance: { 
+          filterTime: typeof window !== 'undefined' ? window.performance.now() - startTime : Date.now() - startTime, 
+          cacheHit: false 
+        }
       }
     }
 
-    const queryResult = filteredQuery.data || {
-      data: baseQuery.data || [],
-      originalCount: baseQuery.data?.length || 0,
-      filteredCount: baseQuery.data?.length || 0,
-      appliedFilters: [],
-      performance: { filterTime: 0, cacheHit: false },
+    // Apply filters using the FilterService instance
+    const filterService = FilterService.getInstance()
+    let filteredData = basePlayersData
+    
+    // Apply filters sequentially
+    for (const filterId of debouncedFilterIds) {
+      const filter = filterService.getFilterById(filterId)
+      if (filter) {
+        const options = debouncedFilterOptions[filterId] || {}
+        const result = filter.applyFilter(filteredData, options)
+        filteredData = result.filtered
+      }
     }
 
     return {
-      data: queryResult.data,
-      isLoading: filteredQuery.isLoading,
-      isError: filteredQuery.isError,
-      error: filteredQuery.error,
-      originalCount: queryResult.originalCount,
-      filteredCount: queryResult.filteredCount,
-      appliedFilters: queryResult.appliedFilters,
-      performance: {
-        ...queryResult.performance,
-        cacheHit: !filteredQuery.isFetching && !!filteredQuery.data,
-      },
+      data: filteredData,
+      performance: { 
+        filterTime: typeof window !== 'undefined' ? window.performance.now() - startTime : Date.now() - startTime, 
+        cacheHit: false 
+      }
     }
-  }, [baseQuery, filteredQuery])
+  }, [basePlayersData, debouncedFilterIds, debouncedFilterOptions])
 
-  return result
+  // Calculate loading and error states
+  const isLoading = sharedMatchupsData ? false : baseQuery.isLoading;
+  const isError = sharedMatchupsData ? false : baseQuery.isError;
+  const error = sharedMatchupsData ? null : baseQuery.error;
+
+  return {
+    data: filteredPlayers,
+    isLoading,
+    isError,
+    error,
+    originalCount: basePlayersData?.length || 0,
+    filteredCount: filteredPlayers?.length || 0,
+    appliedFilters: debouncedFilterIds,
+    performance: filterPerformance,
+  }
 } 

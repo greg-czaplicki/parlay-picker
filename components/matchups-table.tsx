@@ -121,6 +121,11 @@ interface MatchupsTableProps {
   roundNum?: number | null;
   showFilters?: boolean;
   compactFilters?: boolean;
+  // Allow passing pre-fetched matchups data to prevent duplicate API calls
+  sharedMatchupsData?: MatchupRow[];
+  isLoading?: boolean;
+  isError?: boolean;
+  error?: Error | null;
 }
 
 export default function MatchupsTable({ 
@@ -128,18 +133,32 @@ export default function MatchupsTable({
   matchupType = "3ball", 
   roundNum, 
   showFilters = true, 
-  compactFilters = false
+  compactFilters = false,
+  sharedMatchupsData,
+  isLoading,
+  isError,
+  error
 }: MatchupsTableProps) {
   const [selectedBookmaker, setSelectedBookmaker] = useState<"fanduel">("fanduel");
   // Odds gap filter state
   const [oddsGapThreshold, setOddsGapThreshold] = useState(40); // Default 40 points in American odds
   const [showFiltersDialog, setShowFiltersDialog] = useState(false);
 
-  // Use our matchups query directly
-  const { data: matchups, isLoading, isError, error } = useMatchupsQuery(eventId, matchupType, roundNum);
+  // Use our matchups query directly, but only if shared data is not provided
+  const { data: matchups, isLoading: matchupsLoading, isError: matchupsError, error: matchupsErrorDetails } = useMatchupsQuery(
+    sharedMatchupsData ? null : eventId, 
+    matchupType, 
+    roundNum
+  );
+
+  // Use shared data if provided, otherwise use query result
+  const finalMatchupsData = sharedMatchupsData || matchups;
+  const finalIsLoading = sharedMatchupsData ? (isLoading ?? false) : matchupsLoading;
+  const finalIsError = sharedMatchupsData ? (isError ?? false) : matchupsError;
+  const finalError = sharedMatchupsData ? error : matchupsErrorDetails;
 
   // Use type guards before accessing fields to extract player IDs for stats
-  const playerIds = (matchups ?? []).flatMap(m => {
+  const playerIds = (finalMatchupsData ?? []).flatMap(m => {
     if (isSupabaseMatchupRow(m)) {
       const ids = [
         (m as any).player1_dg_id,
@@ -214,7 +233,7 @@ export default function MatchupsTable({
   const isPlayerInAnyParlay = (playerName: string) =>
     allParlayPicks.some((pick: any) => (pick.picked_player_name || '').toLowerCase() === playerName.toLowerCase());
 
-  if (isLoading) {
+  if (finalIsLoading) {
     return (
       <Card className="glass-card">
         <CardContent className="p-6 text-center">
@@ -227,11 +246,11 @@ export default function MatchupsTable({
     );
   }
 
-  if (isError) {
+  if (finalIsError) {
     return (
       <Card className="glass-card">
         <CardContent className="p-6 text-center">
-          <div className="text-red-500">Error: {error?.message}</div>
+          <div className="text-red-500">Error: {finalError?.message}</div>
           <Button onClick={() => {
             // Implement retry logic here
           }} className="mt-4">Try Again</Button>
@@ -244,7 +263,7 @@ export default function MatchupsTable({
   // Using the existing type guard throughout the code instead
 
   // Filter matchups to only those with valid FanDuel odds for all players
-  const filteredMatchups = (matchups ?? []).filter(matchup => {
+  const filteredMatchups = (finalMatchupsData ?? []).filter(matchup => {
     if (isSupabaseMatchupRow(matchup)) {
       return (
         Number((matchup as SupabaseMatchupRow).odds1 ?? 0) > 1 &&
@@ -269,9 +288,9 @@ export default function MatchupsTable({
             <div className="flex justify-between items-center">
               <div>
                 <h2 className="text-xl font-bold">{matchupType === "3ball" ? "3-Ball" : "2-Ball"} Matchups</h2>
-                {matchups && matchups.length > 0 && (
+                {finalMatchupsData && finalMatchupsData.length > 0 && (
                   <p className="text-sm text-gray-400">
-                    Event: {isSupabaseMatchupRow(matchups[0]) || isSupabaseMatchupRow2Ball(matchups[0]) ? matchups[0].event_name : ""}
+                    Event: {isSupabaseMatchupRow(finalMatchupsData[0]) || isSupabaseMatchupRow2Ball(finalMatchupsData[0]) ? finalMatchupsData[0].event_name : ""}
                   </p>
                 )}
               </div>
@@ -370,6 +389,39 @@ export default function MatchupsTable({
                 </Dialog>
               </div>
             </div>
+
+            {/* Check if we have any position data across all matchups */}
+            {(() => {
+              const hasAnyPositionDataAcrossMatchups = filteredMatchups.some(matchup => {
+                if (isSupabaseMatchupRow(matchup)) {
+                  const m = matchup as SupabaseMatchupRow;
+                  return [m.player1_dg_id, m.player2_dg_id, m.player3_dg_id].some(id => {
+                    if (!id) return false;
+                    const playerStat = playerStatsMap[String(id)];
+                    return playerStat && (playerStat.position || playerStat.today !== null || playerStat.total !== null);
+                  });
+                } else if (isSupabaseMatchupRow2Ball(matchup)) {
+                  const m = matchup as SupabaseMatchupRow2Ball;
+                  return [m.player1_dg_id, m.player2_dg_id].some(id => {
+                    if (!id) return false;
+                    const playerStat = playerStatsMap[String(id)];
+                    return playerStat && (playerStat.position || playerStat.today !== null || playerStat.total !== null);
+                  });
+                }
+                return false;
+              });
+
+              if (!hasAnyPositionDataAcrossMatchups && !loadingStats) {
+                return (
+                  <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-sm text-blue-400">
+                    📊 Live tournament position data not yet available. Positions will update when the tournament begins or live scoring data becomes available.
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
+
           </div>
           {filteredMatchups && filteredMatchups.length > 0 ? (
             <div className="rounded-lg overflow-hidden border border-gray-800">
@@ -556,7 +608,10 @@ export default function MatchupsTable({
                       // Format the player's tournament position and score
                       const formatPlayerPosition = (playerId: string | number) => {
                         const playerStat = playerStatsMap[String(playerId)];
-                        if (!playerStat) return { position: '-', score: '-' };
+                        
+                        if (!playerStat) {
+                          return { position: '-', score: '-' };
+                        }
                         
                         // Position should be leaderboard position (T5, 1, etc.)
                         const position = playerStat.position || '-';
@@ -616,6 +671,13 @@ export default function MatchupsTable({
                         return { position, score };
                       };
                       
+                      // Check if we have any valid position data for this matchup
+                      const hasAnyPositionData = sortedPlayers.some(player => {
+                        if (!player.dg_id) return false;
+                        const playerStat = playerStatsMap[String(player.dg_id)];
+                        return playerStat && (playerStat.position || playerStat.today !== null || playerStat.total !== null);
+                      });
+
                       return (
                         <TableRow key={`3ball-${matchup.uuid}`}>
                           <TableCell>
@@ -788,7 +850,10 @@ export default function MatchupsTable({
                       // Format the player's tournament position and score
                       const formatPlayerPosition = (playerId: string | number) => {
                         const playerStat = playerStatsMap[String(playerId)];
-                        if (!playerStat) return { position: '-', score: '-' };
+                        
+                        if (!playerStat) {
+                          return { position: '-', score: '-' };
+                        }
                         
                         // Position should be leaderboard position (T5, 1, etc.)
                         const position = playerStat.position || '-';
@@ -848,6 +913,13 @@ export default function MatchupsTable({
                         return { position, score };
                       };
                       
+                      // Check if we have any valid position data for this matchup
+                      const hasAnyPositionData = sortedPlayers.some(player => {
+                        if (!player.dg_id) return false;
+                        const playerStat = playerStatsMap[String(player.dg_id)];
+                        return playerStat && (playerStat.position || playerStat.today !== null || playerStat.total !== null);
+                      });
+
                       return (
                         <TableRow key={`2ball-${m2.uuid}`}>
                           <TableCell>

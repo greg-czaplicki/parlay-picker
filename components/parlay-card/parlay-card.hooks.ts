@@ -28,7 +28,7 @@ export function useParlayPlayers(parlayId: number, selectedRound: number | null)
 
   // Initialize players from picks
   useEffect(() => {
-    console.log('[useParlayPlayers] picks:', picks);
+  
     setPlayers(prevPlayers => {
       const mapped = picks.map((pick: any) => {
         const existing = prevPlayers.find(p => p.pickId === pick.id);
@@ -51,7 +51,7 @@ export function useParlayPlayers(parlayId: number, selectedRound: number | null)
         prevPlayers.length !== mapped.length ||
         prevPlayers.some((p, i) => p.pickId !== mapped[i].pickId || p.name !== mapped[i].name)
       ) {
-        console.log('[useParlayPlayers] setPlayers: updating players', mapped);
+
         return mapped;
       }
       return prevPlayers;
@@ -61,10 +61,10 @@ export function useParlayPlayers(parlayId: number, selectedRound: number | null)
 
   // After players are initialized, trigger data loading for each player
   useEffect(() => {
-    console.log('[useParlayPlayers] players after sync:', players);
+
     players.forEach((player, index) => {
       if (player.isLoadingMatchup && !player.matchupError) {
-        console.log('[useParlayPlayers] loadMatchupForPlayer', player, index);
+
         loadMatchupForPlayer(player, index);
       }
     });

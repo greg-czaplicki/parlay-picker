@@ -16,7 +16,7 @@ async function fetchFromDataGolf(tour: 'pga' | 'euro'): Promise<any[]> {
     
     if (response.ok) {
       const apiResponse = await response.json();
-      console.log(`DataGolf ${tour.toUpperCase()} API: ${apiResponse.data?.length || 0} players from ${apiResponse.info?.event_name || 'unknown event'}`);
+  
       return apiResponse.data || [];
     } else {
       console.warn(`DataGolf ${tour.toUpperCase()} API failed: ${response.status} ${response.statusText}`);
@@ -39,10 +39,7 @@ export async function GET(req: NextRequest) {
       return Response.json({ success: false, error: 'Missing required parameters: eventId, roundNum, playerIds' }, { status: 400 });
     }
 
-    // Debug: Log raw and parsed playerIds
-    console.log('Raw playerIds:', playerIds);
     const playerIdArr = playerIds.split(',').map((id) => Number(id)).filter((id) => !isNaN(id));
-    console.log('Parsed playerIdArr:', playerIdArr);
     if (playerIdArr.length === 0) {
       return Response.json({ success: false, error: `No valid playerIds provided. Raw: ${playerIds}` }, { status: 400 });
     }
@@ -52,7 +49,7 @@ export async function GET(req: NextRequest) {
     // Lookup event_name from event_id using tournaments table
     const { data: eventRows, error: eventError } = await supabase
       .from('tournaments')
-      .select('event_name')
+      .select('event_name, start_date, end_date')
       .eq('event_id', Number(eventId))
       .limit(1);
     if (eventError) {
@@ -61,9 +58,54 @@ export async function GET(req: NextRequest) {
     if (!eventRows || eventRows.length === 0) {
       return Response.json({ success: false, error: `No event_name found for event_id ${eventId}` }, { status: 404 });
     }
-    const eventName = eventRows[0].event_name;
+    const { event_name: eventName, start_date, end_date } = eventRows[0];
     if (!eventName) {
       return Response.json({ success: false, error: `event_name is null for event_id ${eventId}` }, { status: 404 });
+    }
+
+    // Check if tournament is currently active (between start and end dates)
+    const now = new Date();
+    const startDate = new Date(start_date);
+    const endDate = new Date(end_date);
+    const isActiveTournament = now >= startDate && now <= endDate;
+    
+    if (!isActiveTournament) {
+      
+      // Return clean player data with no position/score information
+      const cleanStats = playerIdArr.map(playerId => ({
+        player_id: playerId,
+        dg_id: playerId,
+        player_name: "", // We don't have names readily available, but that's ok
+        event_name: null,
+        round_num: null,
+        position: null,
+        total: null,
+        today: null,
+        thru: null,
+        current_round: null,
+        round_scores: {
+          R1: null,
+          R2: null,
+          R3: null,
+          R4: null
+        },
+        sg_total: null,
+        sg_ott: null,
+        sg_app: null,
+        sg_arg: null,
+        sg_putt: null,
+        season_sg_total: null,
+        season_sg_ott: null,
+        season_sg_app: null,
+        season_sg_arg: null,
+        season_sg_putt: null
+      }));
+      
+      return Response.json({ 
+        success: true, 
+        stats: cleanStats,
+        message: `Tournament not active. Showing clean data to avoid stale tournament results.`
+      });
     }
 
     // Fetch live position data from DataGolf - try both PGA and Euro tours
@@ -83,32 +125,54 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    console.log(`Combined live data: ${allLivePlayerData.length} players total`);
-    console.log(`Requested player IDs: ${playerIdArr.join(', ')}`);
-    console.log(`Found in live data: ${playerIdArr.filter(id => liveDataMap.has(id)).join(', ')}`);
+    // Only use Supabase fallback if this is an active tournament
+    let allEventStats: any[] = [];
+    if (isActiveTournament) {
+      const { data: eventStatsData, error: allEventStatsError } = await supabase
+        .from('latest_live_tournament_stats_view')
+        .select(`
+          dg_id,
+          player_name,
+          event_name,
+          round_num,
+          position,
+          total,
+          today,
+          thru,
+          sg_total,
+          sg_ott,
+          sg_app,
+          sg_arg,
+          sg_putt,
+          data_golf_updated_at
+        `)
+        .eq('event_name', eventName)
+        .in('dg_id', playerIdArr);
+      
+      if (allEventStatsError) {
+        console.warn(`Failed to fetch Supabase event stats: ${allEventStatsError.message}`);
+      } else {
+        allEventStats = eventStatsData || [];
+        
+        // Check data freshness - if data is older than 6 hours, consider it stale
+        const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);
+        const staleStats = allEventStats.filter(stat => {
+          if (!stat.data_golf_updated_at) return true;
+          const updateTime = new Date(stat.data_golf_updated_at);
+          return updateTime < sixHoursAgo;
+        });
+        
+        if (staleStats.length > 0) {
+          console.warn(`Found ${staleStats.length} stale stats entries (older than 6 hours) for event ${eventName}`);
+          // If more than half the data is stale, don't use any of it
+          if (staleStats.length > allEventStats.length / 2) {
+            console.warn(`Majority of data is stale, clearing event stats to avoid showing old tournament data`);
+            allEventStats = [];
+          }
+        }
+      }
+    } else {
 
-    // Fallback: Query Supabase view for stats data (keeping SG stats functionality)
-    const { data: allEventStats, error: allEventStatsError } = await supabase
-      .from('latest_live_tournament_stats_view')
-      .select(`
-        dg_id,
-        player_name,
-        event_name,
-        round_num,
-        position,
-        total,
-        today,
-        thru,
-        sg_total,
-        sg_ott,
-        sg_app,
-        sg_arg,
-        sg_putt
-      `)
-      .eq('event_name', eventName)
-      .in('dg_id', playerIdArr);
-    if (allEventStatsError) {
-      return Response.json({ success: false, error: allEventStatsError.message }, { status: 500 });
     }
 
     // Query season stats from player_season_stats
@@ -151,10 +215,11 @@ export async function GET(req: NextRequest) {
       const liveData = liveDataMap.get(dg_id) || null;
       
       // Use live data for position, scores, and player name if available
-      const position = liveData?.current_pos || eventRow?.position || null;
-      const total = liveData?.current_score ?? liveData?.total ?? eventRow?.total ?? null;
-      const today = liveData?.today ?? eventRow?.today ?? null;
-      const thru = liveData?.thru ?? eventRow?.thru ?? null;
+      // If no live data and tournament is not active, return null values to show dashes
+      const position = liveData?.current_pos || (isActiveTournament ? eventRow?.position : null) || null;
+      const total = liveData?.current_score ?? liveData?.total ?? (isActiveTournament ? eventRow?.total : null) ?? null;
+      const today = liveData?.today ?? (isActiveTournament ? eventRow?.today : null) ?? null;
+      const thru = liveData?.thru ?? (isActiveTournament ? eventRow?.thru : null) ?? null;
       const playerName = liveData?.player_name || eventRow?.player_name || seasonRow?.player_name || '';
 
       // Add individual round data and current round info
@@ -192,6 +257,7 @@ export async function GET(req: NextRequest) {
         season_sg_putt: seasonRow?.sg_putt ?? null,
       };
     });
+
 
     return Response.json({ success: true, stats: mergedStats }, { status: 200 });
   } catch (err: any) {

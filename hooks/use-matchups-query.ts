@@ -40,7 +40,10 @@ export function useMatchupsQuery(eventId: number | null, matchupType: "2ball" | 
       roundNum ?? 'allRounds',
     ],
     enabled: !!eventId,
+    staleTime: 2 * 60 * 1000, // 2 minutes - don't refetch for 2 minutes
+    gcTime: 5 * 60 * 1000, // 5 minutes - keep in cache for 5 minutes
     queryFn: async () => {
+      console.log(`🔌 Fetching matchups: eventId=${eventId}, type=${matchupType}, round=${roundNum}`);
       let endpoint = eventId
         ? `/api/matchups?type=${matchupType}&event_id=${eventId}`
         : `/api/matchups?type=${matchupType}`;
@@ -57,6 +60,7 @@ export function useMatchupsQuery(eventId: number | null, matchupType: "2ball" | 
         const eventIdNum = Number(eventId);
         filtered = matchupsData.filter((m: any) => Number(m.event_id) === eventIdNum);
       }
+      console.log(`✅ Fetched ${filtered.length} matchups for event ${eventId}`);
       return filtered;
     },
   });

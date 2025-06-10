@@ -138,17 +138,7 @@ export default function RecommendedPicks({
   const isError = shouldUseExternalData ? (externalIsError ?? false) : internalIsError;
   const error = shouldUseExternalData ? externalError : internalError;
 
-  // Debug logging
-  console.log('RecommendedPicks Debug:', {
-    shouldUseExternalData,
-    baseDataLength: internalRecommendations?.length || 0,
-    filteredDataLength: filteredRecommendations?.length || 0,
-    originalCount,
-    filteredCount,
-    selectedFilters: filterManager.selectedFilters,
-    appliedFilters,
-    firstFewPlayers: filteredRecommendations?.slice(0, 3)
-  })
+
 
   // All user parlays for indicator logic
   const userId = '00000000-0000-0000-0000-000000000001';

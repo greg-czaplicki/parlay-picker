@@ -27,6 +27,7 @@ import { Badge } from "@/components/ui/badge"
 import { Filter as FilterIcon, CloudRain } from "lucide-react"
 import { OddsFreshnessIndicator } from "@/components/odds-freshness-indicator"
 import { ManualIngestButton } from "@/components/manual-ingest-button"
+import { useMatchupsQuery } from "@/hooks/use-matchups-query"
 
 // Register filters once at module load
 registerCoreFilters()
@@ -55,13 +56,24 @@ export default function Dashboard({
   // Auto-detect available matchup types for the selected event
   const { data: availableMatchupTypes } = useMatchupTypeQuery(selectedEventId)
 
+  // Fetch the current round for the selected event
+  const { data: latestRound, isLoading: isLoadingRound } = useCurrentRoundForEvent(selectedEventId)
+
+  // **SHARED DATA FETCHING** - Fetch matchups once and share between components
+  const { 
+    data: sharedMatchupsData, 
+    isLoading: isLoadingMatchups, 
+    isError: isErrorMatchups, 
+    error: errorMatchups 
+  } = useMatchupsQuery(selectedEventId, matchupType, currentRound);
+
   // Filter management - only for recommended picks
   const filterManager = useFilterManager({ 
     autoSave: true, 
     enablePerformanceTracking: true 
   })
 
-  // Use filtered data hook only for recommendations
+  // Use filtered data hook for recommendations - but pass shared matchups data
   const {
     data: filteredRecommendations,
     isLoading: isLoadingRecommendations,
@@ -78,11 +90,10 @@ export default function Dashboard({
     oddsGapPercentage: 40,
     limit: 10,
     debounceMs: 300,
-    enableCaching: true
+    enableCaching: true,
+    // Pass shared matchups data to prevent duplicate fetching
+    sharedMatchupsData
   })
-
-  // Fetch the current round for the selected event
-  const { data: latestRound, isLoading: isLoadingRound } = useCurrentRoundForEvent(selectedEventId)
 
   // When selectedEventId or latestRound changes, update currentRound
   useEffect(() => {
@@ -91,96 +102,92 @@ export default function Dashboard({
     }
   }, [latestRound])
 
+  // Consolidated effect for event selection and matchup type detection
   useEffect(() => {
-    if (!currentEvents || currentEvents.length === 0) return;
+    if (!currentEvents || currentEvents.length === 0 || isLoadingRound) return;
     
-    // Smart event selection: prioritize events with 3-ball availability for current round
-    const selectBestEvent = async () => {
+    // Only run this logic once when we have events and round data
+    const initializeEventAndMatchupType = async () => {
       try {
-        // Check each event for 3-ball availability in the current round
-        const eventChecks = await Promise.all(
-          currentEvents.map(async (event) => {
+    
+        
+        // If we already have a selected event and haven't manually changed types, 
+        // just check current event's 3-ball availability
+        if (selectedEventId && !userSelectedType) {
+          const response = await fetch(`/api/matchups?eventId=${selectedEventId}&matchupType=3ball&roundNum=${currentRound}&checkOnly=true`);
+          const data = await response.json();
+          const hasThreeBalls = data.count > 0;
+          
+          if (hasThreeBalls && matchupType !== "3ball") {
+            setMatchupType("3ball");
+            if (currentRound >= 3) {
+              toast({
+                title: "🏌️‍♂️ 3-Ball Matchups Detected!",
+                description: `Round ${currentRound} has 3-ball matchups (likely due to weather delays). Auto-switched to 3-ball view! 🎯`,
+                duration: 4000,
+              });
+            }
+          } else if (!hasThreeBalls && matchupType === "3ball") {
+            setMatchupType("2ball");
+          }
+          return; // Exit early, we already have an event selected
+        }
+
+        // Only do full event selection if we don't have a selected event
+        if (!selectedEventId) {
+  
+          
+          // Check each event for 3-ball availability SEQUENTIALLY to avoid request spam
+          for (const event of currentEvents) {
             try {
               const response = await fetch(`/api/matchups?eventId=${event.event_id}&matchupType=3ball&roundNum=${currentRound}&checkOnly=true`);
               const data = await response.json();
               const hasThreeBalls = data.count > 0;
-              return { event, hasThreeBalls, count: data.count };
+              
+              if (hasThreeBalls) {
+  
+                setSelectedEventId(event.event_id);
+                setMatchupType("3ball");
+                
+                if (currentRound >= 3) {
+                  toast({
+                    title: "🌧️ Weather 3-Balls Found!",
+                    description: `Auto-selected ${event.event_name} - Round ${currentRound} has ${data.count} 3-ball matchups! 🎯`,
+                    duration: 4000,
+                  });
+                }
+                return; // Found a good event, exit
+              }
             } catch (error) {
-              return { event, hasThreeBalls: false, count: 0 };
+              console.warn(`Failed to check 3-ball availability for ${event.event_name}:`, error);
             }
-          })
-        );
-
-        // Prioritize events with 3-ball matchups for current round
-        const eventsWithThreeBalls = eventChecks.filter(check => check.hasThreeBalls);
-        
-        if (eventsWithThreeBalls.length > 0) {
-          // If multiple events have 3-balls, prefer the one with most matchups
-          const bestEvent = eventsWithThreeBalls.sort((a, b) => b.count - a.count)[0];
-          setSelectedEventId(bestEvent.event.event_id);
-          
-          // Show celebration for weekend 3-balls (weather-induced)
-          if (currentRound >= 3) {
-            toast({
-              title: "🌧️ Weather 3-Balls Found!",
-              description: `Auto-selected ${bestEvent.event.event_name} - Round ${currentRound} has ${bestEvent.count} 3-ball matchups! Perfect for your betting strategy! 🎯`,
-              duration: 4000,
-            });
           }
-        } else {
-          // Fallback to first event by date
+          
+          // If no events have 3-balls, just select the first event
+          
           setSelectedEventId(currentEvents[0].event_id);
-        }
-      } catch (error) {
-        console.warn("Failed to check event 3-ball availability:", error);
-        // Fallback to first event
-        setSelectedEventId(currentEvents[0].event_id);
-      }
-    };
-
-    selectBestEvent();
-  }, [currentEvents, currentRound]);
-
-  // Auto-detection logic: Always prefer 3-ball when available (unless user manually selected)
-  useEffect(() => {
-    if (!selectedEventId || userSelectedType) return;
-    
-    // Check for 3-ball availability for the selected event and round
-    const checkThreeBallAvailability = async () => {
-      try {
-        const response = await fetch(`/api/matchups?eventId=${selectedEventId}&matchupType=3ball&roundNum=${currentRound}&checkOnly=true`);
-        const data = await response.json();
-        const hasThreeBalls = data.count > 0;
-        
-        if (hasThreeBalls && matchupType !== "3ball") {
-          setMatchupType("3ball");
-          
-          // Show notification for weekend 3-balls (weather-induced) - only if not already shown
-          if (currentRound >= 3 && !userSelectedType) {
-            toast({
-              title: "🏌️‍♂️ 3-Ball Matchups Detected!",
-              description: `Round ${currentRound} has 3-ball matchups (likely due to weather delays). Auto-switched to 3-ball view - your bread and butter! 🎯`,
-              duration: 4000,
-            });
-          }
-        } else if (!hasThreeBalls && matchupType === "3ball") {
-          // Fallback to 2-ball if no 3-balls available
           setMatchupType("2ball");
         }
       } catch (error) {
-        console.warn("Failed to check 3-ball availability:", error);
+        console.warn("Failed to initialize event and matchup type:", error);
+        // Fallback to first event
+        if (currentEvents.length > 0) {
+          setSelectedEventId(currentEvents[0].event_id);
+        }
       }
     };
 
-    checkThreeBallAvailability();
-  }, [selectedEventId, currentRound, matchupType, userSelectedType]);
+    initializeEventAndMatchupType();
+  }, [currentEvents, currentRound, isLoadingRound]); // Removed selectedEventId and userSelectedType from deps to prevent loops
 
   const handleEventChange = (value: string) => {
+
     setSelectedEventId(Number(value));
     setUserSelectedType(false); // Reset user selection when changing events
   }
 
   const handleMatchupTypeChange = (value: "2ball" | "3ball") => {
+
     setMatchupType(value);
     setUserSelectedType(true); // Mark as manually selected
   }
@@ -334,11 +341,18 @@ export default function Dashboard({
           </div>
 
           {/* Row 2: Main Matchups Table (Left) - No filtering */}
-          <div className="md:col-span-3">
+          <div className="md:col-span-2">
             <MatchupsTable 
               eventId={selectedEventId} 
               matchupType={matchupType} 
-              roundNum={currentRound} 
+              roundNum={currentRound}
+              showFilters={true}
+              compactFilters={false}
+              // Pass shared data to prevent duplicate API calls
+              sharedMatchupsData={sharedMatchupsData}
+              isLoading={isLoadingMatchups}
+              isError={isErrorMatchups}
+              error={errorMatchups}
             />
           </div>
 

@@ -47,7 +47,10 @@ export function usePlayerStatsQuery(eventId: number | null, roundNum: number, pl
   return useQuery<PlayerStat[], Error>({
     queryKey: queryKeys.playerData.live(eventId ?? 0, roundNum + ':' + playerIds.join(',')),
     enabled: !!eventId && playerIds.length > 0,
+    staleTime: 1 * 60 * 1000, // 1 minute - don't refetch for 1 minute
+    gcTime: 3 * 60 * 1000, // 3 minutes - keep in cache
     queryFn: async () => {
+      console.log(`🔌 Fetching player stats: eventId=${eventId}, round=${roundNum}, playerCount=${playerIds.length}`);
       const params = new URLSearchParams({
         eventId: String(eventId),
         roundNum: String(roundNum),
@@ -58,6 +61,7 @@ export function usePlayerStatsQuery(eventId: number | null, roundNum: number, pl
       if (!response.ok) throw new Error(await response.text());
       const data = await response.json();
       if (!data.success) throw new Error(data.error || 'API returned success: false');
+      console.log(`✅ Fetched stats for ${data.stats?.length || 0} players`);
       return data.stats as PlayerStat[];
     },
   });

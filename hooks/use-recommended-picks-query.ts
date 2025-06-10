@@ -67,22 +67,13 @@ export function useRecommendedPicksQuery(
   // Flatten matchups to player array
   const players: Player[] = useMemo(() => {
     const matchupsData = matchupsQuery.data || [];
-    console.log('RECOMMENDED_PICKS_DEBUG: Raw matchups data length:', matchupsData.length);
+
     
     let result: Player[] = [];
     for (const apiMatchup of matchupsData) {
       if (!apiMatchup || typeof apiMatchup !== 'object') continue;
       
-      console.log('RECOMMENDED_PICKS_DEBUG: Processing matchup:', {
-        id: apiMatchup.id,
-        type: matchupType,
-        player1: apiMatchup.player1_name,
-        player2: apiMatchup.player2_name,
-        player3: apiMatchup.player3_name,
-        odds1: apiMatchup.odds1,
-        odds2: apiMatchup.odds2,
-        odds3: apiMatchup.odds3
-      });
+
       
       if (matchupType === "3ball") {
         if (!apiMatchup.player1_name || !apiMatchup.player2_name || !apiMatchup.player3_name) continue;
@@ -156,8 +147,7 @@ export function useRecommendedPicksQuery(
       }
     }
     
-    console.log('RECOMMENDED_PICKS_DEBUG: Final players array length:', result.length);
-    console.log('RECOMMENDED_PICKS_DEBUG: Sample players:', result.slice(0, 3));
+
     
     return result;
   }, [matchupsQuery.data, matchupType]);
@@ -185,29 +175,18 @@ export function useRecommendedPicksQuery(
       statsMap[key].today = stat.today;
       statsMap[key].thru = stat.thru;
     }
-    // After building statsMap
-    console.log('statsMap keys:', Object.keys(statsMap));
-    if (Object.keys(statsMap).length > 0) {
-      const firstKey = Object.keys(statsMap)[0];
-      console.log('Sample statsMap value:', statsMap[firstKey]);
-    }
+
     return players.map(player => {
       const stat = statsMap[String(player.dg_id)] || {};
-      console.log('Merging for player', player.dg_id, stat);
-      const merged = {
-        ...player,
-        sgTotal: stat.sgTotal ?? player.sgTotal,
-        seasonSgTotal: stat.seasonSgTotal ?? null,
-        position: stat.position ?? player.position,
-        total: stat.total ?? player.total,
-        today: stat.today ?? player.today,
-        thru: stat.thru ?? player.thru,
-      };
-      // Log the merged player for the first few
-      if (player.dg_id && Number(player.dg_id) < 10000) {
-        console.log('Merged player:', merged);
-      }
-      return merged;
+              return {
+          ...player,
+          sgTotal: stat.sgTotal ?? player.sgTotal,
+          seasonSgTotal: stat.seasonSgTotal ?? null,
+          position: stat.position ?? player.position,
+          total: stat.total ?? player.total,
+          today: stat.today ?? player.today,
+          thru: stat.thru ?? player.thru,
+        };
     });
   }, [players, statsQuery.data]);
 
