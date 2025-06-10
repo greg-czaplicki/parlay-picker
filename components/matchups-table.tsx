@@ -220,12 +220,21 @@ export default function MatchupsTable({
     return diff >= oddsGapThreshold;
   };
 
-  // Parlay context and all user parlays for indicator logic
+  // Parlay context and all user parlays for indicator logic - only check against active parlays (not settled ones)
   const userId = '00000000-0000-0000-0000-000000000001';
   const { selections, addSelection, removeSelection } = useParlayContext();
   const { data: allParlays = [] } = useParlaysQuery(userId);
-  // Flatten all picks from all parlays
-  const allParlayPicks = (allParlays ?? []).flatMap((parlay: any) => parlay.picks || []);
+  
+  // Filter to only active parlays (parlays that have at least one unsettled pick)
+  const activeParlays = (allParlays ?? []).filter((parlay: any) => {
+    if (!Array.isArray(parlay.picks)) return true;
+    return parlay.picks.some((pick: any) => 
+      !pick.settlement_status || pick.settlement_status === 'pending'
+    );
+  });
+  
+  // Flatten all picks from active parlays only
+  const allParlayPicks = activeParlays.flatMap((parlay: any) => parlay.picks || []);
   // Helper to check if a player is in the current parlay
   const isPlayerInCurrentParlay = (playerName: string) =>
     selections.some(s => s.player.toLowerCase() === playerName.toLowerCase());

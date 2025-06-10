@@ -140,10 +140,19 @@ export default function RecommendedPicks({
 
 
 
-  // All user parlays for indicator logic
+  // All user parlays for indicator logic - only check against active parlays (not settled ones)
   const userId = '00000000-0000-0000-0000-000000000001';
   const { data: allParlays = [] } = useParlaysQuery(userId);
-  const allParlayPicks = (allParlays ?? []).flatMap((parlay: any) => parlay.picks || []);
+  
+  // Filter to only active parlays (parlays that have at least one unsettled pick)
+  const activeParlays = (allParlays ?? []).filter((parlay: any) => {
+    if (!Array.isArray(parlay.picks)) return true;
+    return parlay.picks.some((pick: any) => 
+      !pick.settlement_status || pick.settlement_status === 'pending'
+    );
+  });
+  
+  const allParlayPicks = activeParlays.flatMap((parlay: any) => parlay.picks || []);
   const isPlayerInAnyParlay = (playerName: string) =>
     allParlayPicks.some((pick: any) => (pick.picked_player_name || '').toLowerCase() === playerName.toLowerCase());
 
