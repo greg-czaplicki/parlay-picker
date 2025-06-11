@@ -12,11 +12,7 @@ export function createHeavyFavoritesFilter(): Filter<any> {
     description: 'Filters for players in a group whose odds are at least 40 points better than the next best in their group, sorted by odds gap.',
     category: FilterCategory.PLAYER,
     applyFilter: (data, options?: FilterOptions): FilterResult<any> => {
-      console.log('HEAVY_FAVORITES_DEBUG: Starting filter with data length:', data?.length || 0);
-      console.log('HEAVY_FAVORITES_DEBUG: Options:', options);
-      
       const oddsGap = typeof options?.oddsGap === 'number' ? options.oddsGap : 0.4;
-      console.log('HEAVY_FAVORITES_DEBUG: Using oddsGap threshold:', oddsGap);
       
       // Group by matchupId
       const groups: Record<string, any[]> = {};
@@ -26,9 +22,9 @@ export function createHeavyFavoritesFilter(): Filter<any> {
         groups[groupId].push(player);
       });
 
-      
       const heavyFavorites: any[] = [];
-      Object.values(groups).forEach((group, groupIndex) => {        
+      
+      Object.values(groups).forEach((group) => {        
         // Filter out players with null odds
         const withOdds = group.filter((p: any) => typeof p.odds === 'number');
         
@@ -51,8 +47,6 @@ export function createHeavyFavoritesFilter(): Filter<any> {
             nextBestPlayer: next.name || next.playerName || undefined, // optional: show who the next best is
             nextBestOdds: next.odds
           });
-        } else {
-          console.log('HEAVY_FAVORITES_DEBUG: Gap too small, skipping');
         }
       });
 

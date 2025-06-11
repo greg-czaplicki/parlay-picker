@@ -235,9 +235,9 @@ export default function Dashboard({
       </div>
 
       {activeTab === "matchups" && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Row 1: Event Selection and Recommendation Filters */}
-          <div className="md:col-span-4">
+          <div className="md:col-span-3">
             <Card className="glass-card">
               <CardContent className="p-6">
                 <div className="flex flex-col gap-4">
@@ -340,7 +340,7 @@ export default function Dashboard({
             </Card>
           </div>
 
-          {/* Row 2: Main Matchups Table (Left) - No filtering */}
+          {/* Row 2: Main Matchups Table (Left) - Larger allocation */}
           <div className="md:col-span-2">
             <MatchupsTable 
               eventId={selectedEventId} 
@@ -356,7 +356,7 @@ export default function Dashboard({
             />
           </div>
 
-          {/* Row 2: Recommended Picks (Right) - With filtering */}
+          {/* Row 2: Recommended Picks (Right) - Better space utilization */}
           <div className="md:col-span-1">
             <RecommendedPicks 
               eventId={selectedEventId}

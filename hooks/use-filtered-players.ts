@@ -70,14 +70,37 @@ export function useFilteredPlayers(
       for (const matchup of sharedMatchupsData) {
         if (!matchup || typeof matchup !== 'object') continue;
         
+        // Helper function to extract SG data from enhanced matchup
+        const extractSGData = (playerSgData: any) => {
+          if (!playerSgData) return { sgTotal: 0, seasonSgTotal: null };
+          
+          // Prefer tournament SG data if available, fallback to season SG
+          const tournamentSG = playerSgData.sgTotal;
+          const seasonSG = playerSgData.seasonSgTotal;
+          
+          if (tournamentSG !== null && tournamentSG !== undefined) {
+            return { sgTotal: tournamentSG, seasonSgTotal: seasonSG };
+          } else if (seasonSG !== null && seasonSG !== undefined) {
+            return { sgTotal: seasonSG, seasonSgTotal: seasonSG };
+          } else {
+            return { sgTotal: 0, seasonSgTotal: null };
+          }
+        };
+        
         if (matchupType === "3ball") {
           if (!matchup.player1_name || !matchup.player2_name || !matchup.player3_name) continue;
+          
+          const player1SG = extractSGData(matchup.player1_sg_data);
+          const player2SG = extractSGData(matchup.player2_sg_data);
+          const player3SG = extractSGData(matchup.player3_sg_data);
+          
           result.push(
             {
               dg_id: matchup.player1_dg_id || 0,
               name: matchup.player1_name,
               odds: matchup.odds1,
-              sgTotal: 0,
+              sgTotal: player1SG.sgTotal,
+              seasonSgTotal: player1SG.seasonSgTotal,
               valueRating: 0,
               confidenceScore: 0,
               isRecommended: false,
@@ -89,7 +112,8 @@ export function useFilteredPlayers(
               dg_id: matchup.player2_dg_id || 0,
               name: matchup.player2_name,
               odds: matchup.odds2,
-              sgTotal: 0,
+              sgTotal: player2SG.sgTotal,
+              seasonSgTotal: player2SG.seasonSgTotal,
               valueRating: 0,
               confidenceScore: 0,
               isRecommended: false,
@@ -101,7 +125,8 @@ export function useFilteredPlayers(
               dg_id: matchup.player3_dg_id || 0,
               name: matchup.player3_name,
               odds: matchup.odds3,
-              sgTotal: 0,
+              sgTotal: player3SG.sgTotal,
+              seasonSgTotal: player3SG.seasonSgTotal,
               valueRating: 0,
               confidenceScore: 0,
               isRecommended: false,
@@ -113,12 +138,17 @@ export function useFilteredPlayers(
         } else {
           // 2ball
           if (!matchup.player1_name || !matchup.player2_name) continue;
+          
+          const player1SG = extractSGData(matchup.player1_sg_data);
+          const player2SG = extractSGData(matchup.player2_sg_data);
+          
           result.push(
             {
               dg_id: matchup.player1_dg_id || 0,
               name: matchup.player1_name,
               odds: matchup.odds1,
-              sgTotal: 0,
+              sgTotal: player1SG.sgTotal,
+              seasonSgTotal: player1SG.seasonSgTotal,
               valueRating: 0,
               confidenceScore: 0,
               isRecommended: false,
@@ -130,7 +160,8 @@ export function useFilteredPlayers(
               dg_id: matchup.player2_dg_id || 0,
               name: matchup.player2_name,
               odds: matchup.odds2,
-              sgTotal: 0,
+              sgTotal: player2SG.sgTotal,
+              seasonSgTotal: player2SG.seasonSgTotal,
               valueRating: 0,
               confidenceScore: 0,
               isRecommended: false,
@@ -141,6 +172,7 @@ export function useFilteredPlayers(
           );
         }
       }
+            
       return result;
     }
     

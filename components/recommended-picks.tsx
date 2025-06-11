@@ -388,14 +388,14 @@ export default function RecommendedPicks({
 
         {/* Recommendations */}
         <Card className="glass-card">
-          <CardHeader>
-            <CardTitle className="text-lg">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-xl">
               Recommended Picks
               {eventId && <span className="text-sm font-normal text-muted-foreground ml-2">Event {eventId}</span>}
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-4">
-            <div className="space-y-3">
+          <CardContent className="p-6">
+            <div className="space-y-4">
               {finalRecommendations.map((player: Player, index: number) => {
                 const playerId = String(player.dg_id);
                 const { inParlay, selectionId } = isPlayerInParlay(playerId, player.name);
@@ -405,18 +405,18 @@ export default function RecommendedPicks({
                   <div
                     key={`${player.dg_id}-${player.matchupId}-${index}`}
                     className={`
-                      p-4 border rounded-lg transition-colors
+                      p-6 border rounded-lg transition-colors
                       ${inParlay ? 'bg-primary/5 border-primary' : 'bg-card border-border'}
                       ${isInOtherParlay && !inParlay ? 'bg-yellow-50/5 border-yellow-200' : ''}
                     `}
                   >
                     {/* Player Header */}
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="font-semibold text-base text-foreground">{player.name}</h3>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-semibold text-lg text-foreground">{player.name}</h3>
                       {isInOtherParlay && !inParlay && (
                         <Tooltip>
                           <TooltipTrigger>
-                            <Info className="h-4 w-4 text-yellow-500" />
+                            <Info className="h-5 w-5 text-yellow-500" />
                           </TooltipTrigger>
                           <TooltipContent>
                             <p>Player is in another parlay</p>
@@ -425,18 +425,18 @@ export default function RecommendedPicks({
                       )}
                     </div>
 
-                    {/* Stats Grid */}
-                    <div className="grid grid-cols-2 gap-3 mb-4">
+                    {/* Stats Grid - More Spacious */}
+                    <div className="grid grid-cols-4 gap-6 mb-6">
                       {/* Odds */}
                       <div className="text-center">
-                        <div className="text-lg font-bold text-foreground">{formatOdds(player.odds)}</div>
-                        <div className="text-xs text-muted-foreground">Odds</div>
+                        <div className="text-xl font-bold text-foreground">{formatOdds(player.odds)}</div>
+                        <div className="text-sm text-muted-foreground mt-1">Odds</div>
                       </div>
                       
                       {/* Gap (if exists) */}
                       {(player as any).oddsGapToNext ? (
                         <div className="text-center">
-                          <div className="text-lg font-bold text-green-600">
+                          <div className="text-xl font-bold text-green-600">
                             +{(() => {
                               const favoriteAmericanOdds = convertToAmericanOdds(player.odds);
                               const nextBestAmericanOdds = convertToAmericanOdds((player as any).nextBestOdds);
@@ -464,44 +464,51 @@ export default function RecommendedPicks({
                               return Math.round(americanGap);
                             })()}
                           </div>
-                          <div className="text-xs text-muted-foreground">Edge</div>
+                          <div className="text-sm text-muted-foreground mt-1">Edge</div>
                         </div>
                       ) : (
                         <div className="text-center">
-                          <div className={`text-lg font-bold ${getSGColorClass(player.sgTotal)}`}>
+                          <div className={`text-xl font-bold ${getSGColorClass(player.sgTotal)}`}>
                             {player.sgTotal?.toFixed(2) ?? 'N/A'}
                           </div>
-                          <div className="text-xs text-muted-foreground">SG Total</div>
+                          <div className="text-sm text-muted-foreground mt-1">SG Total</div>
                         </div>
                       )}
                       
                       {/* Value Score (when composite score exists) */}
                       {(player as any).compositeScore ? (
                         <div className="text-center">
-                          <div className="text-lg font-bold text-blue-600">
+                          <div className="text-xl font-bold text-blue-600">
                             {((player as any).compositeScore * 9 + 1).toFixed(1)}
                           </div>
-                          <div className="text-xs text-muted-foreground">Value</div>
+                          <div className="text-sm text-muted-foreground mt-1">Value</div>
                         </div>
                       ) : (
                         /* SG Total (when gap exists but no composite score) */
                         (player as any).oddsGapToNext && (
                           <div className="text-center">
-                            <div className={`text-sm font-semibold ${getSGColorClass(player.sgTotal)}`}>
+                            <div className={`text-lg font-semibold ${getSGColorClass(player.sgTotal)}`}>
                               {player.sgTotal?.toFixed(2) ?? 'N/A'}
                             </div>
-                            <div className="text-xs text-muted-foreground">SG Total</div>
+                            <div className="text-sm text-muted-foreground mt-1">SG Total</div>
                           </div>
                         )
                       )}
                       
                       {/* Season SG */}
-                      {player.seasonSgTotal && (
+                      {player.seasonSgTotal ? (
                         <div className="text-center">
-                          <div className="text-sm font-semibold text-blue-600">
+                          <div className="text-lg font-semibold text-blue-600">
                             {player.seasonSgTotal.toFixed(2)}
                           </div>
-                          <div className="text-xs text-muted-foreground">Season</div>
+                          <div className="text-sm text-muted-foreground mt-1">Season SG</div>
+                        </div>
+                      ) : (
+                        <div className="text-center">
+                          <div className="text-lg font-semibold text-muted-foreground">
+                            -
+                          </div>
+                          <div className="text-sm text-muted-foreground mt-1">Season SG</div>
                         </div>
                       )}
                     </div>
@@ -511,16 +518,16 @@ export default function RecommendedPicks({
                       {inParlay ? (
                         <Button
                           variant="outline"
-                          size="sm"
+                          size="lg"
                           onClick={() => selectionId && removeFromParlay(selectionId, playerId, player.name)}
-                          className="text-destructive hover:text-destructive w-full"
+                          className="text-destructive hover:text-destructive w-full py-3"
                         >
                           Remove from Parlay
                         </Button>
                       ) : (
                         <Button
                           variant="default"
-                          size="sm"
+                          size="lg"
                           onClick={() => {
                             const selection: ParlaySelection = {
                               id: `${player.dg_id}-${player.matchupId}`,
@@ -536,9 +543,9 @@ export default function RecommendedPicks({
                             }
                             addToParlay(selection, playerId)
                           }}
-                          className="w-full"
+                          className="w-full py-3"
                         >
-                          <Plus className="h-4 w-4 mr-2" />
+                          <Plus className="h-5 w-5 mr-2" />
                           Add to Parlay
                         </Button>
                       )}

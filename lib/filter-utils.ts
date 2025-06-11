@@ -371,5 +371,46 @@ export const FilterPresets = {
       { id: 'sg-heavy', options: { threshold: 50 }, negate: true }, // Exclude poor SG players
       { id: 'balanced', options: { weight: 1.0 } }
     ]
+  },
+
+  // New SG-focused presets
+  SG_DOMINANCE: {
+    operator: 'OR' as const,
+    filters: [
+      { id: 'sg-heavy', options: { minSgThreshold: 1.5, sortBy: 'composite' } },
+      { id: 'sg-category-leaders', options: { category: 'total', minCategoryValue: 1.0, minPercentile: 80 } }
+    ]
+  },
+
+  PUTTING_SPECIALISTS: {
+    operator: 'AND' as const,
+    filters: [
+      { id: 'sg-category-leaders', options: { category: 'putting', minCategoryValue: 0.8, minPercentile: 75 } },
+      { id: 'sg-heavy', options: { minSgThreshold: 0.5 } }
+    ]
+  },
+
+  APPROACH_MASTERS: {
+    operator: 'AND' as const,
+    filters: [
+      { id: 'sg-category-leaders', options: { category: 'approach', minCategoryValue: 0.7, minPercentile: 80 } },
+      { id: 'heavy-favorites', options: { oddsGap: 0.3 } }
+    ]
+  },
+
+  CONSISTENT_PERFORMERS: {
+    operator: 'AND' as const,
+    filters: [
+      { id: 'sg-category-leaders', options: { category: 'all', requireConsistency: true, minPercentile: 70 } },
+      { id: 'sg-heavy', options: { tournamentWeight: 0.5, sortBy: 'sg' } }
+    ]
+  },
+
+  TOURNAMENT_LEADERS: {
+    operator: 'AND' as const,
+    filters: [
+      { id: 'sg-heavy', options: { tournamentWeight: 0.8, minSgThreshold: 1.0, sortBy: 'composite' } },
+      { id: 'heavy-favorites', options: { oddsGap: 0.25 } }
+    ]
   }
 } 

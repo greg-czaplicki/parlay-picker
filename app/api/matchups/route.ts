@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseClient } from '@/lib/api-utils'
 
-// GET: Fetch only the latest odds for each unique matchup
+// GET: Fetch matchups with enhanced SG data
 export async function GET(req: NextRequest) {
   const supabase = createSupabaseClient()
   const { searchParams } = new URL(req.url)
@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   const round_num = searchParams.get('roundNum') || searchParams.get('round_num')
   const checkOnly = searchParams.get('checkOnly') === 'true'
 
-  // Handle checkOnly requests separately
+  // Handle checkOnly requests separately (no need for SG data)
   if (checkOnly) {
     const baseCountQuery = supabase
       .from('latest_matchups')
@@ -29,40 +29,186 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  // Handle regular data requests
-  const baseQuery = supabase
-    .from('latest_matchups')
-    .select(`
-      uuid,
-      event_id,
-      round_num,
-      type,
-      player1_dg_id,
-      player1_name,
-      player2_dg_id,
-      player2_name,
-      player3_dg_id,
-      player3_name,
-      odds1,
-      odds2,
-      odds3,
-      dg_odds1,
-      dg_odds2,
-      dg_odds3,
-      start_hole,
-      teetime,
-      tee_time,
-      created_at
-    `)
+  try {
+    // 1. Fetch base matchup data
+    const baseQuery = supabase
+      .from('latest_matchups')
+      .select(`
+        uuid,
+        event_id,
+        round_num,
+        type,
+        player1_dg_id,
+        player1_name,
+        player2_dg_id,
+        player2_name,
+        player3_dg_id,
+        player3_name,
+        odds1,
+        odds2,
+        odds3,
+        dg_odds1,
+        dg_odds2,
+        dg_odds3,
+        start_hole,
+        teetime,
+        tee_time,
+        created_at
+      `)
 
-  const query = type ? baseQuery.eq('type', type) : baseQuery
-  const finalQuery = event_id ? query.eq('event_id', event_id) : query
-  const completeQuery = round_num ? finalQuery.eq('round_num', round_num) : finalQuery
+    const query = type ? baseQuery.eq('type', type) : baseQuery
+    const finalQuery = event_id ? query.eq('event_id', event_id) : query
+    const completeQuery = round_num ? finalQuery.eq('round_num', round_num) : finalQuery
 
-  const { data, error } = await completeQuery
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    const { data: matchupsData, error: matchupsError } = await completeQuery
+    if (matchupsError) return NextResponse.json({ error: matchupsError.message }, { status: 400 })
+    if (!matchupsData || matchupsData.length === 0) {
+      return NextResponse.json({ matchups: [] })
+    }
 
-  return NextResponse.json({ matchups: data })
+    // 2. Extract unique player IDs from matchups
+    const playerIds = Array.from(new Set(
+      matchupsData.flatMap(matchup => [
+        matchup.player1_dg_id,
+        matchup.player2_dg_id,
+        matchup.player3_dg_id
+      ].filter(id => id !== null && id !== undefined))
+    ))
+
+    if (playerIds.length === 0) {
+      return NextResponse.json({ matchups: matchupsData })
+    }
+
+    // 3. Fetch season-long SG data from player_skill_ratings (Data Golf season stats)
+    const { data: seasonSgData, error: seasonSgError } = await supabase
+      .from('player_skill_ratings')
+      .select(`
+        dg_id,
+        player_name,
+        sg_total,
+        sg_putt,
+        sg_arg,
+        sg_app,
+        sg_ott,
+        driving_acc,
+        driving_dist
+      `)
+      .in('dg_id', playerIds)
+
+    // Create season SG lookup map
+    const seasonSgMap = new Map()
+    if (!seasonSgError && seasonSgData) {
+      seasonSgData.forEach(player => {
+        if (player.dg_id) {
+          seasonSgMap.set(player.dg_id, {
+            seasonSgTotal: player.sg_total,
+            seasonSgPutt: player.sg_putt,
+            seasonSgArg: player.sg_arg,
+            seasonSgApp: player.sg_app,
+            seasonSgOtt: player.sg_ott,
+            seasonDrivingAcc: player.driving_acc,
+            seasonDrivingDist: player.driving_dist
+          })
+        }
+      })
+    }
+
+    // 4. Fetch tournament SG data from latest_live_tournament_stats_view (if in tournament)
+    let tournamentSgMap = new Map()
+    
+    // Try to get current tournament data
+    const { data: tournamentSgData, error: tournamentSgError } = await supabase
+      .from('latest_live_tournament_stats_view')
+      .select(`
+        dg_id,
+        player_name,
+        event_name,
+        round_num,
+        sg_total,
+        sg_putt,
+        sg_arg,
+        sg_app,
+        sg_ott,
+        sg_t2g,
+        position,
+        total,
+        today,
+        thru
+      `)
+      .in('dg_id', playerIds)
+      .order('data_golf_updated_at', { ascending: false })
+
+    if (!tournamentSgError && tournamentSgData) {
+      // Group by dg_id and take the most recent record for each player
+      const playerTournamentData = new Map()
+      tournamentSgData.forEach(player => {
+        if (player.dg_id) {
+          if (!playerTournamentData.has(player.dg_id) || 
+              (playerTournamentData.get(player.dg_id).round_num < player.round_num)) {
+            playerTournamentData.set(player.dg_id, player)
+          }
+        }
+      })
+      
+      playerTournamentData.forEach((player, dgId) => {
+        tournamentSgMap.set(dgId, {
+          sgTotal: player.sg_total,
+          sgPutt: player.sg_putt,
+          sgArg: player.sg_arg,
+          sgApp: player.sg_app,
+          sgOtt: player.sg_ott,
+          sgT2g: player.sg_t2g,
+          position: player.position,
+          total: player.total,
+          today: player.today,
+          thru: player.thru,
+          eventName: player.event_name,
+          roundNum: player.round_num
+        })
+      })
+    }
+
+    // 5. Enhance matchup data with SG stats
+    const enhancedMatchups = matchupsData.map(matchup => {
+      // Helper function to get player SG data
+      const getPlayerSGData = (dgId: number) => {
+        const seasonData = seasonSgMap.get(dgId) || {}
+        const tournamentData = tournamentSgMap.get(dgId) || {}
+        return {
+          ...seasonData,
+          ...tournamentData
+        }
+      }
+
+      return {
+        ...matchup,
+        // Add SG data for player 1
+        ...(matchup.player1_dg_id && {
+          player1_sg_data: getPlayerSGData(matchup.player1_dg_id)
+        }),
+        // Add SG data for player 2  
+        ...(matchup.player2_dg_id && {
+          player2_sg_data: getPlayerSGData(matchup.player2_dg_id)
+        }),
+        // Add SG data for player 3 (if exists)
+        ...(matchup.player3_dg_id && {
+          player3_sg_data: getPlayerSGData(matchup.player3_dg_id)
+        }),
+        // Add metadata
+        sg_data_enhanced: true,
+        season_sg_players: seasonSgMap.size,
+        tournament_sg_players: tournamentSgMap.size
+      }
+    })
+
+    console.log(`✅ Enhanced ${enhancedMatchups.length} matchups with SG data (Season: ${seasonSgMap.size}, Tournament: ${tournamentSgMap.size} players)`)
+
+    return NextResponse.json({ matchups: enhancedMatchups })
+
+  } catch (error: any) {
+    console.error('Error fetching enhanced matchup data:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
 }
 
 // POST: Bulk insert matchups

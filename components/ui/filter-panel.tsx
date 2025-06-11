@@ -258,7 +258,7 @@ export function FilterPanel({
             onFilterSelect={handleFilterSelect}
             multiSelect={multiSelect}
             showDescriptions={false}
-            groupByCategory={false}
+            groupByCategory={true}
           />
         </div>
 
@@ -293,12 +293,258 @@ function FilterOptionsEditor({ filterId, options, onChange }: FilterOptionsEdito
 
   if (!filter) return null
 
-  // This is a basic editor - in a real implementation, 
-  // filters would define their own configuration schema
-  const handleOptionChange = (key: string, value: unknown) => {
-    onChange({ ...options, [key]: value })
+  // Handle SG Heavy filter with its enhanced options
+  if (filterId === 'sg-heavy') {
+    return (
+      <div className="p-3 border rounded-lg space-y-4">
+        <div className="flex items-center justify-between">
+          <h5 className="text-sm font-medium">{filter.name} Options</h5>
+          <Badge variant="outline" className="text-xs">
+            Enhanced SG Analysis
+          </Badge>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Minimum SG Threshold */}
+          <div className="space-y-2">
+            <Label htmlFor={`${filterId}-minSgThreshold`} className="text-xs font-medium">
+              Minimum SG Threshold
+            </Label>
+            <Slider
+              id={`${filterId}-minSgThreshold`}
+              min={-2}
+              max={3}
+              step={0.1}
+              value={[Number(options.minSgThreshold) || 0]}
+              onValueChange={([value]) => onChange({ ...options, minSgThreshold: value })}
+            />
+            <div className="text-xs text-gray-400">
+              Current: {(options.minSgThreshold || 0).toFixed(1)} strokes gained
+            </div>
+          </div>
+
+          {/* Tournament Weight */}
+          <div className="space-y-2">
+            <Label htmlFor={`${filterId}-tournamentWeight`} className="text-xs font-medium">
+              Tournament vs Season Weight
+            </Label>
+            <Slider
+              id={`${filterId}-tournamentWeight`}
+              min={0}
+              max={1}
+              step={0.1}
+              value={[Number(options.tournamentWeight) || 0.6]}
+              onValueChange={([value]) => onChange({ ...options, tournamentWeight: value })}
+            />
+            <div className="text-xs text-gray-400">
+              Current: {Math.round((options.tournamentWeight || 0.6) * 100)}% tournament, {Math.round((1 - (options.tournamentWeight || 0.6)) * 100)}% season
+            </div>
+          </div>
+
+          {/* Sort By */}
+          <div className="space-y-2">
+            <Label htmlFor={`${filterId}-sortBy`} className="text-xs font-medium">
+              Sort Results By
+            </Label>
+            <select
+              id={`${filterId}-sortBy`}
+              value={options.sortBy || 'sg'}
+              onChange={(e) => onChange({ ...options, sortBy: e.target.value })}
+              className="w-full h-8 px-2 text-xs border rounded"
+            >
+              <option value="sg">SG Performance</option>
+              <option value="odds-gap">Odds Gap</option>
+              <option value="composite">Composite Score</option>
+            </select>
+          </div>
+
+          {/* Minimum Odds Gap */}
+          <div className="space-y-2">
+            <Label htmlFor={`${filterId}-minOddsGap`} className="text-xs font-medium">
+              Minimum Odds Gap
+            </Label>
+            <Slider
+              id={`${filterId}-minOddsGap`}
+              min={0}
+              max={2}
+              step={0.1}
+              value={[Number(options.minOddsGap) || 0]}
+              onValueChange={([value]) => onChange({ ...options, minOddsGap: value })}
+            />
+            <div className="text-xs text-gray-400">
+              Current: {(options.minOddsGap || 0).toFixed(1)} decimal odds gap
+            </div>
+          </div>
+
+          {/* Max Odds */}
+          <div className="space-y-2">
+            <Label htmlFor={`${filterId}-maxOdds`} className="text-xs font-medium">
+              Maximum Odds (+100 to +500)
+            </Label>
+            <Input
+              id={`${filterId}-maxOdds`}
+              type="number"
+              min="100"
+              max="500"
+              step="25"
+              value={String(options.maxOdds || 999)}
+              onChange={(e) => onChange({ ...options, maxOdds: parseInt(e.target.value) || 999 })}
+              className="h-8"
+              placeholder="999 (no limit)"
+            />
+          </div>
+
+          {/* Include Underdogs */}
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2">
+              <Switch
+                id={`${filterId}-includeUnderdogs`}
+                checked={Boolean(options.includeUnderdogs)}
+                onCheckedChange={(checked) => onChange({ ...options, includeUnderdogs: checked })}
+              />
+              <Label htmlFor={`${filterId}-includeUnderdogs`} className="text-xs font-medium">
+                Include All Qualified Players
+              </Label>
+            </div>
+            <div className="text-xs text-gray-400">
+              {options.includeUnderdogs ? 'Shows all players meeting criteria' : 'Shows only top SG player per group'}
+            </div>
+          </div>
+        </div>
+
+        <div className="pt-2 border-t">
+          <div className="text-xs text-gray-500">
+            <strong>Pro Tip:</strong> Use higher tournament weight (0.8+) during active tournaments, 
+            or composite sort for balanced SG + odds analysis.
+          </div>
+        </div>
+      </div>
+    )
   }
 
+  // Handle SG Category Leaders filter
+  if (filterId === 'sg-category-leaders') {
+    return (
+      <div className="p-3 border rounded-lg space-y-4">
+        <div className="flex items-center justify-between">
+          <h5 className="text-sm font-medium">{filter.name} Options</h5>
+          <Badge variant="outline" className="text-xs">
+            Category Specialist
+          </Badge>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Category Focus */}
+          <div className="space-y-2">
+            <Label htmlFor={`${filterId}-category`} className="text-xs font-medium">
+              SG Category Focus
+            </Label>
+            <select
+              id={`${filterId}-category`}
+              value={options.category || 'total'}
+              onChange={(e) => onChange({ ...options, category: e.target.value })}
+              className="w-full h-8 px-2 text-xs border rounded"
+            >
+              <option value="total">Total (Overall SG)</option>
+              <option value="putting">Putting</option>
+              <option value="approach">Approach</option>
+              <option value="around-green">Around the Green</option>
+              <option value="off-tee">Off the Tee</option>
+              <option value="all">Best in Any Category</option>
+            </select>
+          </div>
+
+          {/* Minimum Category Value */}
+          <div className="space-y-2">
+            <Label htmlFor={`${filterId}-minCategoryValue`} className="text-xs font-medium">
+              Minimum Category Value
+            </Label>
+            <Slider
+              id={`${filterId}-minCategoryValue`}
+              min={0}
+              max={2}
+              step={0.1}
+              value={[Number(options.minCategoryValue) || 0.5]}
+              onValueChange={([value]) => onChange({ ...options, minCategoryValue: value })}
+            />
+            <div className="text-xs text-gray-400">
+              Current: {(options.minCategoryValue || 0.5).toFixed(1)} strokes gained
+            </div>
+          </div>
+
+          {/* Minimum Percentile */}
+          <div className="space-y-2">
+            <Label htmlFor={`${filterId}-minPercentile`} className="text-xs font-medium">
+              Minimum Percentile Rank
+            </Label>
+            <Slider
+              id={`${filterId}-minPercentile`}
+              min={50}
+              max={95}
+              step={5}
+              value={[Number(options.minPercentile) || 70]}
+              onValueChange={([value]) => onChange({ ...options, minPercentile: value })}
+            />
+            <div className="text-xs text-gray-400">
+              Current: Top {100 - (options.minPercentile || 70)}% of players
+            </div>
+          </div>
+
+          {/* Require Consistency */}
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2">
+              <Switch
+                id={`${filterId}-requireConsistency`}
+                checked={Boolean(options.requireConsistency)}
+                onCheckedChange={(checked) => onChange({ ...options, requireConsistency: checked })}
+              />
+              <Label htmlFor={`${filterId}-requireConsistency`} className="text-xs font-medium">
+                Require Multi-Category Consistency
+              </Label>
+            </div>
+            <div className="text-xs text-gray-400">
+              {options.requireConsistency ? 'Players must be strong across multiple SG categories' : 'Focus only on selected category'}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Handle Heavy Favorites filter
+  if (filterId === 'heavy-favorites') {
+    return (
+      <div className="p-3 border rounded-lg space-y-4">
+        <div className="flex items-center justify-between">
+          <h5 className="text-sm font-medium">{filter.name} Options</h5>
+          <Badge variant="outline" className="text-xs">
+            Odds Analysis
+          </Badge>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor={`${filterId}-oddsGap`} className="text-xs font-medium">
+              Minimum Odds Gap
+            </Label>
+            <Slider
+              id={`${filterId}-oddsGap`}
+              min={0.1}
+              max={1.5}
+              step={0.1}
+              value={[Number(options.oddsGap) || 0.4]}
+              onValueChange={([value]) => onChange({ ...options, oddsGap: value })}
+            />
+            <div className="text-xs text-gray-400">
+              Current: {(options.oddsGap || 0.4).toFixed(1)} decimal odds gap required
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Generic fallback for other filters
   return (
     <div className="p-3 border rounded-lg space-y-3">
       <div className="flex items-center justify-between">
@@ -308,7 +554,6 @@ function FilterOptionsEditor({ filterId, options, onChange }: FilterOptionsEdito
         </Badge>
       </div>
       
-      {/* Generic options - filters can define their own UI */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div className="space-y-2">
           <Label htmlFor={`${filterId}-threshold`} className="text-xs">
@@ -320,7 +565,7 @@ function FilterOptionsEditor({ filterId, options, onChange }: FilterOptionsEdito
             max={100}
             step={1}
             value={[Number(options.threshold) || 50]}
-            onValueChange={([value]) => handleOptionChange('threshold', value)}
+            onValueChange={([value]) => onChange({ ...options, threshold: value })}
           />
           <div className="text-xs text-gray-400">
             Current: {options.threshold || 50}
@@ -338,7 +583,7 @@ function FilterOptionsEditor({ filterId, options, onChange }: FilterOptionsEdito
             max="10"
             step="0.1"
             value={String(options.weight || 1)}
-            onChange={(e) => handleOptionChange('weight', parseFloat(e.target.value) || 1)}
+            onChange={(e) => onChange({ ...options, weight: parseFloat(e.target.value) || 1 })}
             className="h-8"
           />
         </div>

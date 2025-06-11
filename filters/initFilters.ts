@@ -1,5 +1,5 @@
 import { FilterService } from './filter-service';
-import { createBalancedFilter, createSGHeavyFilter, createSGValueFilter, createHeavyFavoritesFilter } from './implementations';
+import { createBalancedFilter, createSGHeavyFilter, createSGValueFilter, createHeavyFavoritesFilter, createSGCategoryLeadersFilter } from './implementations';
 
 /**
  * Registers all core filter implementations with the FilterService singleton.
@@ -11,4 +11,5 @@ export function registerCoreFilters() {
   service.registerFilter(createSGHeavyFilter());
   service.registerFilter(createSGValueFilter());
   service.registerFilter(createHeavyFavoritesFilter());
+  service.registerFilter(createSGCategoryLeadersFilter());
 } 
