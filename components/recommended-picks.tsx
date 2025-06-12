@@ -17,6 +17,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { FilterPanel } from "@/components/ui/filter-panel"
 import { FilterChipList } from "@/components/ui/filter-chip"
 import { Badge } from "@/components/ui/badge"
+import { formatPlayerName } from "@/lib/utils"
 
 interface RecommendedPicksProps {
   eventId: number | null;
@@ -98,6 +99,16 @@ export default function RecommendedPicks({
   // Track which players have been added to the parlay
   const [addedPlayers, setAddedPlayers] = useState<Record<string, boolean>>({})
 
+  // Fetch complete matchup data to find opponents
+  const { data: fullMatchupData } = useRecommendedPicksQuery(
+    eventId,
+    matchupType,
+    bookmaker,
+    100, // Get more data for opponents
+    500, // Higher limit to get all players
+    roundNum
+  )
+
   // Filter management - only used if showFilters is true and no external data provided
   const filterManager = useFilterManager({ 
     autoSave: true, 
@@ -154,20 +165,26 @@ export default function RecommendedPicks({
   
   const allParlayPicks = activeParlays.flatMap((parlay: any) => parlay.picks || []);
   const isPlayerInAnyParlay = (playerName: string) =>
-    allParlayPicks.some((pick: any) => (pick.picked_player_name || '').toLowerCase() === playerName.toLowerCase());
+    allParlayPicks.some((pick: any) => formatPlayerName(pick.picked_player_name || '').toLowerCase() === formatPlayerName(playerName).toLowerCase());
 
   // Use filtered recommendations directly - no cross-filtering with main matchups table
   const finalRecommendations = filteredRecommendations;
 
+  // Helper function to find opponents for a player in the same matchup
+  const getOpponents = (currentPlayer: Player) => {
+    if (!fullMatchupData) return [];
+    
+    return fullMatchupData.filter(player => 
+      player.matchupId === currentPlayer.matchupId && 
+      player.dg_id !== currentPlayer.dg_id
+    );
+  };
+
   // Function to add a player to the parlay
   const addToParlay = (selection: ParlaySelection, playerId: string) => {
-    // Format player name to "First Last" format if it's in "Last, First" format
-    let playerName = selection.player
-    if (playerName.includes(",")) {
-      const [lastName, firstName] = playerName.split(",").map(part => part.trim())
-      playerName = `${firstName} ${lastName}`
-      selection.player = playerName
-    }
+    // Format player name to "First Last" format
+    const formattedPlayerName = formatPlayerName(selection.player)
+    selection.player = formattedPlayerName
     
     addSelection(selection)
     
@@ -176,7 +193,7 @@ export default function RecommendedPicks({
     
     toast({
       title: "Added to Parlay",
-      description: `${playerName} has been added to your parlay.`,
+      description: `${formattedPlayerName} has been added to your parlay.`,
       duration: 3000
     })
   }
@@ -188,16 +205,9 @@ export default function RecommendedPicks({
     // Mark player as removed in local state
     setAddedPlayers(prev => ({ ...prev, [playerId]: false }))
     
-    // Format player name if needed for toast
-    let displayName = playerName
-    if (displayName.includes(",")) {
-      const [lastName, firstName] = displayName.split(",").map(part => part.trim())
-      displayName = `${firstName} ${lastName}`
-    }
-    
     toast({
       title: "Removed from Parlay",
-      description: `${displayName} has been removed from your parlay.`,
+      description: `${formatPlayerName(playerName)} has been removed from your parlay.`,
       duration: 3000
     })
   }
@@ -208,19 +218,9 @@ export default function RecommendedPicks({
     if (addedPlayers[playerId]) {
       // Find the selection ID
       const selection = selections.find(s => {
-        // Try to match by player name, accounting for "Last, First" vs "First Last" format
-        let nameToCheck = s.player
-        let nameToMatch = playerName
-        
-        if (nameToCheck.includes(",")) {
-          const [lastName, firstName] = nameToCheck.split(",").map(part => part.trim())
-          nameToCheck = `${firstName} ${lastName}`
-        }
-        
-        if (nameToMatch.includes(",")) {
-          const [lastName, firstName] = nameToMatch.split(",").map(part => part.trim())
-          nameToMatch = `${firstName} ${lastName}`
-        }
+        // Try to match by player name using formatted names
+        const nameToCheck = formatPlayerName(s.player)
+        const nameToMatch = formatPlayerName(playerName)
         
         return nameToCheck.toLowerCase() === nameToMatch.toLowerCase()
       })
@@ -236,17 +236,9 @@ export default function RecommendedPicks({
     // Find players that are currently in recommendations and also in selections
     const newAddedPlayers: Record<string, boolean> = {};
     (finalRecommendations ?? []).forEach((player: Player) => {
-      let formattedPlayerName = player.name
-      if (formattedPlayerName.includes(",")) {
-        const [lastName, firstName] = formattedPlayerName.split(",").map(part => part.trim())
-        formattedPlayerName = `${firstName} ${lastName}`
-      }
+      const formattedPlayerName = formatPlayerName(player.name)
       const isInParlay = selections.some((selection: ParlaySelection) => {
-        let selectionPlayerName = selection.player
-        if (selectionPlayerName.includes(",")) {
-          const [lastName, firstName] = selectionPlayerName.split(",").map(part => part.trim())
-          selectionPlayerName = `${firstName} ${lastName}`
-        }
+        const selectionPlayerName = formatPlayerName(selection.player)
         return selectionPlayerName.toLowerCase() === formattedPlayerName.toLowerCase()
       })
       newAddedPlayers[String(player.dg_id)] = isInParlay
@@ -400,6 +392,7 @@ export default function RecommendedPicks({
                 const playerId = String(player.dg_id);
                 const { inParlay, selectionId } = isPlayerInParlay(playerId, player.name);
                 const isInOtherParlay = isPlayerInAnyParlay(player.name);
+                const opponents = getOpponents(player);
 
                 return (
                   <div
@@ -411,8 +404,8 @@ export default function RecommendedPicks({
                     `}
                   >
                     {/* Player Header */}
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-semibold text-lg text-foreground">{player.name}</h3>
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-semibold text-lg text-foreground">{formatPlayerName(player.name)}</h3>
                       {isInOtherParlay && !inParlay && (
                         <Tooltip>
                           <TooltipTrigger>
@@ -424,6 +417,18 @@ export default function RecommendedPicks({
                         </Tooltip>
                       )}
                     </div>
+
+                    {/* Opponents */}
+                    {opponents.length > 0 && (
+                      <div className="mb-4">
+                        <div className="text-sm text-muted-foreground">
+                          vs. {opponents
+                            .sort((a, b) => (a.odds || Infinity) - (b.odds || Infinity)) // Sort by best odds first (lowest decimal)
+                            .map(opponent => `${formatPlayerName(opponent.name)} (${formatOdds(opponent.odds)})`)
+                            .join(', ')}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Stats Grid - More Spacious */}
                     <div className="grid grid-cols-4 gap-6 mb-6">

@@ -63,13 +63,18 @@ export async function GET(req: NextRequest) {
       return Response.json({ success: false, error: `event_name is null for event_id ${eventId}` }, { status: 404 });
     }
 
-    // Check if tournament is currently active (between start and end dates)
-    const now = new Date();
-    const startDate = new Date(start_date);
-    const endDate = new Date(end_date);
-    const isActiveTournament = now >= startDate && now <= endDate;
+    // Check if tournament has started by looking for Round 1 completion
+    // Only show position/score data after first round is complete
+    const { data: round1Check, error: round1Error } = await supabase
+      .from('latest_live_tournament_stats_view')
+      .select('round_num')
+      .eq('event_name', eventName)
+      .eq('round_num', '1')
+      .limit(1);
     
-    if (!isActiveTournament) {
+    const hasRound1Data = round1Check && round1Check.length > 0;
+    
+    if (!hasRound1Data) {
       
       // Return clean player data with no position/score information
       const cleanStats = playerIdArr.map(playerId => ({
@@ -127,7 +132,7 @@ export async function GET(req: NextRequest) {
 
     // Only use Supabase fallback if this is an active tournament
     let allEventStats: any[] = [];
-    if (isActiveTournament) {
+    if (hasRound1Data) {
       const { data: eventStatsData, error: allEventStatsError } = await supabase
         .from('latest_live_tournament_stats_view')
         .select(`
@@ -216,10 +221,10 @@ export async function GET(req: NextRequest) {
       
       // Use live data for position, scores, and player name if available
       // If no live data and tournament is not active, return null values to show dashes
-      const position = liveData?.current_pos || (isActiveTournament ? eventRow?.position : null) || null;
-      const total = liveData?.current_score ?? liveData?.total ?? (isActiveTournament ? eventRow?.total : null) ?? null;
-      const today = liveData?.today ?? (isActiveTournament ? eventRow?.today : null) ?? null;
-      const thru = liveData?.thru ?? (isActiveTournament ? eventRow?.thru : null) ?? null;
+      const position = liveData?.current_pos || (hasRound1Data ? eventRow?.position : null) || null;
+      const total = liveData?.current_score ?? liveData?.total ?? (hasRound1Data ? eventRow?.total : null) ?? null;
+      const today = liveData?.today ?? (hasRound1Data ? eventRow?.today : null) ?? null;
+      const thru = liveData?.thru ?? (hasRound1Data ? eventRow?.thru : null) ?? null;
       const playerName = liveData?.player_name || eventRow?.player_name || seasonRow?.player_name || '';
 
       // Add individual round data and current round info

@@ -141,7 +141,7 @@ export default function MatchupsTable({
 }: MatchupsTableProps) {
   const [selectedBookmaker, setSelectedBookmaker] = useState<"fanduel">("fanduel");
   // Odds gap filter state
-  const [oddsGapThreshold, setOddsGapThreshold] = useState(40); // Default 40 points in American odds
+  const [oddsGapThreshold, setOddsGapThreshold] = useState(0);
   const [showFiltersDialog, setShowFiltersDialog] = useState(false);
 
   // Use our matchups query directly, but only if shared data is not provided
@@ -236,18 +236,7 @@ export default function MatchupsTable({
   // Flatten all picks from active parlays only
   const allParlayPicks = activeParlays.flatMap((parlay: any) => parlay.picks || []);
   
-  // Debug logging
-  console.log('Debug parlay data:', {
-    totalParlays: allParlays?.length || 0,
-    activeParlays: activeParlays.length,
-    activePicks: allParlayPicks.length,
-    roundNum: roundNum,
-    sampleParlay: allParlays?.[0],
-    samplePick: allParlayPicks[0],
-    activeParlaysPreview: activeParlays.slice(0, 2),
-    // Show parlay outcomes to understand what's active vs settled
-    parlayOutcomes: (allParlays ?? []).map((p: any) => ({ uuid: p.uuid, outcome: p.outcome }))
-  });
+
   
   // Helper to check if a player is in the current parlay
   const isPlayerInCurrentParlay = (playerName: string) => {
@@ -282,28 +271,8 @@ export default function MatchupsTable({
       const formattedCheckName = formatPlayerName(checkPlayerName).toLowerCase();
       
       const matches = formattedPickName === formattedCheckName;
-      if (matches) {
-        console.log('Player match found:', { 
-          playerName, 
-          pickPlayerName, 
-          formattedPickName, 
-          formattedCheckName, 
-          pick, 
-          parlay: pick.parlay_id 
-        });
-      }
       return matches;
     });
-    
-    // Log every player check to see what's happening
-    if (playerName.includes('Tiger') || playerName.includes('Rory') || playerName.includes('Straka')) {
-      console.log('getPlayerStatus for:', playerName, { 
-        inCurrent, 
-        inSubmitted, 
-        activePicksCount: allParlayPicks.length,
-        samplePickNames: allParlayPicks.slice(0, 3).map((p: any) => p.picked_player_name)
-      });
-    }
     
     if (inCurrent) {
       return { status: 'current', label: 'In current parlay' };
@@ -774,13 +743,13 @@ export default function MatchupsTable({
                         <TableRow 
                           key={`3ball-${matchup.uuid}`}
                           className={`
-                            ${hasMultiplePicksInGroup ? 'bg-orange-50/5 border-orange-200/10' : ''}
+                            ${hasMultiplePicksInGroup ? 'bg-yellow-50/5 border-yellow-200/10' : ''}
                             ${hasConflictInGroup ? 'bg-yellow-50/5 border-yellow-200/10' : ''}
                           `}
                         >
                           <TableCell>
                             {hasMultiplePicksInGroup && (
-                              <div className="mb-2 p-2 bg-orange-50/5 border border-orange-200/20 rounded text-xs text-orange-500/80 flex items-center gap-1">
+                              <div className="mb-2 p-2 bg-yellow-50/5 border border-yellow-200/20 rounded text-xs text-yellow-500/80 flex items-center gap-1">
                                 <AlertTriangle size={12} />
                                 Multiple picks in this group
                               </div>
@@ -793,18 +762,27 @@ export default function MatchupsTable({
                                   key={`player-${idx}`} 
                                   className={`
                                     py-1 h-8 flex items-center rounded px-1 transition-colors
-                                    ${playerStatus.status === 'used' ? 'bg-orange-50/10 border border-orange-200/20' : ''}
+                                    ${playerStatus.status === 'used' ? 'bg-yellow-50/10 border border-yellow-200/20' : ''}
                                     ${playerStatus.status === 'current' ? 'bg-primary/5 border border-primary/20' : ''}
                                   `}
                                 >
                                   <span className="mr-2 flex items-center gap-1">
                                     {playerStatus.status === 'current' ? (
-                                      <Button size="icon" variant="secondary" disabled className="h-6 w-6 p-0">
+                                      <Button 
+                                        size="icon" 
+                                        variant="secondary" 
+                                        className="h-6 w-6 p-0" 
+                                        onClick={() => {
+                                          if (typeof player.dg_id !== 'number' || isNaN(player.dg_id)) return;
+                                          // Remove from current parlay
+                                          removeSelection(String(player.dg_id));
+                                        }}
+                                      >
                                         <CheckCircle className="text-green-400" size={16} />
                                       </Button>
                                     ) : playerStatus.status === 'used' ? (
                                       <Button size="icon" variant="secondary" disabled className="h-6 w-6 p-0">
-                                        <CheckCircle className="text-orange-400/70" size={16} />
+                                        <CheckCircle className="text-yellow-400/70" size={16} />
                                       </Button>
                                     ) : (
                                       <Button 
@@ -849,7 +827,7 @@ export default function MatchupsTable({
                                     {playerStatus.status !== 'available' && (
                                       <Tooltip>
                                         <TooltipTrigger asChild>
-                                          <Info className={playerStatus.status === 'current' ? 'text-blue-400/70' : 'text-orange-400/70'} size={14} />
+                                          <Info className={playerStatus.status === 'current' ? 'text-blue-400/70' : 'text-yellow-400/70'} size={14} />
                                         </TooltipTrigger>
                                         <TooltipContent>
                                           {playerStatus.label}
@@ -858,7 +836,7 @@ export default function MatchupsTable({
                                     )}
                                   </span>
                                   <span className={`
-                                    ${playerStatus.status === 'used' ? 'text-orange-600/70 font-medium' : ''}
+                                    ${playerStatus.status === 'used' ? 'text-yellow-600/70 font-medium' : ''}
                                     ${playerStatus.status === 'current' ? 'text-blue-600/70 font-medium' : ''}
                                   `}>
                                     {formatPlayerName(player.name)}
@@ -1085,13 +1063,13 @@ export default function MatchupsTable({
                         <TableRow 
                           key={`2ball-${m2.uuid}`}
                           className={`
-                            ${hasMultiplePicksInGroup ? 'bg-orange-50/5 border-orange-200/10' : ''}
+                            ${hasMultiplePicksInGroup ? 'bg-yellow-50/5 border-yellow-200/10' : ''}
                             ${hasConflictInGroup ? 'bg-yellow-50/5 border-yellow-200/10' : ''}
                           `}
                         >
                           <TableCell>
                             {hasMultiplePicksInGroup && (
-                              <div className="mb-2 p-2 bg-orange-50/5 border border-orange-200/20 rounded text-xs text-orange-500/80 flex items-center gap-1">
+                              <div className="mb-2 p-2 bg-yellow-50/5 border border-yellow-200/20 rounded text-xs text-yellow-500/80 flex items-center gap-1">
                                 <AlertTriangle size={12} />
                                 Multiple picks in this group
                               </div>
@@ -1104,18 +1082,27 @@ export default function MatchupsTable({
                                   key={`player-${idx}`} 
                                   className={`
                                     py-1 h-8 flex items-center rounded px-1 transition-colors
-                                    ${playerStatus.status === 'used' ? 'bg-orange-50/10 border border-orange-200/20' : ''}
+                                    ${playerStatus.status === 'used' ? 'bg-yellow-50/10 border border-yellow-200/20' : ''}
                                     ${playerStatus.status === 'current' ? 'bg-primary/5 border border-primary/20' : ''}
                                   `}
                                 >
                                   <span className="mr-2 flex items-center gap-1">
                                     {playerStatus.status === 'current' ? (
-                                      <Button size="icon" variant="secondary" disabled className="h-6 w-6 p-0">
+                                      <Button 
+                                        size="icon" 
+                                        variant="secondary" 
+                                        className="h-6 w-6 p-0" 
+                                        onClick={() => {
+                                          if (typeof player.dg_id !== 'number' || isNaN(player.dg_id)) return;
+                                          // Remove from current parlay
+                                          removeSelection(String(player.dg_id));
+                                        }}
+                                      >
                                         <CheckCircle className="text-green-400" size={16} />
                                       </Button>
                                     ) : playerStatus.status === 'used' ? (
                                       <Button size="icon" variant="secondary" disabled className="h-6 w-6 p-0">
-                                        <CheckCircle className="text-orange-400/70" size={16} />
+                                        <CheckCircle className="text-yellow-400/70" size={16} />
                                       </Button>
                                     ) : (
                                       <Button 
@@ -1160,7 +1147,7 @@ export default function MatchupsTable({
                                     {playerStatus.status !== 'available' && (
                                       <Tooltip>
                                         <TooltipTrigger asChild>
-                                          <Info className={playerStatus.status === 'current' ? 'text-blue-400/70' : 'text-orange-400/70'} size={14} />
+                                          <Info className={playerStatus.status === 'current' ? 'text-blue-400/70' : 'text-yellow-400/70'} size={14} />
                                         </TooltipTrigger>
                                         <TooltipContent>
                                           {playerStatus.label}
@@ -1169,7 +1156,7 @@ export default function MatchupsTable({
                                     )}
                                   </span>
                                   <span className={`
-                                    ${playerStatus.status === 'used' ? 'text-orange-600/70 font-medium' : ''}
+                                    ${playerStatus.status === 'used' ? 'text-yellow-600/70 font-medium' : ''}
                                     ${playerStatus.status === 'current' ? 'text-blue-600/70 font-medium' : ''}
                                   `}>
                                     {formatPlayerName(player.name)}
