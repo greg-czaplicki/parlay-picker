@@ -203,7 +203,7 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
       setAutoProcessing(true);
       try {
         // First sync the latest stats
-        const syncRes = await fetch('http://localhost:3000/api/live-stats/sync', { method: 'GET' });
+        const syncRes = await fetch('/api/live-stats/sync', { method: 'GET' });
         if (!syncRes.ok) throw new Error('Failed to sync live stats');
         
         // Then settle any unsettled parlays
