@@ -1,12 +1,11 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Plus, AlertCircle, Info, Filter as FilterIcon } from "lucide-react"
-import { getMatchups, Matchup } from "@/app/actions/matchups"
 import { toast } from "@/components/ui/use-toast"
 import { useParlayContext, ParlaySelection } from "@/context/ParlayContext"
 import { useRecommendedPicksQuery, Player } from "@/hooks/use-recommended-picks-query"
@@ -383,7 +382,6 @@ export default function RecommendedPicks({
           <CardHeader className="pb-4">
             <CardTitle className="text-xl">
               Recommended Picks
-              {eventId && <span className="text-sm font-normal text-muted-foreground ml-2">Event {eventId}</span>}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-6">
@@ -406,7 +404,7 @@ export default function RecommendedPicks({
                     className={`
                       p-6 border rounded-lg transition-colors
                       ${inParlay ? 'bg-primary/5 border-primary' : 'bg-card border-border'}
-                      ${isInOtherParlay && !inParlay && !hasMatchupConflict ? 'bg-blue-50/5 border-blue-200' : ''}
+                      ${isInOtherParlay && !inParlay && !hasMatchupConflict ? '!bg-blue-50/5 !border-blue-400' : ''}
                       ${hasMatchupConflict ? 'bg-amber-50/5 border-amber-400 border-2' : ''}
                     `}
                   >
@@ -591,10 +589,14 @@ export default function RecommendedPicks({
                             }
                             addToParlay(selection, playerId)
                           }}
-                          className={`w-full py-3 ${hasMatchupConflict ? 'border-amber-400 text-amber-700 hover:bg-amber-50' : ''}`}
+                          className={`w-full py-3 ${hasMatchupConflict ? 'border-amber-400 text-amber-700 hover:bg-amber-500' : ''}`}
                         >
                           <Plus className="h-5 w-5 mr-2" />
-                          {hasMatchupConflict ? "Add Anyway (Conflict!)" : "Add to Parlay"}
+                          {hasMatchupConflict 
+                            ? "Add Anyway (Conflict)" 
+                            : isInOtherParlay 
+                              ? "Add Anyway (In Parlay)" 
+                              : "Add to Parlay"}
                         </Button>
                       )}
                     </div>

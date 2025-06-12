@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useState } from "react"
+import { Card, CardContent } from "@/components/ui/card"
 import {
   Table,
   TableBody,
@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Loader2, DollarSign, Sliders, CheckCircle, Info, PlusCircle, Plus, AlertCircle, Settings, AlertTriangle } from "lucide-react"
+import { Loader2, Sliders, CheckCircle, Info, PlusCircle, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Tooltip,
@@ -28,21 +28,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { toast } from "@/components/ui/use-toast"
 import { detect3BallDivergence } from "@/lib/utils"
 import { useMatchupsQuery } from "@/hooks/use-matchups-query"
 import { usePlayerStatsQuery, PlayerStat } from "@/hooks/use-player-stats-query"
-import { useParlayContext, ParlaySelection } from "@/context/ParlayContext"
+import { useParlayContext } from "@/context/ParlayContext"
 import { useParlaysQuery } from '@/hooks/use-parlays-query'
 
 // Only 3-ball matchups
@@ -68,6 +58,8 @@ interface SupabaseMatchupRow {
   dg_odds1?: number | null;
   dg_odds2?: number | null;
   dg_odds3?: number | null;
+  teetime?: string | null;
+  tee_time?: string | null;
 }
 
 // Interface for 2-ball matchups
@@ -88,6 +80,8 @@ interface SupabaseMatchupRow2Ball {
   draftkings_p2_odds?: number | null;
   dg_odds1?: number | null;
   dg_odds2?: number | null;
+  teetime?: string | null;
+  tee_time?: string | null;
 }
 
 // Interface for live tournament stats
@@ -132,14 +126,11 @@ export default function MatchupsTable({
   eventId, 
   matchupType = "3ball", 
   roundNum, 
-  showFilters = true, 
-  compactFilters = false,
   sharedMatchupsData,
   isLoading,
   isError,
   error
 }: MatchupsTableProps) {
-  const [selectedBookmaker, setSelectedBookmaker] = useState<"fanduel">("fanduel");
   // Odds gap filter state
   const [oddsGapThreshold, setOddsGapThreshold] = useState(0);
   const [showFiltersDialog, setShowFiltersDialog] = useState(false);
@@ -201,6 +192,60 @@ export default function MatchupsTable({
     return name.includes(",") ? name.split(",").reverse().join(" ").trim() : name ?? "";
   };
 
+  // Format tee time with tournament local time and Eastern time difference
+  const formatTeeTime = (teeTime: string | null): { localTime: string; easternDiff: string } => {
+    if (!teeTime) return { localTime: "-", easternDiff: "" };
+    
+    try {
+      // Parse the tee time (assuming it's in UTC or local tournament time)
+      const teeTimeDate = new Date(teeTime);
+      
+      // Most golf tournaments are in these timezones:
+      // - US: Eastern, Central, Mountain, Pacific
+      // - International: Various (default to tournament local)
+      // For now, assume US tournaments and default to Eastern for international
+      const tournamentTimezone = 'America/New_York'; // Default assumption, could be enhanced later
+      
+      // Format in tournament local time
+      const localTime = teeTimeDate.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZone: tournamentTimezone,
+      });
+      
+      // Calculate difference from Eastern
+      const easternTime = teeTimeDate.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZone: 'America/New_York',
+      });
+      
+      // If tournament is in Eastern time, no diff needed
+      let easternDiff = "";
+      if (tournamentTimezone !== 'America/New_York') {
+        const tournamentHour = parseInt(teeTimeDate.toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          hour12: false,
+          timeZone: tournamentTimezone,
+        }));
+        const easternHour = parseInt(teeTimeDate.toLocaleTimeString('en-US', {
+          hour: '2-digit', 
+          hour12: false,
+          timeZone: 'America/New_York',
+        }));
+        
+        const diff = tournamentHour - easternHour;
+        if (diff !== 0) {
+          easternDiff = diff > 0 ? `(+${diff}h ET)` : `(${diff}h ET)`;
+        }
+      }
+      
+      return { localTime, easternDiff };
+    } catch (error) {
+      return { localTime: "-", easternDiff: "" };
+    }
+  };
+
   // Calculate if the odds gap exceeds the threshold
   const hasSignificantOddsGap = (playerOdds: number | null, referenceOdds: number | null): boolean => {
     if (!playerOdds || !referenceOdds || playerOdds <= 1 || referenceOdds <= 1) return false;
@@ -235,8 +280,6 @@ export default function MatchupsTable({
   
   // Flatten all picks from active parlays only
   const allParlayPicks = activeParlays.flatMap((parlay: any) => parlay.picks || []);
-  
-
   
   // Helper to check if a player is in the current parlay
   const isPlayerInCurrentParlay = (playerName: string) => {
@@ -328,6 +371,37 @@ export default function MatchupsTable({
       );
     }
     return false;
+  }).sort((a, b) => {
+    // Sort by tee time first (earliest first)
+    const aTeeTime = a.tee_time ? new Date(a.tee_time).getTime() : Infinity;
+    const bTeeTime = b.tee_time ? new Date(b.tee_time).getTime() : Infinity;
+    
+    if (aTeeTime !== bTeeTime) {
+      return aTeeTime - bTeeTime;
+    }
+    
+    // Fallback to odds-based sorting (favorites first) 
+    if (isSupabaseMatchupRow(a) && isSupabaseMatchupRow(b)) {
+      const aMinOdds = Math.min(
+        Number((a as SupabaseMatchupRow).odds1 ?? Infinity),
+        Number((a as SupabaseMatchupRow).odds2 ?? Infinity),
+        Number((a as SupabaseMatchupRow).odds3 ?? Infinity)
+      );
+      const bMinOdds = Math.min(
+        Number((b as SupabaseMatchupRow).odds1 ?? Infinity),
+        Number((b as SupabaseMatchupRow).odds2 ?? Infinity),
+        Number((b as SupabaseMatchupRow).odds3 ?? Infinity)
+      );
+      return aMinOdds - bMinOdds;
+    } else if (isSupabaseMatchupRow2Ball(a) && isSupabaseMatchupRow2Ball(b)) {
+      const a2 = a as SupabaseMatchupRow2Ball;
+      const b2 = b as SupabaseMatchupRow2Ball;
+      const aMinOdds = Math.min(Number(a2.odds1 ?? Infinity), Number(a2.odds2 ?? Infinity));
+      const bMinOdds = Math.min(Number(b2.odds1 ?? Infinity), Number(b2.odds2 ?? Infinity));
+      return aMinOdds - bMinOdds;
+    }
+    
+    return 0;
   });
     
   return (
@@ -338,11 +412,6 @@ export default function MatchupsTable({
             <div className="flex justify-between items-center">
               <div>
                 <h2 className="text-xl font-bold">{matchupType === "3ball" ? "3-Ball" : "2-Ball"} Matchups</h2>
-                {finalMatchupsData && finalMatchupsData.length > 0 && (
-                  <p className="text-sm text-gray-400">
-                    Event: {isSupabaseMatchupRow(finalMatchupsData[0]) || isSupabaseMatchupRow2Ball(finalMatchupsData[0]) ? finalMatchupsData[0].event_name : ""}
-                  </p>
-                )}
               </div>
               <div className="flex items-center gap-2">
                 <Dialog open={showFiltersDialog} onOpenChange={setShowFiltersDialog}>
@@ -479,6 +548,7 @@ export default function MatchupsTable({
                 <TableHeader className="bg-[#1e1e23]">
                   <TableRow>
                     <TableHead className="text-white text-center">Players</TableHead>
+                    <TableHead className="text-white text-center">Tee Time</TableHead>
                     <TableHead className="text-white text-center">Position</TableHead>
                     <TableHead className="text-white text-center">FanDuel Odds</TableHead>
                     <TableHead className="text-white text-center">Data Golf Odds</TableHead>
@@ -656,10 +726,31 @@ export default function MatchupsTable({
                         });
 
                       // Format the player's tournament position and score
-                      const formatPlayerPosition = (playerId: string | number) => {
+                      const formatPlayerPosition = (playerId: string | number, teeTime?: string | null) => {
                         const playerStat = playerStatsMap[String(playerId)];
                         
                         if (!playerStat) {
+                          return { position: '-', score: '-' };
+                        }
+                        
+                        // Check if this group has teed off yet
+                        const hasTeeTeeOff = (() => {
+                          if (!teeTime) return true; // If no tee time, assume they can have scores
+                          
+                          try {
+                            const teeTimeDate = new Date(teeTime);
+                            const now = new Date();
+                            // Add buffer time - consider teed off if tee time was more than 30 minutes ago
+                            const teeOffThreshold = new Date(teeTimeDate.getTime() + 30 * 60 * 1000);
+                            return now > teeOffThreshold;
+                          } catch (error) {
+                            return true; // If can't parse, default to showing data
+                          }
+                        })();
+                        
+                        // Only show position data if the group has actually teed off
+                        // Don't rely on thru > 0 as it could be stale from previous rounds
+                        if (!hasTeeTeeOff) {
                           return { position: '-', score: '-' };
                         }
                         
@@ -846,7 +937,20 @@ export default function MatchupsTable({
                             })}
                           </TableCell>
                           
-                          {/* New Position column */}
+                          {/* Tee Time column */}
+                          <TableCell className="text-center">
+                            {(() => {
+                              const { localTime, easternDiff } = formatTeeTime(matchup.tee_time ?? null);
+                              return (
+                                <div className="text-center">
+                                  <div className="text-xs font-medium">{localTime}</div>
+                                  {easternDiff && <div className="text-xs text-muted-foreground">{easternDiff}</div>}
+                                </div>
+                              );
+                            })()}
+                          </TableCell>
+                          
+                          {/* Position column */}
                           <TableCell className="text-center">
                             {sortedPlayers.map((player, idx) => {
                               let playerId = '';
@@ -861,7 +965,7 @@ export default function MatchupsTable({
                                 }
                               }
                               
-                              const positionData = formatPlayerPosition(String(playerId));
+                              const positionData = formatPlayerPosition(String(playerId), matchup.tee_time);
                               
                               return (
                                 <div key={`position-${idx}`} className="py-1 h-8 flex items-center justify-center">
@@ -976,10 +1080,31 @@ export default function MatchupsTable({
                         });
 
                       // Format the player's tournament position and score
-                      const formatPlayerPosition = (playerId: string | number) => {
+                      const formatPlayerPosition = (playerId: string | number, teeTime?: string | null) => {
                         const playerStat = playerStatsMap[String(playerId)];
                         
                         if (!playerStat) {
+                          return { position: '-', score: '-' };
+                        }
+                        
+                        // Check if this group has teed off yet
+                        const hasTeeTeeOff = (() => {
+                          if (!teeTime) return true; // If no tee time, assume they can have scores
+                          
+                          try {
+                            const teeTimeDate = new Date(teeTime);
+                            const now = new Date();
+                            // Add buffer time - consider teed off if tee time was more than 30 minutes ago
+                            const teeOffThreshold = new Date(teeTimeDate.getTime() + 30 * 60 * 1000);
+                            return now > teeOffThreshold;
+                          } catch (error) {
+                            return true; // If can't parse, default to showing data
+                          }
+                        })();
+                        
+                        // Only show position data if the group has actually teed off
+                        // Don't rely on thru > 0 as it could be stale from previous rounds
+                        if (!hasTeeTeeOff) {
                           return { position: '-', score: '-' };
                         }
                         
@@ -1166,6 +1291,19 @@ export default function MatchupsTable({
                             })}
                           </TableCell>
                           
+                          {/* Tee Time column for 2-ball */}
+                          <TableCell className="text-center">
+                            {(() => {
+                              const { localTime: teeTimeLocal, easternDiff: teeTimeDiff } = formatTeeTime(m2.tee_time ?? null);
+                              return (
+                                <div className="text-center">
+                                  <div className="text-xs font-medium">{teeTimeLocal}</div>
+                                  {teeTimeDiff && <div className="text-xs text-muted-foreground">{teeTimeDiff}</div>}
+                                </div>
+                              );
+                            })()}
+                          </TableCell>
+                          
                           {/* Position column for 2-ball */}
                           <TableCell className="text-center">
                             {sortedPlayers.map((player, idx) => {
@@ -1179,7 +1317,7 @@ export default function MatchupsTable({
                                 }
                               }
                               
-                              const positionData = formatPlayerPosition(String(playerId));
+                              const positionData = formatPlayerPosition(String(playerId), m2.tee_time);
                               
                               return (
                                 <div key={`position-${idx}`} className="py-1 h-8 flex items-center justify-center">
