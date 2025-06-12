@@ -171,7 +171,7 @@ export async function GET(req: NextRequest) {
   if (matchupIds.length > 0) {
     const { data: matchupsData, error: matchupsError } = await supabase
       .from('matchups')
-      .select('uuid, type, round_num, event_id, player1_name, player2_name, player3_name, player1_dg_id, player2_dg_id, player3_dg_id, odds1, odds2, odds3')
+      .select('uuid, type, round_num, event_id, player1_name, player2_name, player3_name, player1_dg_id, player2_dg_id, player3_dg_id, odds1, odds2, odds3, tee_time')
       .in('uuid', matchupIds)
     if (matchupsError) return NextResponse.json({ error: matchupsError.message }, { status: 400 })
     matchups = matchupsData || []
@@ -309,6 +309,7 @@ export async function GET(req: NextRequest) {
       return {
         ...pick,
         players: playersInMatchup,
+        tee_time: matchup?.tee_time || null, // Include tee time for sorting
       }
     })
     

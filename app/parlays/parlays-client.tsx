@@ -41,6 +41,8 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
   const organizedParlays = useMemo(() => {
     if (!Array.isArray(parlays)) return { active: [], settled: [], activeTotal: 0, settledTotal: 0 };
     
+
+    
     // A parlay is settled if all its picks have been settled
     const active = parlays.filter((parlay: any) => {
       if (!Array.isArray(parlay.picks)) return true;
@@ -56,7 +58,7 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
       );
     });
     
-    // Enhanced sort function: tournament name, then round number, then date
+    // Enhanced sort function: tournament name → round number → tee time (earliest first) → creation date (newest first)
     const sortParlays = (a: any, b: any) => {
       // Helper to extract tournament name from picks
       const getTournamentName = (parlay: any) => {
@@ -64,6 +66,30 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
         // Look for eventName in the player data structure
         const firstPlayer = parlay.picks[0].players[0];
         return firstPlayer.eventName || parlay.tournament_name || 'Unknown Tournament';
+      };
+      
+      // Helper to extract earliest tee time from parlay picks
+      const getEarliestTeeTime = (parlay: any) => {
+        if (!parlay.picks?.length) return null;
+        
+        // Get all tee times from the picks (now directly available via API)
+        const teeTimes: Date[] = [];
+        
+        parlay.picks.forEach((pick: any) => {
+          if (pick.tee_time) {
+            try {
+              const teeTime = new Date(pick.tee_time);
+              if (!isNaN(teeTime.getTime())) {
+                teeTimes.push(teeTime);
+              }
+            } catch (e) {
+              // Ignore invalid dates
+            }
+          }
+        });
+        
+        // Return the earliest tee time, or null if none found
+        return teeTimes.length > 0 ? new Date(Math.min(...teeTimes.map(t => t.getTime()))) : null;
       };
       
       const aTournament = getTournamentName(a);
@@ -76,6 +102,21 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
       // Then by round number
       if (a.round_num !== b.round_num) {
         return (a.round_num || 0) - (b.round_num || 0);
+      }
+      
+      // Then by tee time (earliest first)
+      const aTeeTime = getEarliestTeeTime(a);
+      const bTeeTime = getEarliestTeeTime(b);
+      
+      if (aTeeTime && bTeeTime) {
+        const timeDiff = aTeeTime.getTime() - bTeeTime.getTime();
+        if (timeDiff !== 0) {
+          return timeDiff; // Earlier tee times first
+        }
+      } else if (aTeeTime && !bTeeTime) {
+        return -1; // Parlays with tee times come before those without
+      } else if (!aTeeTime && bTeeTime) {
+        return 1; // Parlays without tee times come after those with
       }
       
       // Finally by creation date (newest first)
@@ -456,7 +497,26 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
 
                     {/* Matchups - Mobile Optimized */}
                     <div className="space-y-3 sm:space-y-4 px-4 sm:px-6 pb-4 sm:pb-6">
-                      {cardProps.picks.map((pick, mIdx) => {
+                      {[...parlay.picks]
+                        .sort((a: any, b: any) => {
+                          // Sort picks by tee time (earliest first)
+                          const aTeeTime = a.tee_time;
+                          const bTeeTime = b.tee_time;
+                          
+                          if (aTeeTime && bTeeTime) {
+                            return new Date(aTeeTime).getTime() - new Date(bTeeTime).getTime();
+                          } else if (aTeeTime && !bTeeTime) {
+                            return -1;
+                          } else if (!aTeeTime && bTeeTime) {
+                            return 1;
+                          }
+                          return 0;
+                        })
+                        .map((apiPick: any, mIdx: number) => {
+                          const pick: ParlayPickDisplay = { 
+                            matchup: [], 
+                            players: apiPick.players || [] 
+                          };
                         if (!pick.players) return null;
                         const userPick = pick.players.find((p: ParlayPlayerDisplay) => p.isUserPick);
                         const others = pick.players.filter((p: ParlayPlayerDisplay) => !p.isUserPick);
@@ -675,7 +735,26 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
 
                     {/* Matchups - Mobile Optimized (same as active parlays) */}
                     <div className="space-y-3 sm:space-y-4 px-4 sm:px-6 pb-4 sm:pb-6">
-                      {cardProps.picks.map((pick, mIdx) => {
+                      {[...parlay.picks]
+                        .sort((a: any, b: any) => {
+                          // Sort picks by tee time (earliest first)
+                          const aTeeTime = a.tee_time;
+                          const bTeeTime = b.tee_time;
+                          
+                          if (aTeeTime && bTeeTime) {
+                            return new Date(aTeeTime).getTime() - new Date(bTeeTime).getTime();
+                          } else if (aTeeTime && !bTeeTime) {
+                            return -1;
+                          } else if (!aTeeTime && bTeeTime) {
+                            return 1;
+                          }
+                          return 0;
+                        })
+                        .map((apiPick: any, mIdx: number) => {
+                          const pick: ParlayPickDisplay = { 
+                            matchup: [], 
+                            players: apiPick.players || [] 
+                          };
                         if (!pick.players) return null;
                         const userPick = pick.players.find((p: ParlayPlayerDisplay) => p.isUserPick);
                         const others = pick.players.filter((p: ParlayPlayerDisplay) => !p.isUserPick);
