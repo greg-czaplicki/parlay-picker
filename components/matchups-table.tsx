@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Loader2, DollarSign, Sliders, CheckCircle, Info, PlusCircle, Plus, AlertCircle, Settings } from "lucide-react"
+import { Loader2, DollarSign, Sliders, CheckCircle, Info, PlusCircle, Plus, AlertCircle, Settings, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Tooltip,
@@ -225,9 +225,9 @@ export default function MatchupsTable({
   const { selections, addSelection, removeSelection } = useParlayContext();
   const { data: allParlays = [] } = useParlaysQuery(userId);
   
-  // Filter to only active parlays (parlays that have at least one unsettled pick)
+  // Filter to only active parlays (parlays with at least one unsettled pick)
   const activeParlays = (allParlays ?? []).filter((parlay: any) => {
-    if (!Array.isArray(parlay.picks)) return true;
+    if (!Array.isArray(parlay.picks)) return false;
     return parlay.picks.some((pick: any) => 
       !pick.settlement_status || pick.settlement_status === 'pending'
     );
@@ -235,12 +235,84 @@ export default function MatchupsTable({
   
   // Flatten all picks from active parlays only
   const allParlayPicks = activeParlays.flatMap((parlay: any) => parlay.picks || []);
+  
+  // Debug logging
+  console.log('Debug parlay data:', {
+    totalParlays: allParlays?.length || 0,
+    activeParlays: activeParlays.length,
+    activePicks: allParlayPicks.length,
+    roundNum: roundNum,
+    sampleParlay: allParlays?.[0],
+    samplePick: allParlayPicks[0],
+    activeParlaysPreview: activeParlays.slice(0, 2),
+    // Show parlay outcomes to understand what's active vs settled
+    parlayOutcomes: (allParlays ?? []).map((p: any) => ({ uuid: p.uuid, outcome: p.outcome }))
+  });
+  
   // Helper to check if a player is in the current parlay
-  const isPlayerInCurrentParlay = (playerName: string) =>
-    selections.some(s => s.player.toLowerCase() === playerName.toLowerCase());
-  // Helper to check if a player is in any other parlay
-  const isPlayerInAnyParlay = (playerName: string) =>
-    allParlayPicks.some((pick: any) => (pick.picked_player_name || '').toLowerCase() === playerName.toLowerCase());
+  const isPlayerInCurrentParlay = (playerName: string) => {
+    const inCurrent = selections.some(s => s.player.toLowerCase() === playerName.toLowerCase());
+    return inCurrent;
+  }
+  
+  // Helper to check if a player is in any active/pending parlay
+  const isPlayerInAnyParlay = (playerName: string) => {
+    // Check current parlay selections
+    const inCurrent = isPlayerInCurrentParlay(playerName);
+    // Check active/pending parlays only (settled parlays allow reuse)
+    const inSubmitted = allParlayPicks.some((pick: any) => {
+      const pickPlayerName = pick.picked_player_name || '';
+      // Format both names the same way for comparison
+      const formattedPickName = formatPlayerName(pickPlayerName).toLowerCase();
+      const formattedCheckName = formatPlayerName(playerName).toLowerCase();
+      return formattedPickName === formattedCheckName;
+    });
+    return inCurrent || inSubmitted;
+  }
+  
+  // Helper to get player status for visual indicators
+  const getPlayerStatus = (playerName: string) => {
+    const inCurrent = isPlayerInCurrentParlay(playerName);
+    const inSubmitted = allParlayPicks.some((pick: any) => {
+      const pickPlayerName = (pick.picked_player_name || '');
+      const checkPlayerName = playerName;
+      
+      // Format both names the same way for comparison
+      const formattedPickName = formatPlayerName(pickPlayerName).toLowerCase();
+      const formattedCheckName = formatPlayerName(checkPlayerName).toLowerCase();
+      
+      const matches = formattedPickName === formattedCheckName;
+      if (matches) {
+        console.log('Player match found:', { 
+          playerName, 
+          pickPlayerName, 
+          formattedPickName, 
+          formattedCheckName, 
+          pick, 
+          parlay: pick.parlay_id 
+        });
+      }
+      return matches;
+    });
+    
+    // Log every player check to see what's happening
+    if (playerName.includes('Tiger') || playerName.includes('Rory') || playerName.includes('Straka')) {
+      console.log('getPlayerStatus for:', playerName, { 
+        inCurrent, 
+        inSubmitted, 
+        activePicksCount: allParlayPicks.length,
+        samplePickNames: allParlayPicks.slice(0, 3).map((p: any) => p.picked_player_name)
+      });
+    }
+    
+    if (inCurrent) {
+      return { status: 'current', label: 'In current parlay' };
+    } else if (inSubmitted) {
+      return { status: 'used', label: 'Already used in a parlay' };
+    } else {
+      return { status: 'available', label: 'Available' };
+    }
+  }
 
   if (finalIsLoading) {
     return (
@@ -687,21 +759,76 @@ export default function MatchupsTable({
                         return playerStat && (playerStat.position || playerStat.today !== null || playerStat.total !== null);
                       });
 
+                      // Check for matchup-level conflicts (multiple picks from same group)
+                      const playersInThisMatchup = sortedPlayers.filter(player => {
+                        return isPlayerInAnyParlay(formatPlayerName(player.name));
+                      });
+                      
+                      const hasMultiplePicksInGroup = playersInThisMatchup.length > 1;
+                      const hasConflictInGroup = playersInThisMatchup.some(player => {
+                        const playerStatus = getPlayerStatus(formatPlayerName(player.name));
+                        return playerStatus.status === 'used'; // Has picks in submitted parlays
+                      });
+
                       return (
-                        <TableRow key={`3ball-${matchup.uuid}`}>
+                        <TableRow 
+                          key={`3ball-${matchup.uuid}`}
+                          className={`
+                            ${hasMultiplePicksInGroup ? 'bg-orange-50/5 border-orange-200/10' : ''}
+                            ${hasConflictInGroup ? 'bg-yellow-50/5 border-yellow-200/10' : ''}
+                          `}
+                        >
                           <TableCell>
-                            {sortedPlayers.map((player, idx) => (
-                              <div key={`player-${idx}`} className="py-1 h-8 flex items-center">
-                                {(() => {
-                                  const inCurrent = isPlayerInCurrentParlay(formatPlayerName(player.name));
-                                  const inAny = isPlayerInAnyParlay(formatPlayerName(player.name));
-                                  return (
-                                    <span className="mr-2 flex items-center gap-1">
-                                      {inCurrent ? (
-                                        <Button size="icon" variant="secondary" disabled className="h-6 w-6 p-0"><CheckCircle className="text-green-400" size={16} /></Button>
-                                      ) : (
-                                        <Button size="icon" variant="outline" className="h-6 w-6 p-0" onClick={() => {
+                            {hasMultiplePicksInGroup && (
+                              <div className="mb-2 p-2 bg-orange-50/5 border border-orange-200/20 rounded text-xs text-orange-500/80 flex items-center gap-1">
+                                <AlertTriangle size={12} />
+                                Multiple picks in this group
+                              </div>
+                            )}
+                            {sortedPlayers.map((player, idx) => {
+                              const playerStatus = getPlayerStatus(formatPlayerName(player.name));
+                              
+                              return (
+                                <div 
+                                  key={`player-${idx}`} 
+                                  className={`
+                                    py-1 h-8 flex items-center rounded px-1 transition-colors
+                                    ${playerStatus.status === 'used' ? 'bg-orange-50/10 border border-orange-200/20' : ''}
+                                    ${playerStatus.status === 'current' ? 'bg-primary/5 border border-primary/20' : ''}
+                                  `}
+                                >
+                                  <span className="mr-2 flex items-center gap-1">
+                                    {playerStatus.status === 'current' ? (
+                                      <Button size="icon" variant="secondary" disabled className="h-6 w-6 p-0">
+                                        <CheckCircle className="text-green-400" size={16} />
+                                      </Button>
+                                    ) : playerStatus.status === 'used' ? (
+                                      <Button size="icon" variant="secondary" disabled className="h-6 w-6 p-0">
+                                        <CheckCircle className="text-orange-400/70" size={16} />
+                                      </Button>
+                                    ) : (
+                                      <Button 
+                                        size="icon" 
+                                        variant="outline" 
+                                        className="h-6 w-6 p-0" 
+                                        onClick={() => {
                                           if (typeof player.dg_id !== 'number' || isNaN(player.dg_id)) return;
+                                          
+                                          // Check if user is already picking someone else from this group
+                                          const otherPlayersInGroup = sortedPlayers.filter(p => 
+                                            p.dg_id !== player.dg_id && isPlayerInAnyParlay(formatPlayerName(p.name))
+                                          );
+                                          
+                                          if (otherPlayersInGroup.length > 0) {
+                                            const otherPlayerNames = otherPlayersInGroup.map(p => formatPlayerName(p.name)).join(', ');
+                                            toast({
+                                              title: "Warning: Conflicting Pick",
+                                              description: `You already have ${otherPlayerNames} from this group in your parlays. Adding ${formatPlayerName(player.name)} means you're betting against yourself.`,
+                                              duration: 5000,
+                                              variant: "destructive"
+                                            });
+                                          }
+                                          
                                           addSelection({
                                             id: String(player.dg_id),
                                             matchupType,
@@ -714,17 +841,31 @@ export default function MatchupsTable({
                                             valueRating: 7.5,
                                             confidenceScore: 75
                                           });
-                                        }}><PlusCircle className="text-primary" size={16} /></Button>
-                                      )}
-                                      {inAny && !inCurrent && (
-                                        <Tooltip><TooltipTrigger asChild><Info className="text-blue-400" size={16} /></TooltipTrigger><TooltipContent>Already used in another parlay</TooltipContent></Tooltip>
-                                      )}
-                                    </span>
-                                  );
-                                })()}
-                                {formatPlayerName(player.name)}
-                              </div>
-                            ))}
+                                        }}
+                                      >
+                                        <PlusCircle className="text-primary" size={16} />
+                                      </Button>
+                                    )}
+                                    {playerStatus.status !== 'available' && (
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Info className={playerStatus.status === 'current' ? 'text-blue-400/70' : 'text-orange-400/70'} size={14} />
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          {playerStatus.label}
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    )}
+                                  </span>
+                                  <span className={`
+                                    ${playerStatus.status === 'used' ? 'text-orange-600/70 font-medium' : ''}
+                                    ${playerStatus.status === 'current' ? 'text-blue-600/70 font-medium' : ''}
+                                  `}>
+                                    {formatPlayerName(player.name)}
+                                  </span>
+                                </div>
+                              );
+                            })}
                           </TableCell>
                           
                           {/* New Position column */}
@@ -929,21 +1070,76 @@ export default function MatchupsTable({
                         return playerStat && (playerStat.position || playerStat.today !== null || playerStat.total !== null);
                       });
 
+                      // Check for matchup-level conflicts (multiple picks from same group)
+                      const playersInThisMatchup = sortedPlayers.filter(player => {
+                        return isPlayerInAnyParlay(formatPlayerName(player.name));
+                      });
+                      
+                      const hasMultiplePicksInGroup = playersInThisMatchup.length > 1;
+                      const hasConflictInGroup = playersInThisMatchup.some(player => {
+                        const playerStatus = getPlayerStatus(formatPlayerName(player.name));
+                        return playerStatus.status === 'used'; // Has picks in submitted parlays
+                      });
+
                       return (
-                        <TableRow key={`2ball-${m2.uuid}`}>
+                        <TableRow 
+                          key={`2ball-${m2.uuid}`}
+                          className={`
+                            ${hasMultiplePicksInGroup ? 'bg-orange-50/5 border-orange-200/10' : ''}
+                            ${hasConflictInGroup ? 'bg-yellow-50/5 border-yellow-200/10' : ''}
+                          `}
+                        >
                           <TableCell>
-                            {sortedPlayers.map((player, idx) => (
-                              <div key={`player-${idx}`} className="py-1 h-8 flex items-center">
-                                {(() => {
-                                  const inCurrent = isPlayerInCurrentParlay(formatPlayerName(player.name));
-                                  const inAny = isPlayerInAnyParlay(formatPlayerName(player.name));
-                                  return (
-                                    <span className="mr-2 flex items-center gap-1">
-                                      {inCurrent ? (
-                                        <Button size="icon" variant="secondary" disabled className="h-6 w-6 p-0"><CheckCircle className="text-green-400" size={16} /></Button>
-                                      ) : (
-                                        <Button size="icon" variant="outline" className="h-6 w-6 p-0" onClick={() => {
+                            {hasMultiplePicksInGroup && (
+                              <div className="mb-2 p-2 bg-orange-50/5 border border-orange-200/20 rounded text-xs text-orange-500/80 flex items-center gap-1">
+                                <AlertTriangle size={12} />
+                                Multiple picks in this group
+                              </div>
+                            )}
+                            {sortedPlayers.map((player, idx) => {
+                              const playerStatus = getPlayerStatus(formatPlayerName(player.name));
+                              
+                              return (
+                                <div 
+                                  key={`player-${idx}`} 
+                                  className={`
+                                    py-1 h-8 flex items-center rounded px-1 transition-colors
+                                    ${playerStatus.status === 'used' ? 'bg-orange-50/10 border border-orange-200/20' : ''}
+                                    ${playerStatus.status === 'current' ? 'bg-primary/5 border border-primary/20' : ''}
+                                  `}
+                                >
+                                  <span className="mr-2 flex items-center gap-1">
+                                    {playerStatus.status === 'current' ? (
+                                      <Button size="icon" variant="secondary" disabled className="h-6 w-6 p-0">
+                                        <CheckCircle className="text-green-400" size={16} />
+                                      </Button>
+                                    ) : playerStatus.status === 'used' ? (
+                                      <Button size="icon" variant="secondary" disabled className="h-6 w-6 p-0">
+                                        <CheckCircle className="text-orange-400/70" size={16} />
+                                      </Button>
+                                    ) : (
+                                      <Button 
+                                        size="icon" 
+                                        variant="outline" 
+                                        className="h-6 w-6 p-0" 
+                                        onClick={() => {
                                           if (typeof player.dg_id !== 'number' || isNaN(player.dg_id)) return;
+                                          
+                                          // Check if user is already picking someone else from this group
+                                          const otherPlayersInGroup = sortedPlayers.filter(p => 
+                                            p.dg_id !== player.dg_id && isPlayerInAnyParlay(formatPlayerName(p.name))
+                                          );
+                                          
+                                          if (otherPlayersInGroup.length > 0) {
+                                            const otherPlayerNames = otherPlayersInGroup.map(p => formatPlayerName(p.name)).join(', ');
+                                            toast({
+                                              title: "Warning: Conflicting Pick",
+                                              description: `You already have ${otherPlayerNames} from this group in your parlays. Adding ${formatPlayerName(player.name)} means you're betting against yourself.`,
+                                              duration: 5000,
+                                              variant: "destructive"
+                                            });
+                                          }
+                                          
                                           addSelection({
                                             id: String(player.dg_id),
                                             matchupType,
@@ -956,17 +1152,31 @@ export default function MatchupsTable({
                                             valueRating: 7.5,
                                             confidenceScore: 75
                                           });
-                                        }}><PlusCircle className="text-primary" size={16} /></Button>
-                                      )}
-                                      {inAny && !inCurrent && (
-                                        <Tooltip><TooltipTrigger asChild><Info className="text-blue-400" size={16} /></TooltipTrigger><TooltipContent>Already used in another parlay</TooltipContent></Tooltip>
-                                      )}
-                                    </span>
-                                  );
-                                })()}
-                                {formatPlayerName(player.name)}
-                              </div>
-                            ))}
+                                        }}
+                                      >
+                                        <PlusCircle className="text-primary" size={16} />
+                                      </Button>
+                                    )}
+                                    {playerStatus.status !== 'available' && (
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Info className={playerStatus.status === 'current' ? 'text-blue-400/70' : 'text-orange-400/70'} size={14} />
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          {playerStatus.label}
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    )}
+                                  </span>
+                                  <span className={`
+                                    ${playerStatus.status === 'used' ? 'text-orange-600/70 font-medium' : ''}
+                                    ${playerStatus.status === 'current' ? 'text-blue-600/70 font-medium' : ''}
+                                  `}>
+                                    {formatPlayerName(player.name)}
+                                  </span>
+                                </div>
+                              );
+                            })}
                           </TableCell>
                           
                           {/* Position column for 2-ball */}
