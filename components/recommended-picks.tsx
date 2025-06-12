@@ -393,6 +393,12 @@ export default function RecommendedPicks({
                 const { inParlay, selectionId } = isPlayerInParlay(playerId, player.name);
                 const isInOtherParlay = isPlayerInAnyParlay(player.name);
                 const opponents = getOpponents(player);
+                
+                // Check if any opponents are in active parlays (betting against yourself)
+                const conflictingOpponents = opponents.filter(opponent => 
+                  isPlayerInAnyParlay(opponent.name)
+                );
+                const hasMatchupConflict = conflictingOpponents.length > 0;
 
                 return (
                   <div
@@ -400,32 +406,58 @@ export default function RecommendedPicks({
                     className={`
                       p-6 border rounded-lg transition-colors
                       ${inParlay ? 'bg-primary/5 border-primary' : 'bg-card border-border'}
-                      ${isInOtherParlay && !inParlay ? 'bg-yellow-50/5 border-yellow-200' : ''}
+                      ${isInOtherParlay && !inParlay && !hasMatchupConflict ? 'bg-blue-50/5 border-blue-200' : ''}
+                      ${hasMatchupConflict ? 'bg-amber-50/5 border-amber-400 border-2' : ''}
                     `}
                   >
                     {/* Player Header */}
                     <div className="flex items-center justify-between mb-2">
                       <h3 className="font-semibold text-lg text-foreground">{formatPlayerName(player.name)}</h3>
-                      {isInOtherParlay && !inParlay && (
-                        <Tooltip>
-                          <TooltipTrigger>
-                            <Info className="h-5 w-5 text-yellow-500" />
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Player is in another parlay</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {hasMatchupConflict && (
+                          <Tooltip>
+                            <TooltipTrigger>
+                              <AlertCircle className="h-5 w-5 text-amber-600" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Betting against yourself! You already have {conflictingOpponents.map(o => formatPlayerName(o.name)).join(', ')} in active parlays</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                        {isInOtherParlay && !inParlay && !hasMatchupConflict && (
+                          <Tooltip>
+                            <TooltipTrigger>
+                              <Info className="h-5 w-5 text-blue-500" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Player is in another parlay</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                      </div>
                     </div>
 
                     {/* Opponents */}
                     {opponents.length > 0 && (
                       <div className="mb-4">
                         <div className="text-sm text-muted-foreground">
-                          vs. {opponents
+                          vs.{' '}
+                          {opponents
                             .sort((a, b) => (a.odds || Infinity) - (b.odds || Infinity)) // Sort by best odds first (lowest decimal)
-                            .map(opponent => `${formatPlayerName(opponent.name)} (${formatOdds(opponent.odds)})`)
-                            .join(', ')}
+                            .map((opponent, index) => {
+                              const isConflicting = conflictingOpponents.some(conflicted => conflicted.dg_id === opponent.dg_id);
+                              const opponentText = `${formatPlayerName(opponent.name)} (${formatOdds(opponent.odds)})`;
+                              
+                              return (
+                                <span key={opponent.dg_id}>
+                                  {index > 0 && ', '}
+                                  <span className={isConflicting ? 'text-amber-800 font-semibold' : ''}>
+                                    {isConflicting && '⚠️ '}
+                                    {opponentText}
+                                  </span>
+                                </span>
+                              );
+                            })}
                         </div>
                       </div>
                     )}
@@ -531,9 +563,20 @@ export default function RecommendedPicks({
                         </Button>
                       ) : (
                         <Button
-                          variant="default"
+                          variant={hasMatchupConflict ? "outline" : "default"}
                           size="lg"
                           onClick={() => {
+                            if (hasMatchupConflict) {
+                              // Show warning toast for betting against yourself
+                              const conflictNames = conflictingOpponents.map(o => formatPlayerName(o.name)).join(', ');
+                              toast({
+                                title: "Betting Against Yourself!",
+                                description: `You already have ${conflictNames} in active parlays. Adding ${formatPlayerName(player.name)} means you're betting against yourself in the same matchup.`,
+                                duration: 5000,
+                                variant: "destructive"
+                              });
+                            }
+                            
                             const selection: ParlaySelection = {
                               id: `${player.dg_id}-${player.matchupId}`,
                               matchupType: matchupType,
@@ -548,10 +591,10 @@ export default function RecommendedPicks({
                             }
                             addToParlay(selection, playerId)
                           }}
-                          className="w-full py-3"
+                          className={`w-full py-3 ${hasMatchupConflict ? 'border-amber-400 text-amber-700 hover:bg-amber-50' : ''}`}
                         >
                           <Plus className="h-5 w-5 mr-2" />
-                          Add to Parlay
+                          {hasMatchupConflict ? "Add Anyway (Conflict!)" : "Add to Parlay"}
                         </Button>
                       )}
                     </div>
