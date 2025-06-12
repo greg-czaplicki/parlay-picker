@@ -135,13 +135,40 @@ export async function GET(request: Request) {
   if (!['pga', 'opp', 'euro'].includes(tour)) {
       return handleApiError(`Invalid tour parameter: ${tour}. Must be one of: pga, opp, euro.`);
   }
+
+  // First, check if there are any active tournaments before syncing
+  const supabase = createSupabaseClient();
+  const today = new Date().toISOString().split('T')[0];
+  const { data: activeTournaments, error: tournamentsError } = await supabase
+    .from('tournaments')
+    .select('event_id, event_name, start_date, end_date')
+    .lte('start_date', today) // Started before or on today
+    .gte('end_date', today);  // Ends after or on today
+
+  if (tournamentsError) {
+    logger.error("Error checking active tournaments:", tournamentsError);
+    return handleApiError(`Failed to check tournament status: ${tournamentsError.message}`);
+  }
+
+  if (!activeTournaments || activeTournaments.length === 0) {
+    logger.info("No active tournaments found. Skipping live stats sync to avoid fetching stale data.");
+    return jsonSuccess({
+      processedCount: 0,
+      sourceTimestamp: null,
+      eventName: null,
+      tour: tour,
+      errors: [],
+      message: "No active tournaments - sync skipped"
+    }, "No active tournaments found. Live stats sync skipped to avoid stale data.");
+  }
+
+  logger.info(`Found ${activeTournaments.length} active tournament(s): ${activeTournaments.map(t => t.event_name).join(', ')}`);
   
     logger.info(`Starting multi-round live stats sync for ${tour.toUpperCase()} tour...`);
   let totalInsertedCount = 0;
   let lastSourceTimestamp: string | null = null;
   let fetchedEventName: string | null = null;
   const errors: string[] = [];
-    const supabase = createSupabaseClient();
 
   // Only fetch Euro tour data if tour is 'euro' and handle appropriately
   if (tour === 'euro') {
@@ -152,6 +179,14 @@ export async function GET(request: Request) {
     try {
       const data = await fetchLiveStats(tour, round);
       if (!data) continue;
+
+      // Check if this event is in our active tournaments list
+      const matchingTournament = activeTournaments.find(t => t.event_name === data.event_name);
+      if (!matchingTournament) {
+        logger.info(`Event "${data.event_name}" from ${tour.toUpperCase()} tour is not in active tournaments list. Skipping sync for this event.`);
+        continue;
+      }
+
       const currentRoundTimestamp = new Date(data.last_updated.replace(" UTC", "Z")).toISOString();
       lastSourceTimestamp = currentRoundTimestamp;
       fetchedEventName = data.event_name;

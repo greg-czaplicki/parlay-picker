@@ -179,6 +179,32 @@ export async function GET() {
   const errors: string[] = [];
   const supabase = createSupabaseClient();
 
+  // First, check if there are any active tournaments before syncing
+  const today = new Date().toISOString().split('T')[0];
+  const { data: activeTournaments, error: tournamentsError } = await supabase
+    .from('tournaments')
+    .select('event_id, event_name, start_date, end_date')
+    .lte('start_date', today) // Started before or on today
+    .gte('end_date', today);  // Ends after or on today
+
+  if (tournamentsError) {
+    logger.error("Error checking active tournaments:", tournamentsError);
+    return handleApiError(`Failed to check tournament status: ${tournamentsError.message}`);
+  }
+
+  if (!activeTournaments || activeTournaments.length === 0) {
+    logger.info("No active tournaments found. Skipping live stats sync to avoid fetching stale data.");
+    return jsonSuccess({
+      processedCount: 0,
+      sourceTimestamp: null,
+      eventNames: [],
+      errors: [],
+      message: "No active tournaments - sync skipped"
+    }, "No active tournaments found. Live stats sync skipped to avoid stale data.");
+  }
+
+  logger.info(`Found ${activeTournaments.length} active tournament(s): ${activeTournaments.map(t => t.event_name).join(', ')}`);
+
   for (const tour of TOURS_TO_SYNC) {
     try {
       const response = await fetchInPlayPredictions(tour);
@@ -195,6 +221,14 @@ export async function GET() {
       // Extract tournament name from info object
       const eventName = info?.event_name || `${tour.toUpperCase()} Tournament`;
       logger.info(`${tour.toUpperCase()} extracted event name: ${eventName}`);
+
+      // Check if this event is in our active tournaments list
+      const matchingTournament = activeTournaments.find(t => t.event_name === eventName);
+      if (!matchingTournament) {
+        logger.info(`Event "${eventName}" from ${tour.toUpperCase()} tour is not in active tournaments list. Skipping sync for this event.`);
+        continue;
+      }
+
       fetchedEventNames.push(eventName);
 
       // Look up event_id from tournament name for more reliable querying

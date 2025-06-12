@@ -180,22 +180,35 @@ export async function GET(req: NextRequest) {
   // Get tournament names for the events in our matchups using exact same lookup as sync
   const eventIds = [...new Set(matchups.map((m: any) => m.event_id).filter(Boolean))]
   let tournamentsByEventId: { [key: number]: string } = {}
+  let activeTournamentNames: string[] = []
+  
   if (eventIds.length > 0) {
     const { data: tournamentsData, error: tournamentsError } = await supabase
       .from('tournaments')
-      .select('event_id, event_name')
+      .select('event_id, event_name, start_date, end_date')
       .in('event_id', eventIds)
     if (!tournamentsError && tournamentsData) {
-      // Create a mapping of event_id to tournament name
+      // Check which tournaments are currently active
+      const today = new Date().toISOString().split('T')[0];
+      
+      // Create a mapping of event_id to tournament name and track active tournaments
       tournamentsData.forEach((t: any) => {
         if (t.event_id && t.event_name) {
           tournamentsByEventId[t.event_id] = t.event_name
+          
+          // Check if tournament is active (between start and end dates)
+          const isActive = t.start_date && t.end_date && 
+                          today >= t.start_date && today <= t.end_date;
+          
+          if (isActive) {
+            activeTournamentNames.push(t.event_name);
+          }
         }
       })
     }
   }
   
-  // Also get tournament names as array for live stats filtering
+  // Also get tournament names as array for live stats filtering - but only use active ones
   const tournamentNames = Object.values(tournamentsByEventId)
 
   // Fetch live stats for all players in all matchups (filtered by tournament name)
@@ -209,21 +222,24 @@ export async function GET(req: NextRequest) {
   })
   
   let liveStats: any[] = []
-  if (allPlayerNames.size > 0 && allRoundNums.size > 0 && tournamentNames.length > 0) {
+  if (activeTournamentNames.length > 0 && allPlayerNames.size > 0 && allRoundNums.size > 0) {
     const { data: statsData, error: statsError } = await supabase
       .from('live_tournament_stats')
       .select('player_name,round_num,position,total,thru,today,event_name')
       .in('player_name', Array.from(allPlayerNames))
       .in('round_num', Array.from(allRoundNums).map(String))
-      .in('event_name', tournamentNames)  // Use same tournament names as stored by sync
+      .in('event_name', activeTournamentNames)  // Only fetch stats for active tournaments
     if (!statsError && statsData) liveStats = statsData
   }
   
-  // Helper to get stats for a player/round
+  // Helper to get stats for a player/round - only returns stats if tournament is active
   function getStats(playerName: string, roundNum: number) {
+    if (activeTournamentNames.length === 0) return null; // No active tournaments
+    
     return liveStats.find(
       (s) => s.player_name === playerName && 
-             String(s.round_num) === String(roundNum)
+             String(s.round_num) === String(roundNum) &&
+             activeTournamentNames.includes(s.event_name)
     )
   }
 
