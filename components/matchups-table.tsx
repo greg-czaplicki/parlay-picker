@@ -192,55 +192,65 @@ export default function MatchupsTable({
     return name.includes(",") ? name.split(",").reverse().join(" ").trim() : name ?? "";
   };
 
-  // Format tee time with tournament local time and Eastern time difference
+  // Helper function to format golf scores properly
+  const formatGolfScore = (scoreValue: number): string => {
+    if (scoreValue === 0) {
+      return 'E';
+    } else if (scoreValue >= 50 && scoreValue <= 100) {
+      // This is likely a raw stroke count (66, 73, etc.)
+      return scoreValue.toString();
+    } else if (scoreValue >= -15 && scoreValue <= 25) {
+      // This is likely relative to par
+      if (scoreValue > 0) {
+        return `+${scoreValue}`;
+      } else {
+        return scoreValue.toString();
+      }
+    } else {
+      // Outside expected ranges, might be bad data
+      return '-';
+    }
+  };
+
+  // Format tee time - assume times are already in correct local tournament time
   const formatTeeTime = (teeTime: string | null): { localTime: string; easternDiff: string } => {
     if (!teeTime) return { localTime: "-", easternDiff: "" };
     
     try {
-      // Parse the tee time (assuming it's in UTC or local tournament time)
-      const teeTimeDate = new Date(teeTime);
-      
-      // Most golf tournaments are in these timezones:
-      // - US: Eastern, Central, Mountain, Pacific
-      // - International: Various (default to tournament local)
-      // For now, assume US tournaments and default to Eastern for international
-      const tournamentTimezone = 'America/New_York'; // Default assumption, could be enhanced later
-      
-      // Format in tournament local time
-      const localTime = teeTimeDate.toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        timeZone: tournamentTimezone,
-      });
-      
-      // Calculate difference from Eastern
-      const easternTime = teeTimeDate.toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        timeZone: 'America/New_York',
-      });
-      
-      // If tournament is in Eastern time, no diff needed
-      let easternDiff = "";
-      if (tournamentTimezone !== 'America/New_York') {
-        const tournamentHour = parseInt(teeTimeDate.toLocaleTimeString('en-US', {
-          hour: '2-digit',
-          hour12: false,
-          timeZone: tournamentTimezone,
-        }));
-        const easternHour = parseInt(teeTimeDate.toLocaleTimeString('en-US', {
-          hour: '2-digit', 
-          hour12: false,
-          timeZone: 'America/New_York',
-        }));
-        
-        const diff = tournamentHour - easternHour;
-        if (diff !== 0) {
-          easternDiff = diff > 0 ? `(+${diff}h ET)` : `(${diff}h ET)`;
+      // Handle the teetime format which is simpler: "2025-06-12 08:02"
+      if (teeTime.includes(' ') && !teeTime.includes('T')) {
+        // This is the teetime format: "2025-06-12 08:02"
+        const timePart = teeTime.split(' ')[1]; // Get "08:02"
+        if (timePart) {
+          const [hours, minutes] = timePart.split(':').map(Number);
+          const localDate = new Date();
+          localDate.setHours(hours, minutes, 0, 0);
+          
+          const localTime = localDate.toLocaleTimeString('en-US', {
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true
+          });
+          
+          return { localTime, easternDiff: "" };
         }
       }
       
-      return { localTime, easternDiff };
+      // Fallback for ISO format tee_time
+      const teeTimeDate = new Date(teeTime);
+      const hours = teeTimeDate.getUTCHours();
+      const minutes = teeTimeDate.getUTCMinutes();
+      
+      const localDate = new Date();
+      localDate.setHours(hours, minutes, 0, 0);
+      
+      const localTime = localDate.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      });
+      
+      return { localTime, easternDiff: "" };
     } catch (error) {
       return { localTime: "-", easternDiff: "" };
     }
@@ -373,8 +383,8 @@ export default function MatchupsTable({
     return false;
   }).sort((a, b) => {
     // Sort by tee time first (earliest first)
-    const aTeeTime = a.tee_time ? new Date(a.tee_time).getTime() : Infinity;
-    const bTeeTime = b.tee_time ? new Date(b.tee_time).getTime() : Infinity;
+    const aTeeTime = a.teetime ? new Date(a.teetime).getTime() : Infinity;
+    const bTeeTime = b.teetime ? new Date(b.teetime).getTime() : Infinity;
     
     if (aTeeTime !== bTeeTime) {
       return aTeeTime - bTeeTime;
@@ -733,27 +743,6 @@ export default function MatchupsTable({
                           return { position: '-', score: '-' };
                         }
                         
-                        // Check if this group has teed off yet
-                        const hasTeeTeeOff = (() => {
-                          if (!teeTime) return true; // If no tee time, assume they can have scores
-                          
-                          try {
-                            const teeTimeDate = new Date(teeTime);
-                            const now = new Date();
-                            // Add buffer time - consider teed off if tee time was more than 30 minutes ago
-                            const teeOffThreshold = new Date(teeTimeDate.getTime() + 30 * 60 * 1000);
-                            return now > teeOffThreshold;
-                          } catch (error) {
-                            return true; // If can't parse, default to showing data
-                          }
-                        })();
-                        
-                        // Only show position data if the group has actually teed off
-                        // Don't rely on thru > 0 as it could be stale from previous rounds
-                        if (!hasTeeTeeOff) {
-                          return { position: '-', score: '-' };
-                        }
-                        
                         // Position should be leaderboard position (T5, 1, etc.)
                         const position = playerStat.position || '-';
                         
@@ -761,31 +750,24 @@ export default function MatchupsTable({
                         let score: string = '-';
                         
                         // Check if we have round-specific data available
-                        if (playerStat.current_round && playerStat.round_scores) {
-                          const currentRound = playerStat.current_round;
-                          const thru = playerStat.thru || 0;
+                        if (playerStat.round_scores) {
                           const roundScores = playerStat.round_scores;
                           
-                          // Determine the last completed round
-                          let lastCompletedRound = currentRound - 1;
-                          
-                          // If they've completed all holes in the current round, it's completed
-                          if (thru >= 18) {
-                            lastCompletedRound = currentRound;
-                          }
-                          
-                          // Get the score for the last completed round
+                          // Get the most recent available round score (prioritize R1 since we're showing Round 1)
                           let roundScore: number | null = null;
-                          if (lastCompletedRound === 1) roundScore = roundScores.R1;
-                          else if (lastCompletedRound === 2) roundScore = roundScores.R2;
-                          else if (lastCompletedRound === 3) roundScore = roundScores.R3;
-                          else if (lastCompletedRound === 4) roundScore = roundScores.R4;
+                          if (roundScores.R1 !== null && roundScores.R1 !== undefined) {
+                            roundScore = roundScores.R1;
+                          } else if (roundScores.R2 !== null && roundScores.R2 !== undefined) {
+                            roundScore = roundScores.R2;
+                          } else if (roundScores.R3 !== null && roundScores.R3 !== undefined) {
+                            roundScore = roundScores.R3;
+                          } else if (roundScores.R4 !== null && roundScores.R4 !== undefined) {
+                            roundScore = roundScores.R4;
+                          }
                           
                           // Format the round score
                           if (roundScore !== null && typeof roundScore === 'number') {
-                            // This is a raw score (like 66, 68, etc.)
-                            // We could show it as raw score or convert to relative par
-                            // For now, showing as raw score since that's most common
+                            // This is a raw score (like 66, 68, etc.) - display as-is
                             score = roundScore.toString();
                           }
                         }
@@ -794,18 +776,8 @@ export default function MatchupsTable({
                         if (score === '-') {
                           const scoreValue = playerStat.today ?? playerStat.total;
                           
-                          if (scoreValue === 0) {
-                            score = 'E';
-                          } else if (typeof scoreValue === 'number') {
-                            // Check if this looks like a raw stroke count (typically 60-90 for golf)
-                            // If so, it's likely bad data and we should show a dash
-                            if (scoreValue > 30 || scoreValue < -30) {
-                              score = '-';
-                            } else if (scoreValue > 0) {
-                              score = `+${scoreValue}`;
-                            } else {
-                              score = scoreValue.toString();
-                            }
+                          if (typeof scoreValue === 'number') {
+                            score = formatGolfScore(scoreValue);
                           }
                         }
                         
@@ -940,7 +912,7 @@ export default function MatchupsTable({
                           {/* Tee Time column */}
                           <TableCell className="text-center">
                             {(() => {
-                              const { localTime, easternDiff } = formatTeeTime(matchup.tee_time ?? null);
+                              const { localTime, easternDiff } = formatTeeTime(matchup.teetime ?? null);
                               return (
                                 <div className="text-center">
                                   <div className="text-xs font-medium">{localTime}</div>
@@ -965,7 +937,7 @@ export default function MatchupsTable({
                                 }
                               }
                               
-                              const positionData = formatPlayerPosition(String(playerId), matchup.tee_time);
+                              const positionData = formatPlayerPosition(String(playerId), matchup.teetime);
                               
                               return (
                                 <div key={`position-${idx}`} className="py-1 h-8 flex items-center justify-center">
@@ -1087,27 +1059,6 @@ export default function MatchupsTable({
                           return { position: '-', score: '-' };
                         }
                         
-                        // Check if this group has teed off yet
-                        const hasTeeTeeOff = (() => {
-                          if (!teeTime) return true; // If no tee time, assume they can have scores
-                          
-                          try {
-                            const teeTimeDate = new Date(teeTime);
-                            const now = new Date();
-                            // Add buffer time - consider teed off if tee time was more than 30 minutes ago
-                            const teeOffThreshold = new Date(teeTimeDate.getTime() + 30 * 60 * 1000);
-                            return now > teeOffThreshold;
-                          } catch (error) {
-                            return true; // If can't parse, default to showing data
-                          }
-                        })();
-                        
-                        // Only show position data if the group has actually teed off
-                        // Don't rely on thru > 0 as it could be stale from previous rounds
-                        if (!hasTeeTeeOff) {
-                          return { position: '-', score: '-' };
-                        }
-                        
                         // Position should be leaderboard position (T5, 1, etc.)
                         const position = playerStat.position || '-';
                         
@@ -1115,31 +1066,24 @@ export default function MatchupsTable({
                         let score: string = '-';
                         
                         // Check if we have round-specific data available
-                        if (playerStat.current_round && playerStat.round_scores) {
-                          const currentRound = playerStat.current_round;
-                          const thru = playerStat.thru || 0;
+                        if (playerStat.round_scores) {
                           const roundScores = playerStat.round_scores;
                           
-                          // Determine the last completed round
-                          let lastCompletedRound = currentRound - 1;
-                          
-                          // If they've completed all holes in the current round, it's completed
-                          if (thru >= 18) {
-                            lastCompletedRound = currentRound;
-                          }
-                          
-                          // Get the score for the last completed round
+                          // Get the most recent available round score (prioritize R1 since we're showing Round 1)
                           let roundScore: number | null = null;
-                          if (lastCompletedRound === 1) roundScore = roundScores.R1;
-                          else if (lastCompletedRound === 2) roundScore = roundScores.R2;
-                          else if (lastCompletedRound === 3) roundScore = roundScores.R3;
-                          else if (lastCompletedRound === 4) roundScore = roundScores.R4;
+                          if (roundScores.R1 !== null && roundScores.R1 !== undefined) {
+                            roundScore = roundScores.R1;
+                          } else if (roundScores.R2 !== null && roundScores.R2 !== undefined) {
+                            roundScore = roundScores.R2;
+                          } else if (roundScores.R3 !== null && roundScores.R3 !== undefined) {
+                            roundScore = roundScores.R3;
+                          } else if (roundScores.R4 !== null && roundScores.R4 !== undefined) {
+                            roundScore = roundScores.R4;
+                          }
                           
                           // Format the round score
                           if (roundScore !== null && typeof roundScore === 'number') {
-                            // This is a raw score (like 66, 68, etc.)
-                            // We could show it as raw score or convert to relative par
-                            // For now, showing as raw score since that's most common
+                            // This is a raw score (like 66, 68, etc.) - display as-is
                             score = roundScore.toString();
                           }
                         }
@@ -1148,18 +1092,8 @@ export default function MatchupsTable({
                         if (score === '-') {
                           const scoreValue = playerStat.today ?? playerStat.total;
                           
-                          if (scoreValue === 0) {
-                            score = 'E';
-                          } else if (typeof scoreValue === 'number') {
-                            // Check if this looks like a raw stroke count (typically 60-90 for golf)
-                            // If so, it's likely bad data and we should show a dash
-                            if (scoreValue > 30 || scoreValue < -30) {
-                              score = '-';
-                            } else if (scoreValue > 0) {
-                              score = `+${scoreValue}`;
-                            } else {
-                              score = scoreValue.toString();
-                            }
+                          if (typeof scoreValue === 'number') {
+                            score = formatGolfScore(scoreValue);
                           }
                         }
                         
@@ -1294,7 +1228,7 @@ export default function MatchupsTable({
                           {/* Tee Time column for 2-ball */}
                           <TableCell className="text-center">
                             {(() => {
-                              const { localTime: teeTimeLocal, easternDiff: teeTimeDiff } = formatTeeTime(m2.tee_time ?? null);
+                              const { localTime: teeTimeLocal, easternDiff: teeTimeDiff } = formatTeeTime(m2.teetime ?? null);
                               return (
                                 <div className="text-center">
                                   <div className="text-xs font-medium">{teeTimeLocal}</div>
@@ -1317,7 +1251,7 @@ export default function MatchupsTable({
                                 }
                               }
                               
-                              const positionData = formatPlayerPosition(String(playerId), m2.tee_time);
+                              const positionData = formatPlayerPosition(String(playerId), m2.teetime);
                               
                               return (
                                 <div key={`position-${idx}`} className="py-1 h-8 flex items-center justify-center">
