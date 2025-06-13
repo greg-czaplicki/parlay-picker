@@ -1,0 +1,193 @@
+name: 🏌️ Tournament Data Collection
+
+on:
+  schedule:
+    # Run every 30 minutes during peak tournament hours (Thu-Sun, 6 AM - 8 PM EST)
+    - cron: '*/30 6-20 * * 4-7'  # Thursday-Sunday, 6 AM - 8 PM EST
+    # Run every hour during off-peak hours (Mon-Wed, 8 AM - 6 PM EST)  
+    - cron: '0 8-18 * * 1-3'     # Monday-Wednesday, 8 AM - 6 PM EST
+    # Emergency collection: Every 2 hours overnight (in case of international tournaments)
+    - cron: '0 */2 * * *'        # Every 2 hours, all days (fallback)
+  
+  # Allow manual triggering
+  workflow_dispatch:
+    inputs:
+      force_sync:
+        description: 'Force sync even if no active tournaments'
+        required: false
+        default: 'false'
+        type: boolean
+      
+      specific_tour:
+        description: 'Sync specific tour (pga, euro, or both)'
+        required: false
+        default: 'both'
+        type: choice
+        options:
+          - both
+          - pga
+          - euro
+
+env:
+  # Your deployment URL - UPDATE THIS to your actual domain
+  APP_URL: ${{ secrets.APP_URL || 'https://your-app-domain.vercel.app' }}
+
+jobs:
+  collect-tournament-data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+      - name: 🏌️ Sync PGA Tour Data
+        if: ${{ github.event.inputs.specific_tour == 'both' || github.event.inputs.specific_tour == 'pga' || github.event.inputs.specific_tour == '' }}
+        run: |
+          echo "🏌️ Syncing PGA Tour data..."
+          
+          response=$(curl -s -w "HTTPSTATUS:%{http_code}" \
+            -X GET "${{ env.APP_URL }}/api/live-stats/sync-tour?tour=pga" \
+            -H "User-Agent: GitHub-Actions-Tournament-Sync/1.0")
+          
+          http_code=$(echo $response | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+          content=$(echo $response | sed -e 's/HTTPSTATUS:.*//')
+          
+          echo "📊 PGA Response Code: $http_code"
+          echo "📄 PGA Response: $content"
+          
+          if [ $http_code -ne 200 ]; then
+            echo "❌ PGA sync failed with status $http_code"
+            exit 1
+          fi
+          
+          # Parse and display sync results
+          processed_count=$(echo $content | jq -r '.data.processedCount // 0')
+          event_name=$(echo $content | jq -r '.data.eventName // "Unknown"')
+          errors=$(echo $content | jq -r '.data.errors | length')
+          
+          echo "✅ PGA Sync completed: $processed_count records processed for $event_name"
+          if [ $errors -gt 0 ]; then
+            echo "⚠️ PGA Sync had $errors errors"
+          fi
+
+      - name: 🌍 Sync European Tour Data  
+        if: ${{ github.event.inputs.specific_tour == 'both' || github.event.inputs.specific_tour == 'euro' || github.event.inputs.specific_tour == '' }}
+        run: |
+          echo "🌍 Syncing European Tour data..."
+          
+          response=$(curl -s -w "HTTPSTATUS:%{http_code}" \
+            -X GET "${{ env.APP_URL }}/api/live-stats/sync-tour?tour=euro" \
+            -H "User-Agent: GitHub-Actions-Tournament-Sync/1.0")
+          
+          http_code=$(echo $response | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+          content=$(echo $response | sed -e 's/HTTPSTATUS:.*//')
+          
+          echo "📊 Euro Response Code: $http_code"
+          echo "📄 Euro Response: $content"
+          
+          if [ $http_code -ne 200 ]; then
+            echo "❌ Euro sync failed with status $http_code"
+            # Don't exit here since Euro tour might not always have data
+            echo "⚠️ Continuing despite Euro sync failure (tour might be inactive)"
+          else
+            processed_count=$(echo $content | jq -r '.data.processedCount // 0')
+            event_name=$(echo $content | jq -r '.data.eventName // "Unknown"')
+            errors=$(echo $content | jq -r '.data.errors | length')
+            
+            echo "✅ Euro Sync completed: $processed_count records processed for $event_name"
+            if [ $errors -gt 0 ]; then
+              echo "⚠️ Euro Sync had $errors errors"
+            fi
+          fi
+
+      - name: 🔄 Comprehensive Multi-Tour Sync
+        run: |
+          echo "🔄 Running comprehensive multi-tour sync..."
+          
+          response=$(curl -s -w "HTTPSTATUS:%{http_code}" \
+            -X GET "${{ env.APP_URL }}/api/live-stats/sync" \
+            -H "User-Agent: GitHub-Actions-Tournament-Sync/1.0")
+          
+          http_code=$(echo $response | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+          content=$(echo $response | sed -e 's/HTTPSTATUS:.*//')
+          
+          echo "📊 Multi-Tour Response Code: $http_code"
+          echo "📄 Multi-Tour Response: $content"
+          
+          if [ $http_code -ne 200 ]; then
+            echo "❌ Multi-tour sync failed with status $http_code"
+            exit 1
+          fi
+          
+          # Parse comprehensive results
+          processed_count=$(echo $content | jq -r '.data.processedCount // 0')
+          event_names=$(echo $content | jq -r '.data.eventNames | join(", ") // "None"')
+          errors=$(echo $content | jq -r '.data.errors | length')
+          timestamp=$(echo $content | jq -r '.data.sourceTimestamp // "Unknown"')
+          
+          echo "✅ Multi-Tour Sync Summary:"
+          echo "   📈 Total Records: $processed_count"
+          echo "   🏆 Active Events: $event_names"
+          echo "   🕒 Data Timestamp: $timestamp"
+          echo "   ⚠️ Errors: $errors"
+          
+          # Set outputs for next jobs
+          echo "TOTAL_RECORDS=$processed_count" >> $GITHUB_ENV
+          echo "ACTIVE_EVENTS=$event_names" >> $GITHUB_ENV
+          echo "SYNC_ERRORS=$errors" >> $GITHUB_ENV
+
+      - name: 📸 Verify Snapshot Creation
+        run: |
+          echo "📸 Checking snapshot system status..."
+          
+          response=$(curl -s -w "HTTPSTATUS:%{http_code}" \
+            -X GET "${{ env.APP_URL }}/api/snapshots?action=system_health" \
+            -H "User-Agent: GitHub-Actions-Tournament-Sync/1.0")
+          
+          http_code=$(echo $response | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+          content=$(echo $response | sed -e 's/HTTPSTATUS:.*//')
+          
+          if [ $http_code -eq 200 ]; then
+            total_snapshots=$(echo $content | jq -r '.data.snapshot_system.total_snapshots // 0')
+            status=$(echo $content | jq -r '.data.snapshot_system.status // "unknown"')
+            system_version=$(echo $content | jq -r '.data.performance_metrics.system_version // "unknown"')
+            
+            echo "✅ Snapshot System Health:"
+            echo "   📸 Total Snapshots: $total_snapshots"
+            echo "   🟢 Status: $status"
+            echo "   📋 Version: $system_version"
+            
+            # Alert if no snapshots are being created
+            if [ $total_snapshots -eq 0 ] && [ "${{ env.TOTAL_RECORDS }}" -gt 0 ]; then
+              echo "⚠️ WARNING: Tournament data was synced but no snapshots exist!"
+              echo "   This might indicate a snapshot trigger issue."
+            fi
+          else
+            echo "❌ Failed to check snapshot status (HTTP $http_code)"
+          fi
+
+  # Summary job that runs after data collection
+  sync-summary:
+    needs: collect-tournament-data
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: 📊 Sync Summary Report
+        run: |
+          echo "🏌️ TOURNAMENT DATA COLLECTION SUMMARY"
+          echo "====================================="
+          echo "🕒 Sync Time: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+          echo "🔄 Trigger: ${{ github.event_name }}"
+          
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "⏰ Scheduled Run: Automatic data collection"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "👤 Manual Run: Triggered by user"
+            echo "   🎯 Tour Focus: ${{ github.event.inputs.specific_tour || 'both' }}"
+            echo "   🔄 Force Sync: ${{ github.event.inputs.force_sync || 'false' }}"
+          fi
+          
+          echo "✅ Data collection workflow completed"
+          echo "📈 Check logs above for detailed sync results"
+          
+          # Could add Slack/Discord webhook notifications here
+          # echo "Sending notification to monitoring channel..." 

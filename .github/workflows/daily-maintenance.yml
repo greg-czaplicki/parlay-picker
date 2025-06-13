@@ -1,0 +1,259 @@
+name: 🧹 Daily System Maintenance
+
+on:
+  schedule:
+    # Run daily at 3 AM EST (8 AM UTC) - quiet time for maintenance
+    - cron: '0 8 * * *'
+    
+    # Run weekly deep cleanup on Mondays at 2 AM EST (7 AM UTC)
+    - cron: '0 7 * * 1'
+  
+  # Allow manual triggering
+  workflow_dispatch:
+    inputs:
+      maintenance_type:
+        description: 'Type of maintenance to run'
+        required: true
+        default: 'daily'
+        type: choice
+        options:
+          - daily
+          - weekly
+          - retention_only
+          - health_check_only
+      
+      dry_run:
+        description: 'Run in dry-run mode (no actual deletions)'
+        required: false
+        default: 'true'
+        type: boolean
+
+env:
+  APP_URL: ${{ secrets.APP_URL || 'https://your-app-domain.vercel.app' }}
+
+jobs:
+  system-health-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: 🔍 System Health Assessment
+        id: health_check
+        run: |
+          echo "🔍 Running comprehensive system health check..."
+          
+          # Check system health
+          response=$(curl -s -w "HTTPSTATUS:%{http_code}" \
+            -X GET "${{ env.APP_URL }}/api/snapshots?action=system_health" \
+            -H "User-Agent: GitHub-Actions-Maintenance/1.0")
+          
+          http_code=$(echo $response | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+          content=$(echo $response | sed -e 's/HTTPSTATUS:.*//')
+          
+          echo "📊 Health Check Response Code: $http_code"
+          
+          if [ $http_code -eq 200 ]; then
+            # Parse health data
+            total_snapshots=$(echo $content | jq -r '.data.snapshot_system.total_snapshots // 0')
+            system_status=$(echo $content | jq -r '.data.snapshot_system.status // "unknown"')
+            cache_size=$(echo $content | jq -r '.data.data_access.cache_size // 0')
+            system_version=$(echo $content | jq -r '.data.performance_metrics.system_version // "unknown"')
+            
+            echo "✅ SYSTEM HEALTH REPORT:"
+            echo "   📸 Total Snapshots: $total_snapshots"
+            echo "   🟢 System Status: $system_status"
+            echo "   💾 Cache Size: $cache_size items"
+            echo "   📋 Version: $system_version"
+            
+            # Set outputs for other jobs
+            echo "SYSTEM_HEALTHY=true" >> $GITHUB_ENV
+            echo "TOTAL_SNAPSHOTS=$total_snapshots" >> $GITHUB_ENV
+            echo "SYSTEM_STATUS=$system_status" >> $GITHUB_ENV
+            
+            # Health thresholds
+            if [ $total_snapshots -gt 50000 ]; then
+              echo "⚠️ WARNING: High snapshot count ($total_snapshots) - consider aggressive retention"
+              echo "HIGH_SNAPSHOT_COUNT=true" >> $GITHUB_ENV
+            fi
+            
+            if [ "$system_status" != "active" ] && [ "$system_status" != "inactive" ]; then
+              echo "❌ WARNING: Unexpected system status: $system_status"
+              echo "SYSTEM_STATUS_ISSUE=true" >> $GITHUB_ENV
+            fi
+          else
+            echo "❌ System health check failed (HTTP $http_code)"
+            echo "SYSTEM_HEALTHY=false" >> $GITHUB_ENV
+            exit 1
+          fi
+
+      - name: 📊 Retention Policy Status
+        run: |
+          echo "📊 Checking retention policy status..."
+          
+          response=$(curl -s -w "HTTPSTATUS:%{http_code}" \
+            -X GET "${{ env.APP_URL }}/api/snapshots?action=retention_status" \
+            -H "User-Agent: GitHub-Actions-Maintenance/1.0")
+          
+          http_code=$(echo $response | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+          content=$(echo $response | sed -e 's/HTTPSTATUS:.*//')
+          
+          if [ $http_code -eq 200 ]; then
+            snapshot_count=$(echo $content | jq -r '.data.retention_policy.current_snapshot_count // 0')
+            oldest_date=$(echo $content | jq -r '.data.retention_policy.oldest_snapshot_date // "null"')
+            storage_mb=$(echo $content | jq -r '.data.retention_policy.estimated_storage_mb // 0')
+            
+            echo "✅ RETENTION STATUS:"
+            echo "   📸 Current Snapshots: $snapshot_count"
+            echo "   📅 Oldest Snapshot: $oldest_date"
+            echo "   💾 Estimated Storage: ${storage_mb}MB"
+            
+            echo "STORAGE_MB=$storage_mb" >> $GITHUB_ENV
+            echo "OLDEST_SNAPSHOT=$oldest_date" >> $GITHUB_ENV
+          else
+            echo "❌ Failed to get retention status (HTTP $http_code)"
+          fi
+
+  data-retention:
+    needs: system-health-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: ${{ github.event.inputs.maintenance_type != 'health_check_only' }}
+    
+    steps:
+      - name: 🧹 Data Retention - Dry Run Analysis
+        if: ${{ github.event.inputs.dry_run == 'true' || github.event.inputs.dry_run == '' }}
+        run: |
+          echo "🧹 Running retention policy dry run..."
+          
+          # Determine policy based on maintenance type and current system state
+          if [ "${{ github.event.inputs.maintenance_type }}" = "weekly" ] || [ "${{ env.HIGH_SNAPSHOT_COUNT }}" = "true" ]; then
+            POLICY="development"
+            echo "🗑️ Using DEVELOPMENT policy (aggressive cleanup)"
+          else
+            POLICY="production"
+            echo "🏭 Using PRODUCTION policy (conservative cleanup)"
+          fi
+          
+          response=$(curl -s -w "HTTPSTATUS:%{http_code}" \
+            -X POST "${{ env.APP_URL }}/api/snapshots" \
+            -H "Content-Type: application/json" \
+            -H "User-Agent: GitHub-Actions-Maintenance/1.0" \
+            -d "{\"action\": \"apply_retention\", \"policy\": \"$POLICY\", \"dry_run\": true}")
+          
+          http_code=$(echo $response | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+          content=$(echo $response | sed -e 's/HTTPSTATUS:.*//')
+          
+          if [ $http_code -eq 200 ]; then
+            snapshots_would_delete=$(echo $content | jq -r '.data.snapshots_would_delete // 0')
+            storage_would_free=$(echo $content | jq -r '.data.storage_would_free_mb // 0')
+            runtime_minutes=$(echo $content | jq -r '.data.estimated_runtime_minutes // 0')
+            
+            echo "✅ DRY RUN RESULTS ($POLICY policy):"
+            echo "   🗑️ Would Delete: $snapshots_would_delete snapshots"
+            echo "   💾 Would Free: ${storage_would_free}MB storage"
+            echo "   ⏱️ Estimated Runtime: ${runtime_minutes} minutes"
+            
+            echo "POLICY_TO_APPLY=$POLICY" >> $GITHUB_ENV
+            echo "WOULD_DELETE=$snapshots_would_delete" >> $GITHUB_ENV
+            echo "WOULD_FREE_MB=$storage_would_free" >> $GITHUB_ENV
+          else
+            echo "❌ Dry run failed (HTTP $http_code)"
+            echo "$content"
+          fi
+
+      - name: 🗑️ Apply Data Retention Policy
+        if: ${{ github.event.inputs.dry_run == 'false' }}
+        run: |
+          echo "🗑️ Applying retention policy: ${{ env.POLICY_TO_APPLY }}"
+          echo "⚠️ This will delete ${{ env.WOULD_DELETE }} snapshots and free ${{ env.WOULD_FREE_MB }}MB"
+          
+          response=$(curl -s -w "HTTPSTATUS:%{http_code}" \
+            -X POST "${{ env.APP_URL }}/api/snapshots" \
+            -H "Content-Type: application/json" \
+            -H "User-Agent: GitHub-Actions-Maintenance/1.0" \
+            -d "{\"action\": \"apply_retention\", \"policy\": \"${{ env.POLICY_TO_APPLY }}\", \"dry_run\": false}")
+          
+          http_code=$(echo $response | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+          content=$(echo $response | sed -e 's/HTTPSTATUS:.*//')
+          
+          if [ $http_code -eq 200 ]; then
+            snapshots_deleted=$(echo $content | jq -r '.data.snapshots_deleted // 0')
+            storage_freed=$(echo $content | jq -r '.data.storage_freed_mb // 0')
+            execution_time=$(echo $content | jq -r '.data.execution_time_ms // 0')
+            
+            echo "✅ RETENTION APPLIED SUCCESSFULLY:"
+            echo "   🗑️ Deleted: $snapshots_deleted snapshots"
+            echo "   💾 Freed: ${storage_freed}MB storage"
+            echo "   ⏱️ Execution Time: ${execution_time}ms"
+          else
+            echo "❌ Retention policy failed (HTTP $http_code)"
+            echo "$content"
+            exit 1
+          fi
+
+  post-maintenance-health:
+    needs: [system-health-check, data-retention]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: 🔍 Post-Maintenance Health Check
+        run: |
+          echo "🔍 Running post-maintenance system verification..."
+          
+          response=$(curl -s -w "HTTPSTATUS:%{http_code}" \
+            -X GET "${{ env.APP_URL }}/api/snapshots?action=system_health" \
+            -H "User-Agent: GitHub-Actions-Maintenance/1.0")
+          
+          http_code=$(echo $response | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+          content=$(echo $response | sed -e 's/HTTPSTATUS:.*//')
+          
+          if [ $http_code -eq 200 ]; then
+            total_snapshots=$(echo $content | jq -r '.data.snapshot_system.total_snapshots // 0')
+            system_status=$(echo $content | jq -r '.data.snapshot_system.status // "unknown"')
+            
+            echo "✅ POST-MAINTENANCE STATUS:"
+            echo "   📸 Remaining Snapshots: $total_snapshots"
+            echo "   🟢 System Status: $system_status"
+            
+            # Compare with pre-maintenance state
+            if [ "${{ env.TOTAL_SNAPSHOTS }}" != "" ]; then
+              pre_count=${{ env.TOTAL_SNAPSHOTS }}
+              deleted_count=$((pre_count - total_snapshots))
+              echo "   📊 Change: -$deleted_count snapshots"
+            fi
+          else
+            echo "❌ Post-maintenance health check failed"
+          fi
+
+      - name: 📋 Maintenance Summary
+        if: always()
+        run: |
+          echo "🧹 DAILY MAINTENANCE SUMMARY"
+          echo "============================"
+          echo "🕒 Maintenance Time: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+          echo "🔧 Maintenance Type: ${{ github.event.inputs.maintenance_type || 'daily' }}"
+          echo "🔍 Dry Run Mode: ${{ github.event.inputs.dry_run || 'true' }}"
+          echo ""
+          echo "📊 SYSTEM STATUS:"
+          echo "   🟢 System Health: ${{ env.SYSTEM_HEALTHY || 'unknown' }}"
+          echo "   📸 Total Snapshots: ${{ env.TOTAL_SNAPSHOTS || 'unknown' }}"
+          echo "   💾 Storage Usage: ${{ env.STORAGE_MB || 'unknown' }}MB"
+          echo ""
+          
+          if [ "${{ github.event.inputs.dry_run }}" != "false" ]; then
+            echo "💡 RECOMMENDATIONS:"
+            echo "   🗑️ Would delete: ${{ env.WOULD_DELETE || '0' }} snapshots"
+            echo "   💾 Would free: ${{ env.WOULD_FREE_MB || '0' }}MB storage"
+            echo "   ▶️ To apply changes, run with dry_run=false"
+          else
+            echo "✅ MAINTENANCE COMPLETED"
+            echo "   🗑️ Snapshots deleted: Successfully applied retention policy"
+            echo "   💾 Storage optimized: System cleaned up"
+          fi
+          
+          if [ "${{ env.HIGH_SNAPSHOT_COUNT }}" = "true" ]; then
+            echo ""
+            echo "⚠️ ALERT: High snapshot count detected"
+            echo "   Consider running weekly maintenance more frequently"
+          fi 
