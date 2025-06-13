@@ -43,19 +43,24 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
     
 
     
-    // A parlay is settled if all its picks have been settled
-    const active = parlays.filter((parlay: any) => {
-      if (!Array.isArray(parlay.picks)) return true;
-      return parlay.picks.some((pick: any) => 
-        !pick.settlement_status || pick.settlement_status === 'pending'
-      );
-    });
+    // Helper function to check if a pick is settled
+    const isPickSettled = (pick: any): boolean => {
+      // A pick is settled if:
+      // 1. settlement_status is explicitly 'settled', OR
+      // 2. pick_outcome has a definitive result (win, loss, push, void)
+      return pick.settlement_status === 'settled' || 
+             (pick.pick_outcome && ['win', 'loss', 'push', 'void'].includes(pick.pick_outcome));
+    };
     
+    // A parlay is settled if all its picks have been settled
     const settled = parlays.filter((parlay: any) => {
       if (!Array.isArray(parlay.picks) || parlay.picks.length === 0) return false;
-      return parlay.picks.every((pick: any) => 
-        pick.settlement_status === 'settled'
-      );
+      return parlay.picks.every((pick: any) => isPickSettled(pick));
+    });
+    
+    const active = parlays.filter((parlay: any) => {
+      if (!Array.isArray(parlay.picks)) return true;
+      return parlay.picks.some((pick: any) => !isPickSettled(pick));
     });
     
     // Enhanced sort function: tournament name → round number → tee time (earliest first) → creation date (newest first)
@@ -124,7 +129,11 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
     };
     
     const sortedActive = active.sort(sortParlays);
-    const sortedSettled = settled.sort(sortParlays);
+    
+    // For settled parlays, sort primarily by creation date (newest first)
+    const sortedSettled = settled.sort((a: any, b: any) => {
+      return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+    });
     
     // Apply pagination to active parlays (most important)
     const startIndex = (currentPage - 1) * pageSize;

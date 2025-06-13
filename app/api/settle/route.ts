@@ -120,12 +120,14 @@ export async function POST(request: NextRequest) {
 async function getEventsWithUnsettledParlays(supabase: any) {
   logger.info('Fetching events with unsettled parlays...')
   
-  // First, get unique event_ids from parlay_picks
+  // Get unsettled parlay picks with their matchup event_ids
   const { data: pickData, error: pickError } = await supabase
     .from('parlay_picks')
-    .select('event_id')
+    .select(`
+      event_id,
+      matchups!inner(event_id)
+    `)
     .eq('settlement_status', 'pending')
-    .not('event_id', 'is', null)
 
   if (pickError) {
     logger.error(`Failed to fetch parlay picks: ${pickError.message}`)
@@ -134,8 +136,12 @@ async function getEventsWithUnsettledParlays(supabase: any) {
 
   logger.info(`Found ${pickData?.length || 0} unsettled picks`)
 
-  // Get unique event IDs
-  const eventIds = [...new Set((pickData || []).map((p: any) => p.event_id).filter(Boolean))]
+  // Get unique event IDs from both direct event_id and matchup.event_id
+  const eventIds = [...new Set((pickData || []).map((p: any) => {
+    // Use direct event_id if available, otherwise use matchup.event_id
+    return p.event_id || p.matchups?.event_id
+  }).filter(Boolean))]
+  
   logger.info(`Unique event IDs with unsettled picks: ${eventIds.join(', ')}`)
 
   if (eventIds.length === 0) {

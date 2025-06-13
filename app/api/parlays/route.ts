@@ -99,6 +99,7 @@ export async function POST(req: NextRequest) {
       picked_player_odds: playerOdds,
       pick_outcome: 'pending',
       outcome: 'void', // Legacy field
+      event_id: matchup.event_id, // Populate event_id for settlement detection
     })
   }
   
@@ -191,16 +192,21 @@ export async function GET(req: NextRequest) {
       // Check which tournaments are currently active
       const today = new Date().toISOString().split('T')[0];
       
-      // Create a mapping of event_id to tournament name and track active tournaments
+      // Create a mapping of event_id to tournament name and track tournaments with parlays
       tournamentsData.forEach((t: any) => {
         if (t.event_id && t.event_name) {
           tournamentsByEventId[t.event_id] = t.event_name
           
-          // Check if tournament is active (between start and end dates)
+          // For parlay display, we want stats for tournaments that either:
+          // 1. Are currently active (for live parlays), OR
+          // 2. Have parlays in our system (for settled parlays)
+          // This ensures settled parlays show final scores instead of resetting
           const isActive = t.start_date && t.end_date && 
                           today >= t.start_date && today <= t.end_date;
           
-          if (isActive) {
+          const hasParlay = eventIds.includes(t.event_id);
+          
+          if (isActive || hasParlay) {
             activeTournamentNames.push(t.event_name);
           }
         }
@@ -208,10 +214,7 @@ export async function GET(req: NextRequest) {
     }
   }
   
-  // Also get tournament names as array for live stats filtering - but only use active ones
-  const tournamentNames = Object.values(tournamentsByEventId)
-
-  // Fetch live stats for all players in all matchups (filtered by tournament name)
+  // Fetch live stats for all players in all matchups (for both active and settled parlays)
   const allPlayerNames = new Set<string>()
   const allRoundNums = new Set<number>()
   matchups.forEach((m: any) => {
@@ -228,18 +231,21 @@ export async function GET(req: NextRequest) {
       .select('player_name,round_num,position,total,thru,today,event_name')
       .in('player_name', Array.from(allPlayerNames))
       .in('round_num', Array.from(allRoundNums).map(String))
-      .in('event_name', activeTournamentNames)  // Only fetch stats for active tournaments
+      .in('event_name', activeTournamentNames)  // Fetch stats for tournaments with parlays
     if (!statsError && statsData) liveStats = statsData
   }
   
-  // Helper to get stats for a player/round - only returns stats if tournament is active
-  function getStats(playerName: string, roundNum: number) {
-    if (activeTournamentNames.length === 0) return null; // No active tournaments
+  // Helper to get stats for a player/round/tournament
+  function getStats(playerName: string, roundNum: number, eventId?: number) {
+    if (activeTournamentNames.length === 0) return null; // No tournaments with parlays
+    
+    // If we have an eventId, get the specific tournament name for this matchup
+    const targetTournamentName = eventId ? tournamentsByEventId[eventId] : null;
     
     return liveStats.find(
       (s) => s.player_name === playerName && 
              String(s.round_num) === String(roundNum) &&
-             activeTournamentNames.includes(s.event_name)
+             (targetTournamentName ? s.event_name === targetTournamentName : activeTournamentNames.includes(s.event_name))
     )
   }
 
@@ -264,7 +270,7 @@ export async function GET(req: NextRequest) {
       let playersInMatchup: any[] = []
       if (matchup) {
         if (matchup.player1_dg_id && matchup.player1_name) {
-          const stats = getStats(matchup.player1_name, matchup.round_num) || {}
+          const stats = getStats(matchup.player1_name, matchup.round_num, matchup.event_id) || {}
           playersInMatchup.push({
             id: matchup.player1_dg_id,
             name: matchup.player1_name,
@@ -277,7 +283,7 @@ export async function GET(req: NextRequest) {
           })
         }
         if (matchup.player2_dg_id && matchup.player2_name) {
-          const stats = getStats(matchup.player2_name, matchup.round_num) || {}
+          const stats = getStats(matchup.player2_name, matchup.round_num, matchup.event_id) || {}
           playersInMatchup.push({
             id: matchup.player2_dg_id,
             name: matchup.player2_name,
@@ -290,7 +296,7 @@ export async function GET(req: NextRequest) {
           })
         }
         if (matchup.type === '3ball' && matchup.player3_dg_id && matchup.player3_name) {
-          const stats = getStats(matchup.player3_name, matchup.round_num) || {}
+          const stats = getStats(matchup.player3_name, matchup.round_num, matchup.event_id) || {}
           playersInMatchup.push({
             id: matchup.player3_dg_id,
             name: matchup.player3_name,
