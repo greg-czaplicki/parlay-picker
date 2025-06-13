@@ -10,8 +10,8 @@
   },
   "crons": [
     {
-      "path": "/api/cron/ingest-matchups",
-      "schedule": "0 6 * * *"
+      "path": "/api/live-stats/auto-sync",
+      "schedule": "*/30 * * * *"
     }
   ],
   "headers": [
