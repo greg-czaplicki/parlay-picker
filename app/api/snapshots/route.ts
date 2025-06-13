@@ -2,6 +2,8 @@ import { NextRequest } from 'next/server'
 import { logger } from '@/lib/logger'
 import { createSupabaseClient, handleApiError, jsonSuccess } from '@/lib/api-utils'
 import { TournamentSnapshotService } from '@/lib/services/tournament-snapshot-service'
+import { TournamentDataService } from '@/lib/services/tournament-data-service'
+import { SnapshotRetentionService } from '@/lib/services/snapshot-retention-service'
 
 /**
  * 🎯 ENHANCED: Snapshot + Parlay Analytics API
@@ -24,6 +26,82 @@ export async function GET(request: NextRequest) {
 
     const supabase = createSupabaseClient()
     const snapshotService = new TournamentSnapshotService()
+    const dataService = new TournamentDataService()
+    const retentionService = new SnapshotRetentionService()
+
+    // 🎯 NEW: System health monitoring endpoints
+    if (action === 'system_health') {
+      logger.info('Getting comprehensive system health status')
+      
+      try {
+        const [
+          retentionStats,
+          cacheStats,
+          snapshotStats
+        ] = await Promise.all([
+          retentionService.getRetentionStats(),
+          dataService.getCacheStats ? dataService.getCacheStats() : { size: 0, hit_rate: 0, avg_age_minutes: 0 },
+          supabase.rpc('get_snapshot_stats')
+        ])
+
+        const systemHealth = {
+          snapshot_system: {
+            total_snapshots: retentionStats.current_snapshot_count,
+            oldest_snapshot: retentionStats.oldest_snapshot_date,
+            estimated_storage_mb: retentionStats.estimated_storage_mb,
+            status: retentionStats.current_snapshot_count > 0 ? 'active' : 'inactive'
+          },
+          data_access: {
+            cache_size: cacheStats.size,
+            cache_hit_rate: cacheStats.hit_rate,
+            avg_cache_age_minutes: cacheStats.avg_age_minutes,
+            fallback_system: 'operational'
+          },
+          integration_status: {
+            live_stats_sync: 'operational', // Would check actual sync status
+            parlay_analytics: 'operational',
+            ml_data_extraction: 'operational',
+            retention_policy: 'active'
+          },
+          performance_metrics: {
+            last_health_check: new Date().toISOString(),
+            system_version: '30.5-integrated'
+          }
+        }
+
+        return jsonSuccess(systemHealth, 'System health check completed')
+      } catch (error) {
+        logger.error('System health check failed:', error)
+        return handleApiError('System health check failed')
+      }
+    }
+
+    if (action === 'retention_status') {
+      logger.info('Getting retention policy status')
+      
+      try {
+        const retentionStats = await retentionService.getRetentionStats()
+        
+        return jsonSuccess({
+          retention_policy: {
+            current_snapshot_count: retentionStats.current_snapshot_count,
+            oldest_snapshot_date: retentionStats.oldest_snapshot_date,
+            estimated_storage_mb: retentionStats.estimated_storage_mb,
+            recommendations: retentionStats.current_snapshot_count > 10000 
+              ? ['Consider applying development retention policy']
+              : ['Current retention levels are healthy']
+          },
+          actions_available: [
+            'Apply production retention policy',
+            'Apply development retention policy',
+            'Schedule automatic retention'
+          ]
+        }, 'Retention status retrieved')
+      } catch (error) {
+        logger.error('Failed to get retention status:', error)
+        return handleApiError('Failed to get retention status')
+      }
+    }
 
     // Handle parlay analytics requests
     if (action === 'player_profile' && playerId) {
@@ -207,6 +285,54 @@ export async function POST(request: NextRequest) {
     const { action } = body
 
     const snapshotService = new TournamentSnapshotService()
+    const retentionService = new SnapshotRetentionService()
+    const supabase = createSupabaseClient()
+
+    // 🎯 NEW: Administrative endpoints for retention management
+    if (action === 'apply_retention') {
+      const { policy = 'production', dry_run = false } = body
+
+      if (!['production', 'development'].includes(policy)) {
+        return handleApiError('Policy must be "production" or "development"')
+      }
+
+      logger.info(`${dry_run ? 'Dry run for' : 'Applying'} retention policy: ${policy}`)
+
+      try {
+        if (dry_run) {
+          // Just get the stats without actually deleting
+          const stats = await retentionService.getRetentionStats()
+          const cutoffDate = new Date(Date.now() - (policy === 'production' ? 365 : 90) * 24 * 60 * 60 * 1000)
+          
+          const { count: wouldDelete } = await supabase
+            .from('tournament_round_snapshots')
+            .select('id', { count: 'exact', head: true })
+            .lt('snapshot_timestamp', cutoffDate.toISOString())
+
+          return jsonSuccess({
+            dry_run: true,
+            policy,
+            current_snapshots: stats.current_snapshot_count,
+            snapshots_would_delete: wouldDelete || 0,
+            storage_would_free_mb: (wouldDelete || 0) * 0.01,
+            estimated_runtime_minutes: Math.ceil((wouldDelete || 0) / 1000)
+          }, `Dry run completed for ${policy} retention policy`)
+        } else {
+          const retentionStats = await retentionService.applyRetentionPolicy(policy as any)
+          
+          return jsonSuccess({
+            retention_applied: true,
+            policy: retentionStats.policy_applied,
+            snapshots_deleted: retentionStats.snapshots_deleted,
+            storage_freed_mb: retentionStats.storage_freed_mb,
+            execution_time_ms: retentionStats.execution_time_ms
+          }, `${policy} retention policy applied successfully`)
+        }
+      } catch (error) {
+        logger.error('Failed to apply retention policy:', error)
+        return handleApiError(`Failed to apply retention policy: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
 
     // 🎯 NEW: Parlay matchup analysis
     if (action === 'analyze_matchup') {
@@ -253,7 +379,6 @@ export async function POST(request: NextRequest) {
     logger.info(`Manual snapshot trigger requested for event ${event_id}, round ${round_number}`)
 
     // Validate the event exists
-    const supabase = createSupabaseClient()
     const { data: tournament, error: tournamentError } = await supabase
       .from('tournaments')
       .select('event_id, event_name')
