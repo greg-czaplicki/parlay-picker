@@ -27,16 +27,37 @@ export class SnapshotRetentionService {
   private readonly DEFAULT_POLICIES: Record<string, RetentionPolicy> = {
     production: {
       name: 'Production',
-      max_age_days: 365,
-      keep_every_nth: 4,
-      min_snapshots_to_keep: 100
+      max_age_days: 2555,  // ~7 years - MUCH better for golf analytics!
+      keep_every_nth: 2,    // Keep every 2nd snapshot (less aggressive)
+      min_snapshots_to_keep: 1000  // Keep much more data
     },
     
     development: {
       name: 'Development', 
-      max_age_days: 90,
-      keep_every_nth: 10,
-      min_snapshots_to_keep: 50
+      max_age_days: 730,   // 2 years for testing
+      keep_every_nth: 5,
+      min_snapshots_to_keep: 200
+    },
+
+    golf_analytics: {
+      name: 'Golf Analytics',
+      max_age_days: 3650,  // 10 YEARS of historical golf data!
+      keep_every_nth: 1,   // Keep EVERY snapshot
+      min_snapshots_to_keep: 5000  // Never delete if under 5000 snapshots
+    },
+
+    never_delete: {
+      name: 'Never Delete',
+      max_age_days: 36500, // 100 years (basically never)
+      keep_every_nth: 1,   // Keep everything
+      min_snapshots_to_keep: 999999  // Never delete anything
+    },
+
+    venue_analytics: {
+      name: 'Venue Analytics',
+      max_age_days: 5475,  // 15 YEARS - capture venue patterns across decades!
+      keep_every_nth: 1,   // Keep every snapshot for venue analysis
+      min_snapshots_to_keep: 10000  // Preserve massive historical venue datasets
     }
   }
 

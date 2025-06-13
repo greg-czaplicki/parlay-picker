@@ -70,10 +70,12 @@ jobs:
             echo "TOTAL_SNAPSHOTS=$total_snapshots" >> $GITHUB_ENV
             echo "SYSTEM_STATUS=$system_status" >> $GITHUB_ENV
             
-            # Health thresholds
-            if [ $total_snapshots -gt 50000 ]; then
-              echo "⚠️ WARNING: High snapshot count ($total_snapshots) - consider aggressive retention"
+            # Health thresholds (adjusted for golf analytics - higher limits)
+            if [ $total_snapshots -gt 500000 ]; then
+              echo "⚠️ WARNING: Very high snapshot count ($total_snapshots) - consider cleanup"
               echo "HIGH_SNAPSHOT_COUNT=true" >> $GITHUB_ENV
+            elif [ $total_snapshots -gt 100000 ]; then
+              echo "📊 INFO: Large dataset ($total_snapshots snapshots) - excellent for golf analytics!"
             fi
             
             if [ "$system_status" != "active" ] && [ "$system_status" != "inactive" ]; then
@@ -127,11 +129,11 @@ jobs:
           
           # Determine policy based on maintenance type and current system state
           if [ "${{ github.event.inputs.maintenance_type }}" = "weekly" ] || [ "${{ env.HIGH_SNAPSHOT_COUNT }}" = "true" ]; then
-            POLICY="development"
-            echo "🗑️ Using DEVELOPMENT policy (aggressive cleanup)"
-          else
             POLICY="production"
-            echo "🏭 Using PRODUCTION policy (conservative cleanup)"
+            echo "🏭 Using PRODUCTION policy (7-year retention)"
+          else
+            POLICY="venue_analytics"
+            echo "🏌️ Using VENUE ANALYTICS policy (15-year retention, optimal for venue-specific insights)"
           fi
           
           response=$(curl -s -w "HTTPSTATUS:%{http_code}" \

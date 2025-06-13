@@ -188,6 +188,213 @@ export async function GET(request: NextRequest) {
       }, 'Parlay recommendations generated')
     }
 
+    // 🎯 NEW: VENUE PERFORMANCE ANALYTICS - Greg's brilliant insight!
+    if (action === 'venue_performance') {
+      const { venue_name, course_type, player_ids } = searchParams.get('venue_name') 
+        ? { venue_name: searchParams.get('venue_name'), course_type: null, player_ids: null }
+        : { venue_name: null, course_type: searchParams.get('course_type'), player_ids: searchParams.get('player_ids')?.split(',').map(Number) }
+      
+      logger.info(`Getting venue performance analysis for venue: ${venue_name || course_type}`)
+      
+      try {
+        // Get historical performance at this specific venue
+        const venueQuery = supabase
+          .from('tournament_round_snapshots')
+          .select(`
+            dg_id,
+            player_name,
+            event_name,
+            position_numeric,
+            total_score,
+            sg_total,
+            snapshot_timestamp,
+            event_id
+          `)
+          .order('snapshot_timestamp', { ascending: false })
+          .limit(5000) // Get substantial historical data
+
+        if (venue_name) {
+          venueQuery.ilike('event_name', `%${venue_name}%`)
+        }
+
+        const { data: venueHistory } = await venueQuery
+
+        if (!venueHistory || venueHistory.length === 0) {
+          return jsonSuccess({
+            venue_analysis: {
+              venue_name: venue_name || course_type,
+              historical_data_points: 0,
+              player_insights: [],
+              message: 'No historical data found for this venue'
+            }
+          }, 'Venue analysis completed (no historical data)')
+        }
+
+        // Group by player and calculate venue-specific stats
+        const playerVenueStats = venueHistory.reduce((acc: any, record) => {
+          const playerId = record.dg_id
+          if (!acc[playerId]) {
+            acc[playerId] = {
+              dg_id: playerId,
+              player_name: record.player_name,
+              venue_rounds: 0,
+              venue_finishes: [],
+              venue_scores: [],
+              venue_sg_total: [],
+              best_venue_finish: 999,
+              worst_venue_finish: 0,
+              last_played_venue: null,
+              venue_trend: 'steady'
+            }
+          }
+
+          acc[playerId].venue_rounds++
+          if (record.position_numeric) acc[playerId].venue_finishes.push(record.position_numeric)
+          if (record.total_score) acc[playerId].venue_scores.push(record.total_score)
+          if (record.sg_total) acc[playerId].venue_sg_total.push(record.sg_total)
+          
+          if (record.position_numeric && record.position_numeric < acc[playerId].best_venue_finish) {
+            acc[playerId].best_venue_finish = record.position_numeric
+          }
+          if (record.position_numeric && record.position_numeric > acc[playerId].worst_venue_finish) {
+            acc[playerId].worst_venue_finish = record.position_numeric
+          }
+          
+          if (!acc[playerId].last_played_venue || record.snapshot_timestamp > acc[playerId].last_played_venue) {
+            acc[playerId].last_played_venue = record.snapshot_timestamp
+          }
+
+          return acc
+        }, {})
+
+        // Calculate venue performance metrics for each player
+        const playerVenueInsights = Object.values(playerVenueStats).map((stats: any) => {
+          const avgFinish = stats.venue_finishes.length > 0 
+            ? stats.venue_finishes.reduce((sum: number, pos: number) => sum + pos, 0) / stats.venue_finishes.length
+            : 999
+
+          const avgScore = stats.venue_scores.length > 0
+            ? stats.venue_scores.reduce((sum: number, score: number) => sum + score, 0) / stats.venue_scores.length
+            : 0
+
+          const avgSG = stats.venue_sg_total.length > 0
+            ? stats.venue_sg_total.reduce((sum: number, sg: number) => sum + sg, 0) / stats.venue_sg_total.length
+            : 0
+
+          // Calculate venue trend (recent vs historical)
+          const recentFinishes = stats.venue_finishes.slice(0, 3)
+          const olderFinishes = stats.venue_finishes.slice(3)
+          const venueTrend = recentFinishes.length > 0 && olderFinishes.length > 0
+            ? (recentFinishes.reduce((s: number, p: number) => s + p, 0) / recentFinishes.length) < 
+              (olderFinishes.reduce((s: number, p: number) => s + p, 0) / olderFinishes.length)
+              ? 'improving' : 'declining'
+            : 'steady'
+
+          return {
+            ...stats,
+            avg_venue_finish: Math.round(avgFinish * 10) / 10,
+            avg_venue_score: Math.round(avgScore * 10) / 10,
+            avg_venue_sg: Math.round(avgSG * 1000) / 1000,
+            venue_consistency: stats.venue_finishes.length > 2 
+              ? 100 - (Math.sqrt(stats.venue_finishes.reduce((sum: number, pos: number) => sum + Math.pow(pos - avgFinish, 2), 0) / stats.venue_finishes.length) * 5)
+              : 0,
+            venue_trend: venueTrend,
+            venue_experience_score: Math.min(100, stats.venue_rounds * 10), // More rounds = more experience
+            venue_form_indicator: venueTrend === 'improving' ? 'positive' : venueTrend === 'declining' ? 'negative' : 'neutral'
+          }
+        })
+
+        // Get current form for comparison (last 10 rounds across all venues)
+        const currentFormQuery = await supabase
+          .from('live_tournament_stats')
+          .select('dg_id, player_name, sg_total, today, data_golf_updated_at')
+          .in('dg_id', Object.keys(playerVenueStats).map(Number))
+          .order('data_golf_updated_at', { ascending: false })
+          .limit(500)
+
+        const { data: currentForm } = currentFormQuery
+
+        // Combine venue performance with current form
+        const venueFormAnalysis = playerVenueInsights
+          .filter((player: any) => player.venue_rounds >= 2) // Only players with multiple venue experiences
+          .map((player: any) => {
+            const playerCurrentForm = currentForm?.filter(f => f.dg_id === player.dg_id).slice(0, 5) || []
+            const currentSG = playerCurrentForm.length > 0 
+              ? playerCurrentForm.reduce((sum, round) => sum + (round.sg_total || 0), 0) / playerCurrentForm.length
+              : 0
+
+            const currentFormTrend = playerCurrentForm.length >= 3
+              ? playerCurrentForm[0]?.sg_total > playerCurrentForm[2]?.sg_total ? 'hot' : 'cold'
+              : 'neutral'
+
+            // 🎯 THE MONEY SIGNAL: Current hot form + good venue history
+            const venueOpportunityScore = 
+              (player.avg_venue_finish < 25 ? 30 : player.avg_venue_finish < 50 ? 20 : 10) + // Historical venue success
+              (player.venue_trend === 'improving' ? 25 : player.venue_trend === 'declining' ? -10 : 5) + // Venue trend
+              (currentFormTrend === 'hot' ? 30 : currentFormTrend === 'cold' ? -15 : 0) + // Current form
+              (currentSG > 0.5 ? 20 : currentSG > 0 ? 10 : currentSG > -0.5 ? 0 : -10) // Recent SG performance
+
+            return {
+              ...player,
+              current_form: {
+                recent_sg_avg: Math.round(currentSG * 1000) / 1000,
+                form_trend: currentFormTrend,
+                recent_rounds: playerCurrentForm.length
+              },
+              venue_opportunity_score: Math.round(venueOpportunityScore),
+              parlay_recommendation: venueOpportunityScore > 50 ? 'strong_consider' : 
+                                   venueOpportunityScore > 25 ? 'consider' : 
+                                   venueOpportunityScore > 0 ? 'monitor' : 'avoid',
+              key_insights: [
+                `${player.venue_rounds} rounds at venue (avg finish: ${Math.round(player.avg_venue_finish)})`,
+                `Venue trend: ${player.venue_trend}`,
+                `Current form: ${currentFormTrend} (SG: ${Math.round(currentSG * 1000) / 1000})`,
+                player.best_venue_finish < 10 ? `Best venue finish: T${player.best_venue_finish}` : null
+              ].filter(Boolean)
+            }
+          })
+          .sort((a, b) => b.venue_opportunity_score - a.venue_opportunity_score) // Sort by opportunity score
+
+        return jsonSuccess({
+          venue_analysis: {
+            venue_name: venue_name || course_type,
+            analysis_timestamp: new Date().toISOString(),
+            historical_data_points: venueHistory.length,
+            players_analyzed: playerVenueInsights.length,
+            players_with_experience: venueFormAnalysis.length,
+            
+            // 🎯 TOP OPPORTUNITIES: Players in form who historically perform well here
+            top_opportunities: venueFormAnalysis.slice(0, 10),
+            
+            // Venue performance leaders (historically)
+            venue_specialists: venueFormAnalysis
+              .filter((p: any) => p.avg_venue_finish < 30 && p.venue_rounds >= 4)
+              .slice(0, 5),
+            
+            // Players trending up at this venue
+            venue_improvers: venueFormAnalysis
+              .filter((p: any) => p.venue_trend === 'improving')
+              .slice(0, 5),
+              
+            // Current hot players with venue experience  
+            hot_form_with_venue_experience: venueFormAnalysis
+              .filter((p: any) => p.current_form.form_trend === 'hot' && p.venue_rounds >= 2)
+              
+          },
+          methodology: {
+            data_span: "Multi-year historical performance at specific venues",
+            form_analysis: "Last 5 rounds across all tournaments",
+            opportunity_scoring: "Combines venue history + current form + venue trend",
+            confidence_factors: ["Historical venue performance", "Recent form trend", "Venue experience level"]
+          }
+        }, `Venue performance analysis completed for ${venue_name || course_type}`)
+        
+      } catch (error) {
+        logger.error('Venue performance analysis failed:', error)
+        return handleApiError('Failed to analyze venue performance')
+      }
+    }
+
     // 🎯 EXISTING: Standard snapshot status endpoint
     // Get snapshot statistics
     const { data: stats } = await supabase.rpc('get_snapshot_stats')
@@ -292,8 +499,8 @@ export async function POST(request: NextRequest) {
     if (action === 'apply_retention') {
       const { policy = 'production', dry_run = false } = body
 
-      if (!['production', 'development'].includes(policy)) {
-        return handleApiError('Policy must be "production" or "development"')
+      if (!['production', 'development', 'golf_analytics', 'venue_analytics', 'never_delete'].includes(policy)) {
+        return handleApiError('Policy must be one of: production, development, golf_analytics, venue_analytics, never_delete')
       }
 
       logger.info(`${dry_run ? 'Dry run for' : 'Applying'} retention policy: ${policy}`)
@@ -302,7 +509,18 @@ export async function POST(request: NextRequest) {
         if (dry_run) {
           // Just get the stats without actually deleting
           const stats = await retentionService.getRetentionStats()
-          const cutoffDate = new Date(Date.now() - (policy === 'production' ? 365 : 90) * 24 * 60 * 60 * 1000)
+          // Calculate cutoff based on policy
+          let maxAgeDays: number
+          switch (policy) {
+            case 'production': maxAgeDays = 2555; break      // ~7 years
+            case 'development': maxAgeDays = 730; break      // 2 years  
+            case 'golf_analytics': maxAgeDays = 3650; break  // 10 years
+            case 'venue_analytics': maxAgeDays = 5475; break // 15 years
+            case 'never_delete': maxAgeDays = 36500; break   // 100 years
+            default: maxAgeDays = 2555; break                // Default to production
+          }
+          
+          const cutoffDate = new Date(Date.now() - maxAgeDays * 24 * 60 * 60 * 1000)
           
           const { count: wouldDelete } = await supabase
             .from('tournament_round_snapshots')
