@@ -1,159 +1,390 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { NextRequest } from 'next/server'
 import { logger } from '@/lib/logger'
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
+import { createSupabaseClient, handleApiError, jsonSuccess } from '@/lib/api-utils'
+import { TournamentSnapshotService } from '@/lib/services/tournament-snapshot-service'
 
 /**
- * GET /api/snapshots - Retrieve bet snapshots for ML analysis
- * Query parameters:
- * - limit: number of snapshots to return (default 50)
- * - offset: pagination offset (default 0)
- * - include_outcomes: whether to include actual outcomes from parlay_picks (default false)
+ * 🎯 ENHANCED: Snapshot + Parlay Analytics API
+ * GET: List recent snapshots and system status
+ * POST: Manually trigger snapshot creation OR analyze parlay matchups
+ * PUT: Test snapshot triggers
+ * PATCH: Get player parlay profiles
  */
-export async function GET(req: NextRequest) {
+
+export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url)
+    const { searchParams } = new URL(request.url)
+    const eventId = searchParams.get('event_id')
+    const roundNum = searchParams.get('round')
     const limit = parseInt(searchParams.get('limit') || '50')
-    const offset = parseInt(searchParams.get('offset') || '0')
-    const includeOutcomes = searchParams.get('include_outcomes') === 'true'
     
-    // Build base query conditionally
-    let query;
-    if (includeOutcomes) {
-      query = supabase
-        .from('bet_snapshots')
-        .select(`
-          uuid,
-          parlay_pick_id,
-          snapshot,
-          created_at,
-          parlay_picks!inner(outcome, pick)
-        `)
-        .order('created_at', { ascending: false })
-        .range(offset, offset + limit - 1);
-    } else {
-      query = supabase
-        .from('bet_snapshots')
-        .select(`
-          uuid,
-          parlay_pick_id,
-          snapshot,
-          created_at
-        `)
-        .order('created_at', { ascending: false })
-        .range(offset, offset + limit - 1);
-    }
-    
-    const { data: snapshots, error } = await query
-    
-    if (error) {
-      logger.error('[GET /api/snapshots] Error fetching snapshots:', error)
-      return NextResponse.json({ error: error.message }, { status: 400 })
-    }
-    
-    // Transform snapshots for ML analysis
-    const transformedSnapshots = snapshots?.map(snapshot => {
-      const data = snapshot.snapshot
+    // 🎯 NEW: Parlay analytics endpoints
+    const action = searchParams.get('action')
+    const playerId = searchParams.get('player_id')
+
+    const supabase = createSupabaseClient()
+    const snapshotService = new TournamentSnapshotService()
+
+    // Handle parlay analytics requests
+    if (action === 'player_profile' && playerId) {
+      logger.info(`Getting parlay profile for player ${playerId}`)
       
-      // Extract key features for ML
-      const features: any = {
-        // Metadata
-        snapshot_id: snapshot.uuid,
-        parlay_pick_id: snapshot.parlay_pick_id,
-        bet_timestamp: data.bet_timestamp,
-        round_num: data.round_num,
-        event_name: data.event_name,
-        
-        // Matchup features
-        matchup_type: data.matchup.type,
-        num_players: data.matchup.players.length,
-        
-        // Picked player features
-        picked_dg_id: data.calculated_features.picked_player.dg_id,
-        picked_name: data.calculated_features.picked_player.name,
-        picked_position: data.calculated_features.picked_player.position_in_matchup,
-        picked_implied_probability: data.calculated_features.picked_player.implied_probability,
-        
-        // Group analysis features
-        avg_sg_total: data.calculated_features.group_analysis.avg_sg_total,
-        odds_spread: data.calculated_features.group_analysis.odds_spread,
-        is_favorite: data.calculated_features.group_analysis.favorite_dg_id === data.calculated_features.picked_player.dg_id,
-        is_underdog: data.calculated_features.group_analysis.underdog_dg_id === data.calculated_features.picked_player.dg_id,
-        
-        // Player stats at bet time (for picked player)
-        picked_sg_total: data.player_stats[data.calculated_features.picked_player.dg_id]?.sg_total || null,
-        picked_sg_ott: data.player_stats[data.calculated_features.picked_player.dg_id]?.sg_ott || null,
-        picked_sg_app: data.player_stats[data.calculated_features.picked_player.dg_id]?.sg_app || null,
-        picked_sg_arg: data.player_stats[data.calculated_features.picked_player.dg_id]?.sg_arg || null,
-        picked_sg_putt: data.player_stats[data.calculated_features.picked_player.dg_id]?.sg_putt || null,
-        
-        // Live stats at bet time (if available)
-        had_live_stats: data.live_stats !== null,
-        picked_live_position: data.live_stats?.[data.calculated_features.picked_player.dg_id]?.position || null,
-        picked_live_total: data.live_stats?.[data.calculated_features.picked_player.dg_id]?.total || null,
-        picked_live_today: data.live_stats?.[data.calculated_features.picked_player.dg_id]?.today || null,
-        picked_live_thru: data.live_stats?.[data.calculated_features.picked_player.dg_id]?.thru || null,
-        
-        // Full snapshot data (for detailed analysis)
-        full_snapshot: includeOutcomes ? data : null,
-        
-        // Optional outcome fields
-        actual_outcome: null,
-        actual_pick: null
+      const profile = await snapshotService.generatePlayerParlayProfile(parseInt(playerId))
+      
+      if (!profile) {
+        return handleApiError(`Player profile not found for ID ${playerId}`)
       }
       
-      // Add actual outcome if available
-      if (includeOutcomes && 'parlay_picks' in snapshot && snapshot.parlay_picks) {
-        const parlayPickData = snapshot.parlay_picks as any;
-        features.actual_outcome = Array.isArray(parlayPickData) ? parlayPickData[0]?.outcome : parlayPickData.outcome;
-        features.actual_pick = Array.isArray(parlayPickData) ? parlayPickData[0]?.pick : parlayPickData.pick;
-      }
+      return jsonSuccess(profile, `Parlay profile retrieved for ${profile.player_name}`)
+    }
+
+    if (action === 'parlay_recommendations') {
+      logger.info('Getting parlay recommendations for active tournaments')
       
-      return features
-    }) || []
-    
-    // Calculate summary statistics
-    const summary = {
-      total_snapshots: transformedSnapshots.length,
-      date_range: {
-        earliest: transformedSnapshots[transformedSnapshots.length - 1]?.bet_timestamp || null,
-        latest: transformedSnapshots[0]?.bet_timestamp || null
-      },
-      matchup_types: {
-        ball_2: transformedSnapshots.filter(s => s.matchup_type === '2ball').length,
-        ball_3: transformedSnapshots.filter(s => s.matchup_type === '3ball').length
-      },
-      live_stats_availability: transformedSnapshots.filter(s => s.had_live_stats).length,
-      ...(includeOutcomes ? {
-        outcomes: {
-          win: transformedSnapshots.filter(s => s.actual_outcome === 'win').length,
-          loss: transformedSnapshots.filter(s => s.actual_outcome === 'loss').length,
-          push: transformedSnapshots.filter(s => s.actual_outcome === 'push').length,
-          void: transformedSnapshots.filter(s => s.actual_outcome === 'void').length
+      // Get active tournaments with recent activity
+      const { data: activeTournaments } = await supabase
+        .from('live_tournament_stats')
+        .select(`
+          event_id,
+          tournament_name,
+          dg_id,
+          player_name,
+          position,
+          sg_total,
+          today,
+          round_num,
+          data_golf_updated_at
+        `)
+        .gte('data_golf_updated_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+        .not('position', 'is', null)
+        .order('data_golf_updated_at', { ascending: false })
+        .limit(100)
+
+      // Group by tournament and get top players for sample matchups
+      const tournamentGroups = activeTournaments?.reduce((acc: any, player) => {
+        const key = `${player.event_id}_${player.tournament_name}`
+        if (!acc[key]) {
+          acc[key] = {
+            event_id: player.event_id,
+            tournament_name: player.tournament_name,
+            players: []
+          }
         }
-      } : {})
+        acc[key].players.push({
+          dg_id: player.dg_id,
+          player_name: player.player_name,
+          position: player.position,
+          sg_total: player.sg_total
+        })
+        return acc
+      }, {}) || {}
+
+      // Generate sample matchup recommendations
+      const recommendations = await Promise.all(
+        Object.values(tournamentGroups).slice(0, 3).map(async (tournament: any) => {
+          const topPlayers = tournament.players
+            .sort((a: any, b: any) => (a.position || 999) - (b.position || 999))
+            .slice(0, 6)
+
+          if (topPlayers.length >= 3) {
+            // Create a sample 3-ball matchup
+            const sampleMatchup = await snapshotService.analyzeMatchupForParlay(
+              topPlayers.slice(0, 3).map((p: any) => p.dg_id),
+              '3ball'
+            )
+
+            return {
+              tournament_name: tournament.tournament_name,
+              event_id: tournament.event_id,
+              sample_matchup: sampleMatchup,
+              available_players: topPlayers.length
+            }
+          }
+          return null
+        })
+      )
+
+      return jsonSuccess({
+        active_tournaments: Object.keys(tournamentGroups).length,
+        recommendations: recommendations.filter(r => r !== null)
+      }, 'Parlay recommendations generated')
     }
+
+    // 🎯 EXISTING: Standard snapshot status endpoint
+    // Get snapshot statistics
+    const { data: stats } = await supabase.rpc('get_snapshot_stats')
     
-    logger.info(`[GET /api/snapshots] Retrieved ${transformedSnapshots.length} snapshots`)
-    
-    return NextResponse.json({
-      snapshots: transformedSnapshots,
-      summary,
-      pagination: {
-        limit,
-        offset,
-        returned: transformedSnapshots.length
+    // Get recent snapshots
+    let snapshotQuery = supabase
+      .from('tournament_round_snapshots')
+      .select(`
+        id,
+        event_id,
+        event_name,
+        round_num,
+        snapshot_timestamp,
+        snapshot_type,
+        data_source,
+        player_name,
+        position,
+        total_score,
+        position_change,
+        momentum_score
+      `)
+      .order('snapshot_timestamp', { ascending: false })
+      .limit(limit)
+
+    if (eventId) {
+      snapshotQuery = snapshotQuery.eq('event_id', parseInt(eventId))
+    }
+
+    if (roundNum) {
+      snapshotQuery = snapshotQuery.eq('round_num', roundNum)
+    }
+
+    const { data: recentSnapshots, error: snapshotError } = await snapshotQuery
+
+    if (snapshotError) {
+      logger.error('Failed to fetch snapshots:', snapshotError)
+      return handleApiError('Failed to fetch snapshots')
+    }
+
+    // Get active tournaments for context
+    const { data: activeTournaments } = await supabase
+      .from('tournaments')
+      .select('event_id, event_name, start_date, end_date')
+      .gte('end_date', new Date().toISOString().split('T')[0])
+      .order('start_date', { ascending: false })
+
+    // Group snapshots by event and round for summary
+    const snapshotSummary = recentSnapshots?.reduce((acc: any, snapshot) => {
+      const key = `${snapshot.event_id}-${snapshot.round_num}`
+      if (!acc[key]) {
+        acc[key] = {
+          event_id: snapshot.event_id,
+          event_name: snapshot.event_name,
+          round_num: snapshot.round_num,
+          snapshot_type: snapshot.snapshot_type,
+          latest_timestamp: snapshot.snapshot_timestamp,
+          player_count: 0,
+          players_with_positions: 0,
+          avg_momentum: 0
+        }
       }
-    })
-    
+      
+      acc[key].player_count++
+      if (snapshot.position) acc[key].players_with_positions++
+      if (snapshot.momentum_score) {
+        acc[key].avg_momentum = (acc[key].avg_momentum + snapshot.momentum_score) / 2
+      }
+      
+      return acc
+    }, {}) || {}
+
+    const response = {
+      system_status: {
+        total_snapshots: stats?.total_snapshots || 0,
+        unique_events: stats?.unique_events || 0,
+        latest_snapshot: stats?.latest_snapshot || null,
+        active_tournaments: activeTournaments?.length || 0
+      },
+      snapshot_summary: Object.values(snapshotSummary),
+      recent_snapshots: recentSnapshots || [],
+      active_tournaments: activeTournaments || []
+    }
+
+    return jsonSuccess(response, 'Snapshot status retrieved successfully')
+
   } catch (error) {
-    logger.error('[GET /api/snapshots] Unexpected error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' }, 
-      { status: 500 }
+    logger.error('Error in snapshot GET endpoint:', error)
+    return handleApiError('Failed to get snapshot status')
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { action } = body
+
+    const snapshotService = new TournamentSnapshotService()
+
+    // 🎯 NEW: Parlay matchup analysis
+    if (action === 'analyze_matchup') {
+      const { player_ids, matchup_type, course_context } = body
+
+      if (!player_ids || !Array.isArray(player_ids) || player_ids.length < 2) {
+        return handleApiError('player_ids array with at least 2 players is required')
+      }
+
+      if (!matchup_type || !['2ball', '3ball'].includes(matchup_type)) {
+        return handleApiError('matchup_type must be "2ball" or "3ball"')
+      }
+
+      if (matchup_type === '3ball' && player_ids.length !== 3) {
+        return handleApiError('3ball matchups require exactly 3 players')
+      }
+
+      if (matchup_type === '2ball' && player_ids.length !== 2) {
+        return handleApiError('2ball matchups require exactly 2 players')
+      }
+
+      logger.info(`Analyzing ${matchup_type} matchup for players: ${player_ids.join(', ')}`)
+
+      const matchupAnalysis = await snapshotService.analyzeMatchupForParlay(
+        player_ids,
+        matchup_type,
+        course_context
+      )
+
+      if (!matchupAnalysis) {
+        return handleApiError('Failed to analyze matchup - insufficient data')
+      }
+
+      return jsonSuccess(matchupAnalysis, `${matchup_type} matchup analysis completed`)
+    }
+
+    // 🎯 EXISTING: Manual snapshot creation
+    const { event_id, round_number, snapshot_type = 'manual' } = body
+
+    if (!event_id || !round_number) {
+      return handleApiError('event_id and round_number are required')
+    }
+
+    logger.info(`Manual snapshot trigger requested for event ${event_id}, round ${round_number}`)
+
+    // Validate the event exists
+    const supabase = createSupabaseClient()
+    const { data: tournament, error: tournamentError } = await supabase
+      .from('tournaments')
+      .select('event_id, event_name')
+      .eq('event_id', event_id)
+      .single()
+
+    if (tournamentError || !tournament) {
+      return handleApiError(`Tournament not found for event_id ${event_id}`)
+    }
+
+    // Create the snapshot
+    const result = await snapshotService.createTournamentSnapshot(
+      event_id,
+      round_number.toString(),
+      snapshot_type
     )
+
+    if (result.success) {
+      logger.info(`Manual snapshot created successfully for ${tournament.event_name}, round ${round_number}`)
+      
+      return jsonSuccess({
+        success: true,
+        event_id,
+        event_name: tournament.event_name,
+        round_number,
+        snapshot_type,
+        snapshot_count: result.snapshotIds?.length || 0,
+        snapshot_ids: result.snapshotIds
+      }, `Snapshot created successfully for ${tournament.event_name}, round ${round_number}`)
+    } else {
+      logger.error(`Manual snapshot failed: ${result.error}`)
+      return handleApiError(`Failed to create snapshot: ${result.error}`)
+    }
+
+  } catch (error) {
+    logger.error('Error in snapshot POST endpoint:', error)
+    return handleApiError('Failed to process request')
+  }
+}
+
+/**
+ * 🎯 NEW: Bulk player profile endpoint
+ */
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { player_ids, include_matchup_analysis = false } = body
+
+    if (!player_ids || !Array.isArray(player_ids)) {
+      return handleApiError('player_ids array is required')
+    }
+
+    if (player_ids.length > 10) {
+      return handleApiError('Maximum 10 players per request')
+    }
+
+    const snapshotService = new TournamentSnapshotService()
+
+    logger.info(`Getting parlay profiles for ${player_ids.length} players`)
+
+    // Get all player profiles in parallel
+    const profiles = await Promise.all(
+      player_ids.map(async (playerId: number) => {
+        const profile = await snapshotService.generatePlayerParlayProfile(playerId)
+        return profile
+      })
+    )
+
+    const validProfiles = profiles.filter(p => p !== null)
+
+    let matchupAnalysis = null
+    if (include_matchup_analysis && validProfiles.length >= 2) {
+      // Create sample matchup analysis
+      const matchupType = validProfiles.length >= 3 ? '3ball' : '2ball'
+      const playersForMatchup = validProfiles.slice(0, matchupType === '3ball' ? 3 : 2)
+      
+      matchupAnalysis = await snapshotService.analyzeMatchupForParlay(
+        playersForMatchup.map(p => p!.dg_id),
+        matchupType
+      )
+    }
+
+    const response = {
+      player_profiles: validProfiles,
+      profiles_found: validProfiles.length,
+      profiles_requested: player_ids.length,
+      matchup_analysis: matchupAnalysis
+    }
+
+    return jsonSuccess(response, `Retrieved ${validProfiles.length} player profiles`)
+
+  } catch (error) {
+    logger.error('Error in bulk profile PATCH endpoint:', error)
+    return handleApiError('Failed to get player profiles')
+  }
+}
+
+/**
+ * Additional endpoint for testing snapshot triggers
+ */
+export async function PUT(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { event_name, round_number } = body
+
+    if (!event_name || !round_number) {
+      return handleApiError('event_name and round_number are required')
+    }
+
+    const snapshotService = new TournamentSnapshotService()
+
+    logger.info(`Testing snapshot trigger for ${event_name}, round ${round_number}`)
+
+    // Test the trigger system without actually creating snapshots
+    const triggerResult = await snapshotService.checkAndTriggerSnapshots(
+      event_name,
+      round_number.toString(),
+      new Date().toISOString()
+    )
+
+    return jsonSuccess({
+      trigger_test: true,
+      event_name,
+      round_number,
+      would_trigger: triggerResult.triggered,
+      reason: triggerResult.reason,
+      error: triggerResult.error
+    }, `Trigger test completed for ${event_name}, round ${round_number}`)
+
+  } catch (error) {
+    logger.error('Error in snapshot PUT endpoint:', error)
+    return handleApiError('Failed to test snapshot trigger')
   }
 } 

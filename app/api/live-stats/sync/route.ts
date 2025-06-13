@@ -1,5 +1,6 @@
 import { logger } from '@/lib/logger'
 import { createSupabaseClient, handleApiError, jsonSuccess } from '@/lib/api-utils'
+import { TournamentSnapshotService } from '@/lib/services/tournament-snapshot-service'
 
 // Define interfaces for the Data Golf API response
 interface LivePlayerData {
@@ -172,112 +173,141 @@ function mapInPlayDataToInsert(players: any[], tournament: string, timestamp: st
 }
 
 export async function GET() {
-  logger.info("Starting multi-tour in-play predictions sync...");
-  let totalInsertedCount = 0;
-  let lastSourceTimestamp: string | null = null;
-  let fetchedEventNames: string[] = [];
-  const errors: string[] = [];
   const supabase = createSupabaseClient();
+  logger.info('Starting live-stats sync process');
 
-  // First, check if there are any active tournaments before syncing
-  const today = new Date().toISOString().split('T')[0];
-  const { data: activeTournaments, error: tournamentsError } = await supabase
-    .from('tournaments')
-    .select('event_id, event_name, start_date, end_date')
-    .lte('start_date', today) // Started before or on today
-    .gte('end_date', today);  // Ends after or on today
+  let fetchedEventNames: string[] = [];
+  let lastSourceTimestamp: string | null = null;
+  const errors: string[] = [];
+  let totalInsertedCount = 0;
 
-  if (tournamentsError) {
-    logger.error("Error checking active tournaments:", tournamentsError);
-    return handleApiError(`Failed to check tournament status: ${tournamentsError.message}`);
-  }
+  try {
+    // Get active tournaments list
+    const { data: activeTournaments } = await supabase
+      .from('tournaments')
+      .select('event_id, event_name')
+      .gte('end_date', new Date().toISOString().split('T')[0]);
 
-  if (!activeTournaments || activeTournaments.length === 0) {
-    logger.info("No active tournaments found. Skipping live stats sync to avoid fetching stale data.");
-    return jsonSuccess({
-      processedCount: 0,
-      sourceTimestamp: null,
-      eventNames: [],
-      errors: [],
-      message: "No active tournaments - sync skipped"
-    }, "No active tournaments found. Live stats sync skipped to avoid stale data.");
-  }
-
-  logger.info(`Found ${activeTournaments.length} active tournament(s): ${activeTournaments.map(t => t.event_name).join(', ')}`);
-
-  for (const tour of TOURS_TO_SYNC) {
-    try {
-      const response = await fetchInPlayPredictions(tour);
-      if (!response || !response.data || response.data.length === 0) {
-        logger.info(`No data available for ${tour.toUpperCase()} tour, skipping.`);
-        continue;
-      }
-
-      logger.info(`${tour.toUpperCase()} response structure:`, Object.keys(response));
-
-      const { data: players, info, last_updated } = response;
-      lastSourceTimestamp = last_updated;
-      
-      // Extract tournament name from info object
-      const eventName = info?.event_name || `${tour.toUpperCase()} Tournament`;
-      logger.info(`${tour.toUpperCase()} extracted event name: ${eventName}`);
-
-      // Check if this event is in our active tournaments list
-      const matchingTournament = activeTournaments.find(t => t.event_name === eventName);
-      if (!matchingTournament) {
-        logger.info(`Event "${eventName}" from ${tour.toUpperCase()} tour is not in active tournaments list. Skipping sync for this event.`);
-        continue;
-      }
-
-      fetchedEventNames.push(eventName);
-
-      // Look up event_id from tournament name for more reliable querying
-      let eventId: number | undefined;
-      const { data: tournamentData } = await supabase
-        .from('tournaments')
-        .select('event_id')
-        .eq('event_name', eventName)
-        .single();
-      
-      if (tournamentData) {
-        eventId = tournamentData.event_id;
-        logger.info(`${tour.toUpperCase()} mapped to event_id: ${eventId}`);
-      } else {
-        logger.warn(`No event_id found for tournament: ${eventName}`);
-      }
-
-      const statsToInsert = mapInPlayDataToInsert(players, eventName, last_updated, eventId);
-      
-      logger.info(`Upserting ${statsToInsert.length} records for ${tour.toUpperCase()} tour (${eventName})`);
-
-      // Upsert on (dg_id, round_num, event_name)
-      const { error } = await supabase
-        .from("live_tournament_stats")
-        .upsert(statsToInsert, { onConflict: "dg_id,round_num,event_name" });
-
-      if (error) {
-        errors.push(`Upsert failed for ${tour} tour: ${error.message}`);
-        logger.error(`Upsert failed for ${tour} tour: ${error.message}`);
-      } else {
-        totalInsertedCount += statsToInsert.length;
-        logger.info(`Successfully synced ${statsToInsert.length} records for ${tour.toUpperCase()} tour`);
-      }
-    } catch (err: any) {
-      errors.push(err.message || String(err));
-      logger.error(`Error syncing ${tour} tour: ${err.message || String(err)}`);
+    if (!activeTournaments || activeTournaments.length === 0) {
+      logger.info('No active tournaments found, skipping live stats sync.');
+      return jsonSuccess({
+        message: 'No active tournaments found',
+        events: [],
+        totalRecords: 0,
+        errors: [],
+        lastUpdated: null,
+        syncTime: new Date().toISOString()
+      });
     }
-  }
 
-  const finalMessage = `In-play predictions sync complete. Total records inserted/updated: ${totalInsertedCount} across ${TOURS_TO_SYNC.length} tours.`;
-  
-  if (errors.length > 0) {
-    logger.warn("Sync completed with errors:", errors);
-  }
+    logger.info(`Found ${activeTournaments.length} active tournaments`);
 
-  return jsonSuccess({
-    processedCount: totalInsertedCount,
-    sourceTimestamp: lastSourceTimestamp,
-    eventNames: fetchedEventNames,
-    errors,
-  }, finalMessage + (errors.length > 0 ? ` Errors: ${errors.join(', ')}` : ''));
+    // Initialize snapshot service for automatic triggers
+    const snapshotService = new TournamentSnapshotService();
+
+    for (const tour of TOURS_TO_SYNC) {
+      try {
+        const response = await fetchInPlayPredictions(tour);
+        if (!response || !response.data || response.data.length === 0) {
+          logger.info(`No data available for ${tour.toUpperCase()} tour, skipping.`);
+          continue;
+        }
+
+        logger.info(`${tour.toUpperCase()} response structure:`, Object.keys(response));
+
+        const { data: players, info, last_updated } = response;
+        lastSourceTimestamp = last_updated;
+        
+        // Extract tournament name from info object
+        const eventName = info?.event_name || `${tour.toUpperCase()} Tournament`;
+        logger.info(`${tour.toUpperCase()} extracted event name: ${eventName}`);
+
+        // Check if this event is in our active tournaments list
+        const matchingTournament = activeTournaments.find(t => t.event_name === eventName);
+        if (!matchingTournament) {
+          logger.info(`Event "${eventName}" from ${tour.toUpperCase()} tour is not in active tournaments list. Skipping sync for this event.`);
+          continue;
+        }
+
+        fetchedEventNames.push(eventName);
+
+        // Look up event_id from tournament name for more reliable querying
+        let eventId: number | undefined;
+        const { data: tournamentData } = await supabase
+          .from('tournaments')
+          .select('event_id')
+          .eq('event_name', eventName)
+          .single();
+        
+        if (tournamentData) {
+          eventId = tournamentData.event_id;
+          logger.info(`${tour.toUpperCase()} mapped to event_id: ${eventId}`);
+        } else {
+          logger.warn(`No event_id found for tournament: ${eventName}`);
+        }
+
+        const statsToInsert = mapInPlayDataToInsert(players, eventName, last_updated, eventId);
+        
+        logger.info(`Upserting ${statsToInsert.length} records for ${tour.toUpperCase()} tour (${eventName})`);
+
+        // Upsert on (dg_id, round_num, event_name)
+        const { error } = await supabase
+          .from("live_tournament_stats")
+          .upsert(statsToInsert, { onConflict: "dg_id,round_num,event_name" });
+
+        if (error) {
+          errors.push(`${tour.toUpperCase()} upsert failed: ${error.message}`);
+          logger.error(`${tour.toUpperCase()} upsert failed: ${error.message}`);
+        } else {
+          totalInsertedCount += statsToInsert.length;
+          logger.info(`${tour.toUpperCase()} upsert completed successfully`);
+
+          // 🎯 NEW: Check for snapshot triggers after successful sync
+          try {
+            // Get unique rounds from the synced data
+            const syncedRounds = [...new Set(statsToInsert.map(s => s.round_num))];
+            
+            for (const roundNum of syncedRounds) {
+              // Skip event_avg round for snapshots
+              if (roundNum === 'event_avg') continue;
+              
+              const triggerResult = await snapshotService.checkAndTriggerSnapshots(
+                eventName,
+                roundNum,
+                last_updated
+              );
+              
+              if (triggerResult.triggered) {
+                logger.info(`📸 Snapshot triggered for ${eventName}, round ${roundNum}`);
+              } else {
+                logger.debug(`No snapshot needed for ${eventName}, round ${roundNum}: ${triggerResult.reason}`);
+              }
+            }
+          } catch (snapshotError) {
+            logger.warn(`Snapshot trigger check failed for ${eventName}:`, snapshotError);
+            // Don't fail the sync if snapshot triggers fail
+          }
+        }
+      } catch (err: any) {
+        errors.push(err.message || String(err));
+        logger.error(`Error syncing ${tour.toUpperCase()} tour: ${err.message || String(err)}`);
+      }
+    }
+
+    const finalMessage = `In-play predictions sync complete. Total records inserted/updated: ${totalInsertedCount} across ${TOURS_TO_SYNC.length} tours.`;
+    
+    if (errors.length > 0) {
+      logger.warn("Sync completed with errors:", errors);
+    }
+
+    return jsonSuccess({
+      processedCount: totalInsertedCount,
+      sourceTimestamp: lastSourceTimestamp,
+      eventNames: fetchedEventNames,
+      errors,
+    }, finalMessage + (errors.length > 0 ? ` Errors: ${errors.join(', ')}` : ''));
+  } catch (error) {
+    logger.error("Error in live-stats sync GET function:", error);
+    return handleApiError('Live stats sync failed');
+  }
 }

@@ -1,0 +1,146 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+---
+description: MCP Supabase configuration for Golf Parlay Picker Next project
+globs: .cursor/mcp.json
+alwaysApply: true
+---
+
+# MCP Supabase Configuration - Golf Parlay Picker Next
+
+Project-specific MCP setup for the golf analytics platform.
+
+## **Current Project Configuration**
+
+```json
+{
+  "mcpServers": {
+    "supabase": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@supabase/mcp-server-supabase@latest",
+        "--access-token",
+        "sbp_f25af10dce29384f488d5e9dff19751904ff6a0a"
+      ]
+    }
+  }
+}
+```
+
+## **Project Details**
+
+- **Project ID**: `hpcvdbocodstfitmnpgy`
+- **Project Name**: `supabase-violet-island`
+- **Region**: `us-east-1`
+- **Database Host**: `db.hpcvdbocodstfitmnpgy.supabase.co`
+- **Status**: `ACTIVE_HEALTHY`
+
+## **Available MCP Tools for This Project**
+
+All tools work with project ID: `hpcvdbocodstfitmnpgy`
+
+### **Migration & Schema Management**
+```javascript
+// Apply migrations (preferred for DDL)
+mcp_supabase_apply_migration({
+  project_id: "hpcvdbocodstfitmnpgy",
+  name: "migration_name",
+  query: "SQL_HERE"
+});
+
+// Execute direct SQL
+mcp_supabase_execute_sql({
+  project_id: "hpcvdbocodstfitmnpgy", 
+  query: "SELECT * FROM tournaments;"
+});
+
+// List tables
+mcp_supabase_list_tables({
+  project_id: "hpcvdbocodstfitmnpgy"
+});
+```
+
+## **Current Database Schema**
+
+### **Core Golf Tables**
+- `tournaments` - Tournament/event data
+- `players` - Player profiles and DG IDs
+- `live_tournament_stats` - Real-time tournament data
+- `matchups` - Head-to-head and 3-ball matchups
+- `parlays` & `parlay_picks` - Betting data
+
+### **ML Snapshot Tables (Recently Added)**
+- `tournament_round_snapshots` - Historical tournament states
+- `player_round_changes` - Position movement tracking
+- `tournament_momentum_summary` - ML aggregations
+
+### **Helper Functions**
+- `extract_position_numeric()` - Convert positions to numbers
+- `calculate_momentum_score()` - Calculate momentum indicators
+
+### **ML Views**
+- `latest_tournament_snapshots` - Latest data per player/round
+- `player_tournament_trends` - ML-ready trends with rolling stats
+
+## **Common Migration Patterns**
+
+### **Add New ML Features**
+```sql
+-- Use mcp_supabase_apply_migration
+ALTER TABLE tournament_round_snapshots 
+ADD COLUMN new_ml_feature DECIMAL(5,2);
+```
+
+### **Query Tournament Data**
+```sql
+-- Use mcp_supabase_execute_sql
+SELECT event_name, COUNT(*) as player_count 
+FROM tournament_round_snapshots 
+GROUP BY event_name;
+```
+
+### **Verify Schema Changes**
+```sql
+-- Check table structure
+SELECT column_name, data_type 
+FROM information_schema.columns 
+WHERE table_name = 'tournament_round_snapshots';
+```
+
+## **Project-Specific Workflow**
+
+1. **For ML Snapshot Development**:
+   - Use `mcp_supabase_apply_migration` for schema changes
+   - Test with current tournament data (event_id from tournaments table)
+   - Verify with `mcp_supabase_list_tables` and `mcp_supabase_execute_sql`
+
+2. **For Data Ingestion Updates**:
+   - Apply migrations to support new DataGolf API fields
+   - Update snapshot capture logic in TypeScript services
+   - Test with live tournament data
+
+3. **For Analytics Features**:
+   - Query ML views for UI components
+   - Use helper functions for calculations
+   - Leverage momentum indicators for predictions
+
+## **Security Notes**
+
+- Access token `sbp_f25af10dce29384f488d5e9dff19751904ff6a0a` is for development
+- Never commit to version control (already in .cursor/mcp.json)
+- Token has full account access - rotate regularly
+- Service role key is for direct DB access only, NOT MCP
+
+## **Troubleshooting This Project**
+
+If MCP tools fail:
+1. Check project status: `mcp_supabase_list_projects`
+2. Verify project ID: `hpcvdbocodstfitmnpgy`
+3. Confirm access token starts with `sbp_`
+4. Check logs for specific error messages
+
+**Remember**: Always use MCP tools for this project's database operations - they integrate with our dev workflow and provide better error handling than direct SQL connections.

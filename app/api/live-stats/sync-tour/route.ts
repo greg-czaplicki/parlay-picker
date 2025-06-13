@@ -2,6 +2,7 @@ import 'next-logger'
 import { logger } from '@/lib/logger'
 import { createSupabaseClient, handleApiError, jsonSuccess, getQueryParams } from '@/lib/api-utils'
 import { z } from 'zod'
+import { TournamentSnapshotService } from '@/lib/services/tournament-snapshot-service'
 
 // Define interfaces for the Data Golf API response
 interface LivePlayerData {
@@ -127,101 +128,123 @@ function mapStatsToInsert(data: DataGolfLiveStatsResponse, timestamp: string): S
 const tourParamSchema = z.object({ tour: z.enum(['pga', 'opp', 'euro']) });
 
 export async function GET(request: Request) {
-  logger.info('Received live-stats/sync-tour request', { url: request.url });
-  try {
-    const { tour } = getQueryParams(request, tourParamSchema);
+  const { searchParams } = new URL(request.url);
+  const tour = searchParams.get('tour') || 'pga';
+  logger.info(`Tour sync request received`, { tour });
   
   // Validate tour parameter
-  if (!['pga', 'opp', 'euro'].includes(tour)) {
-      return handleApiError(`Invalid tour parameter: ${tour}. Must be one of: pga, opp, euro.`);
-  }
-
-  // First, check if there are any active tournaments before syncing
-  const supabase = createSupabaseClient();
-  const today = new Date().toISOString().split('T')[0];
-  const { data: activeTournaments, error: tournamentsError } = await supabase
-    .from('tournaments')
-    .select('event_id, event_name, start_date, end_date')
-    .lte('start_date', today) // Started before or on today
-    .gte('end_date', today);  // Ends after or on today
-
-  if (tournamentsError) {
-    logger.error("Error checking active tournaments:", tournamentsError);
-    return handleApiError(`Failed to check tournament status: ${tournamentsError.message}`);
-  }
-
-  if (!activeTournaments || activeTournaments.length === 0) {
-    logger.info("No active tournaments found. Skipping live stats sync to avoid fetching stale data.");
-    return jsonSuccess({
-      processedCount: 0,
-      sourceTimestamp: null,
-      eventName: null,
-      tour: tour,
-      errors: [],
-      message: "No active tournaments - sync skipped"
-    }, "No active tournaments found. Live stats sync skipped to avoid stale data.");
-  }
-
-  logger.info(`Found ${activeTournaments.length} active tournament(s): ${activeTournaments.map(t => t.event_name).join(', ')}`);
+  const tourSchema = z.enum(['pga', 'euro']);
+  const validationResult = tourSchema.safeParse(tour);
   
-    logger.info(`Starting multi-round live stats sync for ${tour.toUpperCase()} tour...`);
+  if (!validationResult.success) {
+    return handleApiError(`Invalid tour parameter: ${tour}. Must be 'pga' or 'euro'.`);
+  }
+
+  const validatedTour = validationResult.data;
+  logger.info(`Validated tour parameter: ${validatedTour}`);
+
   let totalInsertedCount = 0;
   let lastSourceTimestamp: string | null = null;
   let fetchedEventName: string | null = null;
   const errors: string[] = [];
+  const supabase = createSupabaseClient();
 
-  // Only fetch Euro tour data if tour is 'euro' and handle appropriately
-  if (tour === 'euro') {
-      return handleApiError('Euro tour data is not supported by DataGolf API. Only PGA and Opposite Field events are supported.');
-  }
+  try {
+    // Get active tournaments
+    const { data: activeTournaments } = await supabase
+      .from('tournaments')
+      .select('event_id, event_name')
+      .gte('end_date', new Date().toISOString().split('T')[0]);
 
-  for (const round of ROUNDS_TO_FETCH) {
-    try {
-      const data = await fetchLiveStats(tour, round);
-      if (!data) continue;
-
-      // Check if this event is in our active tournaments list
-      const matchingTournament = activeTournaments.find(t => t.event_name === data.event_name);
-      if (!matchingTournament) {
-        logger.info(`Event "${data.event_name}" from ${tour.toUpperCase()} tour is not in active tournaments list. Skipping sync for this event.`);
-        continue;
-      }
-
-      const currentRoundTimestamp = new Date(data.last_updated.replace(" UTC", "Z")).toISOString();
-      lastSourceTimestamp = currentRoundTimestamp;
-      fetchedEventName = data.event_name;
-      const statsToInsert = mapStatsToInsert(data, currentRoundTimestamp);
-        // Upsert on (dg_id, round_num, event_name)
-        const { error } = await supabase
-          .from("live_tournament_stats")
-          .upsert(statsToInsert, { onConflict: "dg_id,round_num,event_name" });
-        if (error) {
-          errors.push(`Upsert failed for round ${round}: ${error.message}`);
-          logger.error(`Upsert failed for round ${round}: ${error.message}`);
-      } else {
-        totalInsertedCount += statsToInsert.length;
-      }
-    } catch (err: any) {
-      errors.push(err.message || String(err));
-        logger.error(`Error syncing round ${round}: ${err.message || String(err)}`);
+    if (!activeTournaments || activeTournaments.length === 0) {
+      logger.info('No active tournaments found.');
+      return jsonSuccess({
+        message: 'No active tournaments found',
+        tour: validatedTour.toUpperCase(),
+        totalRecords: 0,
+        errors: [],
+        lastUpdated: null
+      });
     }
-  }
 
-  const finalMessage = `${tour.toUpperCase()} tour sync complete. Total records inserted/updated: ${totalInsertedCount} across attempted rounds for ${fetchedEventName ?? 'event'}.`;
-  if (errors.length > 0) {
-      logger.warn(`${tour.toUpperCase()} sync completed with errors:`, errors);
-  }
+    // Initialize snapshot service for automatic triggers
+    const snapshotService = new TournamentSnapshotService();
 
-    logger.info('Returning live-stats/sync-tour response');
-  return jsonSuccess({
-    processedCount: totalInsertedCount,
-    sourceTimestamp: lastSourceTimestamp,
-    eventName: fetchedEventName,
-    tour: tour,
-    errors,
-  }, finalMessage + (errors.length > 0 ? ` Errors: ${errors.join(', ')}` : ''));
+    // Only fetch Euro tour data if tour is 'euro' and handle appropriately
+    if (tour === 'euro') {
+        return handleApiError('Euro tour data is not supported by DataGolf API. Only PGA and Opposite Field events are supported.');
+    }
+
+    for (const round of ROUNDS_TO_FETCH) {
+      try {
+        const data = await fetchLiveStats(tour, round);
+        if (!data) continue;
+
+        // Check if this event is in our active tournaments list
+        const matchingTournament = activeTournaments.find(t => t.event_name === data.event_name);
+        if (!matchingTournament) {
+          logger.info(`Event "${data.event_name}" from ${tour.toUpperCase()} tour is not in active tournaments list. Skipping sync for this event.`);
+          continue;
+        }
+
+        const currentRoundTimestamp = new Date(data.last_updated.replace(" UTC", "Z")).toISOString();
+        lastSourceTimestamp = currentRoundTimestamp;
+        fetchedEventName = data.event_name;
+        const statsToInsert = mapStatsToInsert(data, currentRoundTimestamp);
+          // Upsert on (dg_id, round_num, event_name)
+          const { error } = await supabase
+            .from("live_tournament_stats")
+            .upsert(statsToInsert, { onConflict: "dg_id,round_num,event_name" });
+          if (error) {
+            errors.push(`Upsert failed for round ${round}: ${error.message}`);
+            logger.error(`Upsert failed for round ${round}: ${error.message}`);
+        } else {
+          totalInsertedCount += statsToInsert.length;
+          logger.info(`Successfully synced ${statsToInsert.length} records for round ${round}`);
+
+          // 🎯 NEW: Check for snapshot triggers after successful sync
+          try {
+            // Skip event_avg round for snapshots
+            if (round !== 'event_avg') {
+              const triggerResult = await snapshotService.checkAndTriggerSnapshots(
+                data.event_name,
+                round,
+                currentRoundTimestamp
+              );
+              
+              if (triggerResult.triggered) {
+                logger.info(`📸 Snapshot triggered for ${data.event_name}, round ${round}`);
+              } else {
+                logger.debug(`No snapshot needed for ${data.event_name}, round ${round}: ${triggerResult.reason}`);
+              }
+            }
+          } catch (snapshotError) {
+            logger.warn(`Snapshot trigger check failed for ${data.event_name}, round ${round}:`, snapshotError);
+            // Don't fail the sync if snapshot triggers fail
+          }
+        }
+      } catch (err: any) {
+        errors.push(err.message || String(err));
+          logger.error(`Error syncing round ${round}: ${err.message || String(err)}`);
+      }
+    }
+
+    const finalMessage = `${tour.toUpperCase()} tour sync complete. Total records inserted/updated: ${totalInsertedCount} across attempted rounds for ${fetchedEventName ?? 'event'}.`;
+    if (errors.length > 0) {
+        logger.warn(`${tour.toUpperCase()} sync completed with errors:`, errors);
+    }
+
+      logger.info('Returning live-stats/sync-tour response');
+    return jsonSuccess({
+      processedCount: totalInsertedCount,
+      sourceTimestamp: lastSourceTimestamp,
+      eventName: fetchedEventName,
+      tour: tour.toUpperCase(),
+      errors,
+    }, finalMessage + (errors.length > 0 ? ` Errors: ${errors.join(', ')}` : ''));
+
   } catch (error) {
-    logger.error('Error in live-stats/sync-tour endpoint:', error);
-    return handleApiError(error);
+    logger.error(`Error in ${tour.toUpperCase()} tour sync:`, error);
+    return handleApiError(`${tour.toUpperCase()} tour sync failed`);
   }
 }

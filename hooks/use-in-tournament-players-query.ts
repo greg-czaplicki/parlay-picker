@@ -192,7 +192,7 @@ export function useInTournamentPlayersQuery({
       
       if (eventName) {
         query = query.eq('event_name', eventName)
-      }
+        }
       
       query = query.order('total', { ascending: true })
       
@@ -212,28 +212,54 @@ function processRoundData(data: any[], round: string, eventName: string | null):
   if (!data || data.length === 0) return data
   
   // Check if this is a round that might have raw scores
-  const isHistoricalRound = /^\d+$/.test(round) // Round 1, 2, 3, 4
+  const isSpecificRound = /^\d+$/.test(round) // Round 1, 2, 3, 4
   const hasPositions = data.some(player => player.position !== null)
   
   let processedData = [...data]
   
-  // If it's a historical round and scores look like raw scores, convert them
-  if (isHistoricalRound) {
+  // Special handling for specific round views (Round 1, 2, 3, 4)
+  if (isSpecificRound) {
+    console.log(`Processing specific round view: Round ${round}`)
+    
+    // For specific round views, show how that round ended
+    // Use 'today' field (round score) as both the display score and ranking criteria
+    processedData = processedData.map(player => {
+      let roundScore = player.today
+      
+      // Handle raw score conversion if needed
+      if (roundScore !== null && isRawScore(roundScore)) {
+        console.log(`Converting raw round score for ${player.player_name}: ${roundScore} → ${convertToParScore(roundScore)}`)
+        roundScore = convertToParScore(roundScore)
+      }
+      
+      return {
+        ...player,
+        total: roundScore,        // Show round score as total for this view
+        today: roundScore,        // Round score
+        position: null            // Will be recalculated below
+      }
+    })
+    
+    // Always recalculate positions for specific rounds based on round scores
+    console.log(`Calculating Round ${round} leaderboard based on round scores`)
+    processedData = calculatePositions(processedData)
+  } else {
+    // For cumulative views (live, event_avg), use existing logic
     const sampleScore = processedData.find(p => p.total !== null)?.total
     if (sampleScore && isRawScore(sampleScore)) {
-      console.log(`Converting raw scores to to-par for round ${round}`)
+      console.log(`Converting raw scores to to-par for ${round}`)
       processedData = processedData.map(player => ({
         ...player,
         total: convertToParScore(player.total),
         today: convertToParScore(player.today)
       }))
     }
-  }
-  
-  // If positions are missing, calculate them
-  if (!hasPositions && processedData.length > 0) {
-    console.log(`Calculating positions for round ${round}`)
-    processedData = calculatePositions(processedData)
+    
+    // If positions are missing, calculate them
+    if (!hasPositions && processedData.length > 0) {
+      console.log(`Calculating positions for ${round}`)
+      processedData = calculatePositions(processedData)
+    }
   }
   
   return processedData
