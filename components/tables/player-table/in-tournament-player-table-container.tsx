@@ -91,6 +91,20 @@ function getPercentile(sorted: number[], p: number) {
   return sorted[lower] + (sorted[upper] - sorted[lower]) * (idx - lower);
 }
 
+// Helper function to check if any player in the dataset has SG data
+function hasSGData<T>(data: T[]): boolean {
+  if (!data || data.length === 0) return false
+  
+  const sgFields = ['sg_total', 'sg_ott', 'sg_app', 'sg_arg', 'sg_putt', 'sg_t2g']
+  
+  return data.some(player => 
+    sgFields.some(field => {
+      const value = (player as any)[field]
+      return value !== null && value !== undefined && !isNaN(Number(value))
+    })
+  )
+}
+
 /**
  * LiveStatsTable
  *
@@ -135,7 +149,7 @@ function LiveStatsTable({ eventId, roundFilter, eventOptions }: { eventId: numbe
     const idx = Math.round(((norm + 1) / 2) * 6);
     return HEATMAP_CLASSES[idx];
   }, [sgStats]);
-  const columns = useColumns<any>({ dataView: 'tournament', getHeatmapColor });
+  const columns = useColumns<any>({ dataView: 'tournament', getHeatmapColor, data: displayPlayers });
 
   // Enable sorting - default sort by total score
   const [sorting, setSorting] = useState<SortingState>([
@@ -151,7 +165,20 @@ function LiveStatsTable({ eventId, roundFilter, eventOptions }: { eventId: numbe
     onSortingChange: setSorting,
     manualSorting: false,
   });
-  return <PlayerTablePresentation table={table} caption="" />;
+  
+  // Check if SG data is available for this tournament
+  const hasSG = hasSGData(displayPlayers);
+  
+  return (
+    <div>
+      {!hasSG && displayPlayers.length > 0 && (
+        <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-sm text-amber-400 mb-4">
+          📊 Strokes Gained statistics are not yet available for this tournament. Only scoring data is shown.
+        </div>
+      )}
+      <PlayerTablePresentation table={table} caption="" />
+    </div>
+  );
 }
 
 /**
@@ -195,7 +222,7 @@ function LastEventStatsTable({ eventId, eventName }: { eventId: number; eventNam
     const idx = Math.round(((norm + 1) / 2) * 6);
     return HEATMAP_CLASSES[idx];
   }, [sgStats]);
-  const columns = useColumns<any>({ dataView: 'tournament', getHeatmapColor });
+  const columns = useColumns<any>({ dataView: 'tournament', getHeatmapColor, data: displayPlayers });
 
   // Enable sorting - default sort by total score
   const [sorting, setSorting] = useState<SortingState>([
@@ -211,5 +238,18 @@ function LastEventStatsTable({ eventId, eventName }: { eventId: number; eventNam
     onSortingChange: setSorting,
     manualSorting: false,
   });
-  return <PlayerTablePresentation table={table} caption="" />;
+  
+  // Check if SG data is available for this tournament
+  const hasSG = hasSGData(displayPlayers);
+  
+  return (
+    <div>
+      {!hasSG && displayPlayers.length > 0 && (
+        <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-sm text-amber-400 mb-4">
+          📊 Strokes Gained statistics are not yet available for this tournament. Only scoring data is shown.
+        </div>
+      )}
+      <PlayerTablePresentation table={table} caption="" />
+    </div>
+  );
 } 

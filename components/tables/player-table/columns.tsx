@@ -10,9 +10,24 @@ import { formatPlayerName } from "@/lib/utils"
 interface UseColumnsProps<T> {
   dataView: "season" | "tournament"
   getHeatmapColor: (value: number | null, statKey: string, isHigherBetter?: boolean) => string
+  data?: T[] // Add data prop to check for SG availability
 }
 
-export function useColumns<T>({ dataView, getHeatmapColor }: UseColumnsProps<T>): ColumnDef<T>[] {
+// Helper function to check if any player in the dataset has SG data
+function hasSGData<T>(data: T[]): boolean {
+  if (!data || data.length === 0) return false
+  
+  const sgFields = ['sg_total', 'sg_ott', 'sg_app', 'sg_arg', 'sg_putt', 'sg_t2g']
+  
+  return data.some(player => 
+    sgFields.some(field => {
+      const value = (player as any)[field]
+      return value !== null && value !== undefined && !isNaN(Number(value))
+    })
+  )
+}
+
+export function useColumns<T>({ dataView, getHeatmapColor, data = [] }: UseColumnsProps<T>): ColumnDef<T>[] {
   const columns: ColumnDef<T>[] = useMemo(
     () => {
       if (dataView === "season") {
@@ -154,7 +169,11 @@ export function useColumns<T>({ dataView, getHeatmapColor }: UseColumnsProps<T>)
           },
         ] as ColumnDef<T>[]
       } else {
-        return [
+        // Tournament view - check if SG data is available
+        const hasSG = hasSGData(data)
+        
+        // Base columns that are always shown
+        const baseColumns: ColumnDef<T>[] = [
           {
             accessorKey: "position",
             header: ({ column }: { column: Column<T, unknown> }) => (
@@ -260,6 +279,10 @@ export function useColumns<T>({ dataView, getHeatmapColor }: UseColumnsProps<T>)
             },
             meta: { headerClassName: 'text-center', cellClassName: 'text-center round-cell' },
           },
+        ]
+
+        // SG columns that are conditionally included
+        const sgColumns: ColumnDef<T>[] = hasSG ? [
           {
             accessorKey: 'sg_ott',
             header: ({ column }: { column: Column<T, unknown> }) => (
@@ -372,10 +395,12 @@ export function useColumns<T>({ dataView, getHeatmapColor }: UseColumnsProps<T>)
             },
             meta: { headerClassName: 'text-center', cellClassName: 'text-center sg-total-cell' },
           },
-        ] as ColumnDef<T>[]
+        ] : []
+
+        return [...baseColumns, ...sgColumns] as ColumnDef<T>[]
       }
     },
-    [dataView, getHeatmapColor]
+    [dataView, getHeatmapColor, data]
   )
 
   return columns

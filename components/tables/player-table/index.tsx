@@ -82,8 +82,8 @@ export default function PlayerTable({
   )
 
   // Call useColumns directly at the top level for both views
-  const seasonColumns = useColumns<PlayerSkillRating>({ dataView: 'season', getHeatmapColor })
   const seasonPlayers = useMemo(() => (seasonSkills ?? []) as PlayerSkillRating[], [seasonSkills])
+  const seasonColumns = useColumns<PlayerSkillRating>({ dataView: 'season', getHeatmapColor, data: seasonPlayers })
 
   // Tournament heatmap logic
   const SG_COLUMNS = ['sg_putt', 'sg_arg', 'sg_app', 'sg_ott', 'sg_t2g', 'sg_total'];
@@ -108,8 +108,8 @@ export default function PlayerTable({
     const idx = Math.round(((norm + 1) / 2) * 6);
     return HEATMAP_CLASSES[idx];
   }, [sgStats]);
-  const tournamentColumns = useColumns<LiveTournamentStat>({ dataView: 'tournament', getHeatmapColor: getTournamentHeatmapColor })
   const tournamentPlayers = useMemo(() => (liveStats ?? []) as LiveTournamentStat[], [liveStats])
+  const tournamentColumns = useColumns<LiveTournamentStat>({ dataView: 'tournament', getHeatmapColor: getTournamentHeatmapColor, data: tournamentPlayers })
 
   let columns, displayPlayers, loading, table
   if (dataView === 'season') {

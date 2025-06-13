@@ -72,7 +72,7 @@ function SeasonPlayerTableContainerComponent() {
   }, [seasonStats, limit])
 
   // Simple columns call
-  const columns = useColumns({ dataView: 'season', getHeatmapColor })
+  const columns = useColumns({ dataView: 'season', getHeatmapColor, data: displayPlayers })
 
   // Direct useReactTable call - no complex memoization
   const table = useReactTable({
