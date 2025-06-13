@@ -4,7 +4,7 @@ import { createSupabaseClient } from '@/lib/api-utils';
 const DATA_GOLF_API_KEY = process.env.DATAGOLF_API_KEY;
 
 // Helper function to fetch from DataGolf in-play API
-async function fetchFromDataGolf(tour: 'pga' | 'euro'): Promise<any[]> {
+async function fetchFromDataGolf(tour: 'pga' | 'euro', targetEventName: string): Promise<any[]> {
   if (!DATA_GOLF_API_KEY) return [];
   
   try {
@@ -16,8 +16,15 @@ async function fetchFromDataGolf(tour: 'pga' | 'euro'): Promise<any[]> {
     
     if (response.ok) {
       const apiResponse = await response.json();
-  
-      return apiResponse.data || [];
+      
+      // Check if this feed matches our target tournament
+      const feedEventName = apiResponse.info?.event_name;
+      if (feedEventName && feedEventName === targetEventName) {
+        return apiResponse.data || [];
+      } else {
+        console.log(`DataGolf ${tour.toUpperCase()} feed has different tournament: "${feedEventName}" vs target "${targetEventName}"`);
+        return [];
+      }
     } else {
       console.warn(`DataGolf ${tour.toUpperCase()} API failed: ${response.status} ${response.statusText}`);
     }
@@ -115,8 +122,8 @@ export async function GET(req: NextRequest) {
 
     // Fetch live position data from DataGolf - try both PGA and Euro tours
     const [pgaData, euroData] = await Promise.all([
-      fetchFromDataGolf('pga'),
-      fetchFromDataGolf('euro')
+      fetchFromDataGolf('pga', eventName),
+      fetchFromDataGolf('euro', eventName)
     ]);
 
     // Combine all live player data
@@ -219,8 +226,8 @@ export async function GET(req: NextRequest) {
       const seasonRow = seasonStatsMap.get(dg_id) || null;
       const liveData = liveDataMap.get(dg_id) || null;
       
-      // Use live data for position, scores, and player name if available
-      // If no live data and tournament is not active, return null values to show dashes
+      // Use DataGolf live data when available, fallback to tournament-specific Supabase data
+      // Now that we handle duplicates correctly, DataGolf live data should be accurate
       const position = liveData?.current_pos || (hasRound1Data ? eventRow?.position : null) || null;
       const total = liveData?.current_score ?? liveData?.total ?? (hasRound1Data ? eventRow?.total : null) ?? null;
       const today = liveData?.today ?? (hasRound1Data ? eventRow?.today : null) ?? null;
