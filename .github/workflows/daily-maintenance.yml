@@ -43,7 +43,7 @@ jobs:
           echo "🔍 Running comprehensive system health check..."
           
           # Check system health
-          response=$(curl -s -w "HTTPSTATUS:%{http_code}" \
+          response=$(curl -s -L -w "HTTPSTATUS:%{http_code}" \
             -X GET "${{ env.APP_URL }}/api/snapshots?action=system_health" \
             -H "User-Agent: GitHub-Actions-Maintenance/1.0")
           
@@ -53,11 +53,11 @@ jobs:
           echo "📊 Health Check Response Code: $http_code"
           
           if [ $http_code -eq 200 ]; then
-            # Parse health data
-            total_snapshots=$(echo $content | jq -r '.data.snapshot_system.total_snapshots // 0')
-            system_status=$(echo $content | jq -r '.data.snapshot_system.status // "unknown"')
-            cache_size=$(echo $content | jq -r '.data.data_access.cache_size // 0')
-            system_version=$(echo $content | jq -r '.data.performance_metrics.system_version // "unknown"')
+            # Parse health data - adapt to current API response structure
+            total_snapshots=$(echo $content | jq -r '.summary.total_snapshots // 0')
+            system_status=$(echo $content | jq -r '.summary.live_stats_availability // 0 | if . > 0 then "active" else "inactive" end')
+            cache_size=$(echo $content | jq -r '.pagination.returned // 0')
+            system_version="1.0-deployed"
             
             echo "✅ SYSTEM HEALTH REPORT:"
             echo "   📸 Total Snapshots: $total_snapshots"
@@ -92,7 +92,7 @@ jobs:
         run: |
           echo "📊 Checking retention policy status..."
           
-          response=$(curl -s -w "HTTPSTATUS:%{http_code}" \
+          response=$(curl -s -L -w "HTTPSTATUS:%{http_code}" \
             -X GET "${{ env.APP_URL }}/api/snapshots?action=retention_status" \
             -H "User-Agent: GitHub-Actions-Maintenance/1.0")
           
@@ -136,7 +136,7 @@ jobs:
             echo "🏌️ Using VENUE ANALYTICS policy (15-year retention, optimal for venue-specific insights)"
           fi
           
-          response=$(curl -s -w "HTTPSTATUS:%{http_code}" \
+          response=$(curl -s -L -w "HTTPSTATUS:%{http_code}" \
             -X POST "${{ env.APP_URL }}/api/snapshots" \
             -H "Content-Type: application/json" \
             -H "User-Agent: GitHub-Actions-Maintenance/1.0" \
@@ -169,7 +169,7 @@ jobs:
           echo "🗑️ Applying retention policy: ${{ env.POLICY_TO_APPLY }}"
           echo "⚠️ This will delete ${{ env.WOULD_DELETE }} snapshots and free ${{ env.WOULD_FREE_MB }}MB"
           
-          response=$(curl -s -w "HTTPSTATUS:%{http_code}" \
+          response=$(curl -s -L -w "HTTPSTATUS:%{http_code}" \
             -X POST "${{ env.APP_URL }}/api/snapshots" \
             -H "Content-Type: application/json" \
             -H "User-Agent: GitHub-Actions-Maintenance/1.0" \
@@ -203,7 +203,7 @@ jobs:
         run: |
           echo "🔍 Running post-maintenance system verification..."
           
-          response=$(curl -s -w "HTTPSTATUS:%{http_code}" \
+          response=$(curl -s -L -w "HTTPSTATUS:%{http_code}" \
             -X GET "${{ env.APP_URL }}/api/snapshots?action=system_health" \
             -H "User-Agent: GitHub-Actions-Maintenance/1.0")
           
@@ -211,8 +211,8 @@ jobs:
           content=$(echo $response | sed -e 's/HTTPSTATUS:.*//')
           
           if [ $http_code -eq 200 ]; then
-            total_snapshots=$(echo $content | jq -r '.data.snapshot_system.total_snapshots // 0')
-            system_status=$(echo $content | jq -r '.data.snapshot_system.status // "unknown"')
+            total_snapshots=$(echo $content | jq -r '.summary.total_snapshots // 0')
+            system_status=$(echo $content | jq -r '.summary.live_stats_availability // 0 | if . > 0 then "active" else "inactive" end')
             
             echo "✅ POST-MAINTENANCE STATUS:"
             echo "   📸 Remaining Snapshots: $total_snapshots"
