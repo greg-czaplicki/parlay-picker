@@ -178,6 +178,112 @@ export class CourseDNAService {
     }
   }
 
+  /**
+   * 🎯 Batch Player Course Fit Analysis 
+   * Analyzes multiple players efficiently for tournament recommendations
+   */
+  async analyzeBatchPlayerCourseFit(
+    eventName: string, 
+    options: {
+      limit?: number;
+      minFitScore?: number;
+      excludePlayerIds?: number[];
+    } = {}
+  ): Promise<PlayerCourseFit[]> {
+    try {
+      logger.info(`Starting batch analysis for ${eventName}`, options);
+
+      // Get course DNA profile once (cached)
+      const courseDNA = await this.generateCourseDNAProfile(eventName);
+      if (!courseDNA) {
+        logger.warn(`No Course DNA available for ${eventName}`);
+        return [];
+      }
+
+      // Get all players with skill ratings
+      const players = await this.getAllPlayersWithSkillRatings(options.excludePlayerIds);
+      if (players.length === 0) {
+        logger.warn('No players with skill ratings found');
+        return [];
+      }
+
+      logger.info(`Processing ${players.length} players for ${eventName}`);
+
+      // Calculate fit scores for all players
+      const playerFits: PlayerCourseFit[] = [];
+      
+      for (const player of players) {
+        const fitScore = this.calculateFitScore(player, courseDNA);
+        
+        // Apply minimum fit score filter
+        if (fitScore.overall >= (options.minFitScore || 0)) {
+          playerFits.push({
+            dg_id: player.dg_id,
+            player_name: player.player_name,
+            event_name: eventName,
+            fit_score: fitScore.overall,
+            fit_grade: this.scoreToGrade(fitScore.overall),
+            category_fit: fitScore.breakdown,
+            historical_results: [],
+            predicted_finish_range: {
+              optimistic: Math.max(1, Math.round(120 - fitScore.overall)),
+              realistic: Math.max(1, Math.round(140 - fitScore.overall)),
+              pessimistic: Math.max(1, Math.round(160 - fitScore.overall))
+            },
+            confidence_level: 0.7
+          });
+        }
+      }
+
+      // Sort by fit score (highest first)
+      playerFits.sort((a, b) => b.fit_score - a.fit_score);
+
+      // Apply limit
+      const limitedResults = options.limit ? playerFits.slice(0, options.limit) : playerFits;
+
+      logger.info(`Batch analysis completed: ${limitedResults.length} qualified players for ${eventName}`);
+      return limitedResults;
+
+    } catch (error) {
+      logger.error(`Error in batch player analysis:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * 📊 Get All Players with Skill Ratings
+   */
+  private async getAllPlayersWithSkillRatings(excludePlayerIds: number[] = []) {
+    try {
+      let query = this.supabase
+        .from('player_skill_ratings')
+        .select('dg_id, player_name, sg_total, sg_ott, sg_app, sg_arg, sg_putt')
+        .not('sg_total', 'is', null)
+        .not('sg_ott', 'is', null)
+        .not('sg_app', 'is', null)
+        .not('sg_arg', 'is', null)
+        .not('sg_putt', 'is', null)
+        .order('sg_total', { ascending: false });
+
+      // Exclude specific players if requested
+      if (excludePlayerIds.length > 0) {
+        query = query.not('dg_id', 'in', `(${excludePlayerIds.join(',')})`);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        logger.error('Error fetching players with skill ratings:', error);
+        return [];
+      }
+
+      return data || [];
+    } catch (error) {
+      logger.error('Error in getAllPlayersWithSkillRatings:', error);
+      return [];
+    }
+  }
+
   // Helper Methods
   private groupByYear(data: any[]) {
     const groups = new Map();
