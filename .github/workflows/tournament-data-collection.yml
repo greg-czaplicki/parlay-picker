@@ -43,7 +43,7 @@ jobs:
         run: |
           echo "🏌️ Syncing PGA Tour data..."
           
-          response=$(curl -s -w "HTTPSTATUS:%{http_code}" \
+          response=$(curl -s -L -w "HTTPSTATUS:%{http_code}" \
             -X GET "${{ env.APP_URL }}/api/live-stats/sync-tour?tour=pga" \
             -H "User-Agent: GitHub-Actions-Tournament-Sync/1.0")
           
@@ -73,7 +73,7 @@ jobs:
         run: |
           echo "🌍 Syncing European Tour data..."
           
-          response=$(curl -s -w "HTTPSTATUS:%{http_code}" \
+          response=$(curl -s -L -w "HTTPSTATUS:%{http_code}" \
             -X GET "${{ env.APP_URL }}/api/live-stats/sync-tour?tour=euro" \
             -H "User-Agent: GitHub-Actions-Tournament-Sync/1.0")
           
@@ -102,7 +102,7 @@ jobs:
         run: |
           echo "🔄 Running comprehensive multi-tour sync..."
           
-          response=$(curl -s -w "HTTPSTATUS:%{http_code}" \
+          response=$(curl -s -L -w "HTTPSTATUS:%{http_code}" \
             -X GET "${{ env.APP_URL }}/api/live-stats/sync" \
             -H "User-Agent: GitHub-Actions-Tournament-Sync/1.0")
           
@@ -138,7 +138,7 @@ jobs:
         run: |
           echo "📸 Checking snapshot system status..."
           
-          response=$(curl -s -w "HTTPSTATUS:%{http_code}" \
+          response=$(curl -s -L -w "HTTPSTATUS:%{http_code}" \
             -X GET "${{ env.APP_URL }}/api/snapshots?action=system_health" \
             -H "User-Agent: GitHub-Actions-Tournament-Sync/1.0")
           
@@ -146,9 +146,9 @@ jobs:
           content=$(echo $response | sed -e 's/HTTPSTATUS:.*//')
           
           if [ $http_code -eq 200 ]; then
-            total_snapshots=$(echo $content | jq -r '.data.snapshot_system.total_snapshots // 0')
-            status=$(echo $content | jq -r '.data.snapshot_system.status // "unknown"')
-            system_version=$(echo $content | jq -r '.data.performance_metrics.system_version // "unknown"')
+            total_snapshots=$(echo $content | jq -r '.summary.total_snapshots // 0')
+            status=$(echo $content | jq -r '.summary.live_stats_availability // 0 | if . > 0 then "active" else "inactive" end')
+            system_version="1.0-deployed"
             
             echo "✅ Snapshot System Health:"
             echo "   📸 Total Snapshots: $total_snapshots"
