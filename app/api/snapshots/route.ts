@@ -395,6 +395,277 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // 🎯 NEW: TOURNAMENT SG ANALYSIS ENGINE - Greg's advanced analytics vision!
+    if (action === 'tournament_sg_analysis') {
+      const tournament_name = searchParams.get('tournament_name')
+      const event_id = searchParams.get('event_id')
+      const year = searchParams.get('year')
+      const top_n = parseInt(searchParams.get('top_n') || '30')
+      
+      if (!tournament_name && !event_id) {
+        return handleApiError('tournament_name or event_id is required')
+      }
+      
+      logger.info(`Analyzing SG patterns for tournament: ${tournament_name || event_id}`)
+      
+      try {
+        // Build query for historical tournament data
+        let tournamentQuery = supabase
+          .from('tournament_round_snapshots')
+          .select(`
+            event_id,
+            event_name,
+            dg_id,
+            player_name,
+            round_num,
+            position_numeric,
+            total_score,
+            round_score,
+            sg_total,
+            sg_ott,
+            sg_app,
+            sg_arg,
+            sg_putt,
+            snapshot_timestamp,
+            snapshot_type
+          `)
+          .not('sg_total', 'is', null)
+          .not('position_numeric', 'is', null)
+          .order('snapshot_timestamp', { ascending: false })
+
+        if (tournament_name) {
+          tournamentQuery = tournamentQuery.ilike('event_name', `%${tournament_name}%`)
+        }
+        if (event_id) {
+          tournamentQuery = tournamentQuery.eq('event_id', parseInt(event_id))
+        }
+        if (year) {
+          const yearStart = `${year}-01-01`
+          const yearEnd = `${year}-12-31`
+          tournamentQuery = tournamentQuery
+            .gte('snapshot_timestamp', yearStart)
+            .lte('snapshot_timestamp', yearEnd)
+        }
+
+        const { data: tournamentData } = await tournamentQuery.limit(2000)
+
+        if (!tournamentData || tournamentData.length === 0) {
+          return jsonSuccess({
+            tournament_analysis: {
+              tournament_name: tournament_name || event_id,
+              year,
+              message: 'No SG data found for this tournament',
+              data_points: 0
+            }
+          }, 'Tournament SG analysis completed (no data)')
+        }
+
+        // Group by tournament edition (event_id + year)
+        const tournamentEditions = tournamentData.reduce((acc: any, record) => {
+          const year = new Date(record.snapshot_timestamp).getFullYear()
+          const editionKey = `${record.event_id}_${year}`
+          
+          if (!acc[editionKey]) {
+            acc[editionKey] = {
+              event_id: record.event_id,
+              event_name: record.event_name,
+              year,
+              players: {},
+              rounds: {}
+            }
+          }
+          
+          // Group by player
+          if (!acc[editionKey].players[record.dg_id]) {
+            acc[editionKey].players[record.dg_id] = {
+              dg_id: record.dg_id,
+              player_name: record.player_name,
+              final_position: null,
+              rounds: {}
+            }
+          }
+          
+          // Store round data
+          acc[editionKey].players[record.dg_id].rounds[record.round_num] = {
+            round_num: record.round_num,
+            round_score: record.round_score,
+            sg_total: record.sg_total,
+            sg_ott: record.sg_ott,
+            sg_app: record.sg_app,
+            sg_arg: record.sg_arg,
+            sg_putt: record.sg_putt,
+            position_after_round: record.position_numeric
+          }
+          
+          // Update final position (use latest round data)
+          if (record.snapshot_type === 'final' || record.round_num === '4') {
+            acc[editionKey].players[record.dg_id].final_position = record.position_numeric
+          }
+          
+          return acc
+        }, {})
+
+        // Analyze each tournament edition
+        const editionAnalyses = Object.values(tournamentEditions).map((edition: any) => {
+          // Get top N finishers
+          const playersArray = Object.values(edition.players)
+          const topFinishers = playersArray
+            .filter((p: any) => p.final_position && p.final_position <= top_n)
+            .sort((a: any, b: any) => a.final_position - b.final_position)
+
+          if (topFinishers.length < 10) {
+            return null // Skip editions with insufficient data
+          }
+
+          // Calculate SG averages for top finishers by round
+          const roundAnalysis: any = {}
+          const overallSG: any = {}
+
+          // Initialize SG categories
+          const sgCategories = ['sg_total', 'sg_ott', 'sg_app', 'sg_arg', 'sg_putt']
+          sgCategories.forEach(cat => {
+            overallSG[cat] = { sum: 0, count: 0, avg: 0, top_performers: [] }
+          })
+
+          // Analyze each round
+          for (let round = 1; round <= 4; round++) {
+            roundAnalysis[round] = {}
+            sgCategories.forEach(cat => {
+              roundAnalysis[round][cat] = { sum: 0, count: 0, avg: 0, best_performance: null }
+            })
+
+            topFinishers.forEach((player: any) => {
+              const roundData = player.rounds[round.toString()]
+              if (roundData) {
+                sgCategories.forEach(cat => {
+                  const value = roundData[cat]
+                  if (value !== null && value !== undefined) {
+                    roundAnalysis[round][cat].sum += value
+                    roundAnalysis[round][cat].count += 1
+                    
+                    overallSG[cat].sum += value
+                    overallSG[cat].count += 1
+
+                    // Track best performances
+                    if (!roundAnalysis[round][cat].best_performance || value > roundAnalysis[round][cat].best_performance.value) {
+                      roundAnalysis[round][cat].best_performance = {
+                        player_name: player.player_name,
+                        value: value,
+                        round_score: roundData.round_score
+                      }
+                    }
+                  }
+                })
+              }
+            })
+
+            // Calculate round averages
+            sgCategories.forEach(cat => {
+              if (roundAnalysis[round][cat].count > 0) {
+                roundAnalysis[round][cat].avg = Math.round(
+                  (roundAnalysis[round][cat].sum / roundAnalysis[round][cat].count) * 1000
+                ) / 1000
+              }
+            })
+          }
+
+          // Calculate overall averages and identify key skills
+          sgCategories.forEach(cat => {
+            if (overallSG[cat].count > 0) {
+              overallSG[cat].avg = Math.round((overallSG[cat].sum / overallSG[cat].count) * 1000) / 1000
+            }
+          })
+
+          // Identify the most important SG categories for this tournament
+          const sgImportance = sgCategories
+            .filter(cat => cat !== 'sg_total')
+            .map(cat => ({
+              category: cat,
+              avg_advantage: overallSG[cat].avg,
+              importance_score: Math.abs(overallSG[cat].avg) * 10 // Scale for ranking
+            }))
+            .sort((a, b) => b.importance_score - a.importance_score)
+
+          // Analyze round-specific patterns
+          const roundPatterns = []
+          for (let round = 1; round <= 4; round++) {
+            const roundSG = sgCategories
+              .filter(cat => cat !== 'sg_total')
+              .map(cat => ({
+                category: cat,
+                avg: roundAnalysis[round][cat].avg || 0,
+                best: roundAnalysis[round][cat].best_performance
+              }))
+              .sort((a, b) => Math.abs(b.avg) - Math.abs(a.avg))
+
+                         roundPatterns.push({
+               round,
+               most_important_sg: roundSG[0],
+               sg_breakdown: roundSG,
+               round_insights: generateRoundInsights(round, roundSG)
+             })
+          }
+
+                     // Generate course profile
+           const courseProfile = {
+             primary_skill: sgImportance[0],
+             secondary_skill: sgImportance[1],
+             least_important: sgImportance[sgImportance.length - 1],
+             course_type_indicator: determineCourseType(sgImportance),
+             success_formula: generateSuccessFormula(sgImportance, overallSG)
+           }
+
+          return {
+            tournament: {
+              event_name: edition.event_name,
+              year: edition.year,
+              event_id: edition.event_id
+            },
+            analysis_scope: {
+              top_finishers_analyzed: topFinishers.length,
+              target_finish_position: top_n,
+              rounds_with_data: Object.keys(roundAnalysis).length
+            },
+            course_sg_profile: courseProfile,
+            overall_sg_requirements: overallSG,
+            round_by_round_analysis: roundPatterns,
+                         top_performers_by_sg: getTopPerformersByCategory(topFinishers, sgCategories),
+             predictive_insights: generatePredictiveInsights(sgImportance, roundPatterns, edition.event_name)
+          }
+        }).filter(analysis => analysis !== null)
+
+        return jsonSuccess({
+          tournament_sg_analysis: {
+            tournament_query: tournament_name || event_id,
+            year,
+            editions_analyzed: editionAnalyses.length,
+            total_data_points: tournamentData.length,
+            
+                         // Multi-year trends if multiple editions
+             historical_trends: editionAnalyses.length > 1 
+               ? analyzeHistoricalTrends(editionAnalyses)
+               : null,
+             
+             // Individual edition analyses
+             edition_analyses: editionAnalyses,
+             
+             // Summary insights across all editions
+             tournament_dna: generateTournamentDNA(editionAnalyses)
+          },
+          methodology: {
+            analysis_scope: `Top ${top_n} finishers SG performance`,
+            data_breakdown: "Round-by-round SG categories with weather context",
+            predictive_value: "Identifies skill requirements for future success",
+            confidence_level: editionAnalyses.length > 2 ? "high" : editionAnalyses.length > 1 ? "medium" : "low"
+          }
+        }, `Tournament SG analysis completed for ${tournament_name || event_id}`)
+        
+      } catch (error) {
+        logger.error('Tournament SG analysis failed:', error)
+        return handleApiError('Failed to analyze tournament SG patterns')
+      }
+    }
+
     // 🎯 EXISTING: Standard snapshot status endpoint
     // Get snapshot statistics
     const { data: stats } = await supabase.rpc('get_snapshot_stats')
@@ -729,5 +1000,185 @@ export async function PUT(request: NextRequest) {
   } catch (error) {
     logger.error('Error in snapshot PUT endpoint:', error)
     return handleApiError('Failed to test snapshot trigger')
+  }
+}
+
+// Helper functions for tournament SG analysis
+function generateRoundInsights(round: number, roundSG: any[]): string[] {
+  const insights = []
+  if (roundSG[0]) {
+    insights.push(`Round ${round}: ${roundSG[0].category.replace('sg_', '').toUpperCase()} is most critical (avg: ${roundSG[0].avg})`)
+  }
+  
+  // Add round-specific insights
+  if (round === 1) {
+    insights.push("Opening round: Course management and avoiding big numbers")
+  } else if (round === 2) {
+    insights.push("Second round: Making the cut, consistent play required")
+  } else if (round === 3) {
+    insights.push("Moving day: Positioning for Sunday, aggressive play may be rewarded")
+  } else if (round === 4) {
+    insights.push("Final round: Pressure performance and clutch putting crucial")
+  }
+  
+  return insights
+}
+
+function determineCourseType(sgImportance: any[]): string {
+  const primary = sgImportance[0]?.category
+  const secondary = sgImportance[1]?.category
+  
+  if (primary === 'sg_app' && secondary === 'sg_putt') {
+    return "Precision course - rewards accuracy and putting"
+  } else if (primary === 'sg_ott' && secondary === 'sg_app') {
+    return "Power course - distance and approach play critical"
+  } else if (primary === 'sg_putt') {
+    return "Putting premium - green reading and touch essential"
+  } else if (primary === 'sg_arg') {
+    return "Short game course - scrambling ability key"
+  } else {
+    return "Balanced test - requires well-rounded skills"
+  }
+}
+
+function generateSuccessFormula(sgImportance: any[], overallSG: any): string {
+  const formula = sgImportance
+    .slice(0, 3)
+    .map(sg => `${sg.category.replace('sg_', '').toUpperCase()} (${sg.avg_advantage > 0 ? '+' : ''}${sg.avg_advantage})`)
+    .join(' + ')
+  
+  return `Success = ${formula}`
+}
+
+function getTopPerformersByCategory(topFinishers: any[], sgCategories: string[]): any {
+  const performersByCategory: any = {}
+  
+  sgCategories.forEach(category => {
+    performersByCategory[category] = []
+    
+    // Calculate average for each player in this category
+    topFinishers.forEach(player => {
+      const roundValues: number[] = []
+      Object.values(player.rounds).forEach((round: any) => {
+        if (round[category] !== null && round[category] !== undefined) {
+          roundValues.push(round[category])
+        }
+      })
+      
+      if (roundValues.length > 0) {
+        const avg = roundValues.reduce((sum, val) => sum + val, 0) / roundValues.length
+        performersByCategory[category].push({
+          player_name: player.player_name,
+          category_average: Math.round(avg * 1000) / 1000,
+          rounds_with_data: roundValues.length
+        })
+      }
+    })
+    
+    // Sort by performance and take top 5
+    performersByCategory[category] = performersByCategory[category]
+      .sort((a: any, b: any) => b.category_average - a.category_average)
+      .slice(0, 5)
+  })
+  
+  return performersByCategory
+}
+
+function generatePredictiveInsights(sgImportance: any[], roundPatterns: any[], eventName: string): string[] {
+  const insights = []
+  
+  // Overall course insight
+  if (sgImportance[0]) {
+    insights.push(`Players strong in ${sgImportance[0].category.replace('sg_', '').toUpperCase()} historically excel at ${eventName}`)
+  }
+  
+  // Round-specific insights
+  roundPatterns.forEach(round => {
+    if (round.most_important_sg) {
+      insights.push(`Round ${round.round}: Focus on ${round.most_important_sg.category.replace('sg_', '').toUpperCase()} performance`)
+    }
+  })
+  
+  // Strategy insights
+  if (sgImportance[0]?.category === 'sg_app') {
+    insights.push("Target players with strong iron play and course management skills")
+  } else if (sgImportance[0]?.category === 'sg_putt') {
+    insights.push("Prioritize players with excellent putting statistics and green reading")
+  } else if (sgImportance[0]?.category === 'sg_ott') {
+    insights.push("Look for big hitters who can take advantage of distance")
+  }
+  
+  return insights
+}
+
+function analyzeHistoricalTrends(editionAnalyses: any[]): any {
+  if (editionAnalyses.length < 2) return null
+  
+  // Track how SG importance has changed over time
+  const sgTrends: any = {}
+  const categories = ['sg_ott', 'sg_app', 'sg_arg', 'sg_putt']
+  
+  categories.forEach(cat => {
+    sgTrends[cat] = {
+      yearly_importance: [],
+      trend_direction: 'stable',
+      consistency: 0
+    }
+    
+    editionAnalyses.forEach(edition => {
+      const sgProfile = edition.course_sg_profile
+      const importance = sgProfile.primary_skill?.category === cat ? 1 : 
+                        sgProfile.secondary_skill?.category === cat ? 0.5 : 0
+      sgTrends[cat].yearly_importance.push(importance)
+    })
+    
+    // Calculate trend direction
+    const recent = sgTrends[cat].yearly_importance.slice(-2).reduce((a: number, b: number) => a + b, 0) / 2
+    const older = sgTrends[cat].yearly_importance.slice(0, -2).reduce((a: number, b: number) => a + b, 0) / Math.max(1, sgTrends[cat].yearly_importance.length - 2)
+    
+    if (recent > older + 0.2) sgTrends[cat].trend_direction = 'increasing'
+    else if (recent < older - 0.2) sgTrends[cat].trend_direction = 'decreasing'
+  })
+  
+  return {
+    years_analyzed: editionAnalyses.length,
+    sg_category_trends: sgTrends,
+    consistency_note: "Multi-year analysis shows course characteristics evolution"
+  }
+}
+
+function generateTournamentDNA(editionAnalyses: any[]): any {
+  if (editionAnalyses.length === 0) return null
+  
+  // Find the most consistent SG requirements across years
+  const categoryOccurrence: any = {}
+  const categories = ['sg_ott', 'sg_app', 'sg_arg', 'sg_putt']
+  
+  categories.forEach(cat => {
+    categoryOccurrence[cat] = 0
+  })
+  
+  editionAnalyses.forEach(edition => {
+    const primary = edition.course_sg_profile.primary_skill?.category
+    const secondary = edition.course_sg_profile.secondary_skill?.category
+    
+    if (primary) categoryOccurrence[primary] += 2
+    if (secondary) categoryOccurrence[secondary] += 1
+  })
+  
+  // Sort by importance
+  const dnaProfile = Object.entries(categoryOccurrence)
+    .sort(([,a], [,b]) => (b as number) - (a as number))
+    .map(([category, score]) => ({
+      skill: category,
+      importance_score: score,
+      frequency: Math.round((score as number) / (editionAnalyses.length * 2) * 100)
+    }))
+  
+  return {
+    tournament_identity: dnaProfile[0],
+    skill_requirements: dnaProfile,
+    consistency_rating: dnaProfile[0].frequency > 70 ? 'high' : dnaProfile[0].frequency > 40 ? 'medium' : 'low',
+    predictive_reliability: editionAnalyses.length > 3 ? 'high' : editionAnalyses.length > 1 ? 'medium' : 'low'
   }
 } 
