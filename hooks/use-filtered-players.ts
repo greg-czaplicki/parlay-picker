@@ -90,6 +90,13 @@ export function useFilteredPlayers(
         if (matchupType === "3ball") {
           if (!matchup.player1_name || !matchup.player2_name || !matchup.player3_name) continue;
           
+          // Filter out matchups where any player has invalid odds (same logic as matchups table)
+          const odds1Valid = Number(matchup.odds1 ?? 0) > 1;
+          const odds2Valid = Number(matchup.odds2 ?? 0) > 1;
+          const odds3Valid = Number(matchup.odds3 ?? 0) > 1;
+          
+          if (!odds1Valid || !odds2Valid || !odds3Valid) continue;
+          
           const player1SG = extractSGData(matchup.player1_sg_data);
           const player2SG = extractSGData(matchup.player2_sg_data);
           const player3SG = extractSGData(matchup.player3_sg_data);
@@ -138,6 +145,12 @@ export function useFilteredPlayers(
         } else {
           // 2ball
           if (!matchup.player1_name || !matchup.player2_name) continue;
+          
+          // Filter out matchups where any player has invalid odds (same logic as matchups table)
+          const odds1Valid = Number(matchup.odds1 ?? 0) > 1;
+          const odds2Valid = Number(matchup.odds2 ?? 0) > 1;
+          
+          if (!odds1Valid || !odds2Valid) continue;
           
           const player1SG = extractSGData(matchup.player1_sg_data);
           const player2SG = extractSGData(matchup.player2_sg_data);

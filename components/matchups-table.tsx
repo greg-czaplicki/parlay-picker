@@ -382,15 +382,20 @@ export default function MatchupsTable({
     }
     return false;
   }).sort((a, b) => {
-    // Sort by tee time first (earliest first)
-    const aTeeTime = a.teetime ? new Date(a.teetime).getTime() : Infinity;
-    const bTeeTime = b.teetime ? new Date(b.teetime).getTime() : Infinity;
-    
-    if (aTeeTime !== bTeeTime) {
-      return aTeeTime - bTeeTime;
+    // Different sorting logic for 2ball vs 3ball matchups
+    if (matchupType === "3ball") {
+      // For 3ball: Sort by tee time first (players in same group play together)
+      const aTeeTime = a.teetime ? new Date(a.teetime).getTime() : Infinity;
+      const bTeeTime = b.teetime ? new Date(b.teetime).getTime() : Infinity;
+      
+      if (aTeeTime !== bTeeTime) {
+        return aTeeTime - bTeeTime;
+      }
     }
     
-    // Fallback to odds-based sorting (favorites first) 
+    // For 2ball: Skip tee time sorting (betting matchups, not playing groups)
+    // For 3ball: Fallback after tee time sorting
+    // Sort by odds-based value (favorites first)
     if (isSupabaseMatchupRow(a) && isSupabaseMatchupRow(b)) {
       const aMinOdds = Math.min(
         Number((a as SupabaseMatchupRow).odds1 ?? Infinity),
@@ -422,6 +427,11 @@ export default function MatchupsTable({
             <div className="flex justify-between items-center">
               <div>
                 <h2 className="text-xl font-bold">{matchupType === "3ball" ? "3-Ball" : "2-Ball"} Matchups</h2>
+                {matchupType === "2ball" && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    2-ball matchups are head-to-head betting markets. Players may have different tee times.
+                  </p>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <Dialog open={showFiltersDialog} onOpenChange={setShowFiltersDialog}>
@@ -558,7 +568,9 @@ export default function MatchupsTable({
                 <TableHeader className="bg-[#1e1e23]">
                   <TableRow>
                     <TableHead className="text-white text-center">Players</TableHead>
-                    <TableHead className="text-white text-center">Tee Time</TableHead>
+                    <TableHead className="text-white text-center">
+                      {matchupType === "3ball" ? "Group Tee Time" : "Individual Tee Times"}
+                    </TableHead>
                     <TableHead className="text-white text-center">Position</TableHead>
                     <TableHead className="text-white text-center">FanDuel Odds</TableHead>
                     <TableHead className="text-white text-center">Data Golf Odds</TableHead>

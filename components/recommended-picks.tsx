@@ -383,6 +383,11 @@ export default function RecommendedPicks({
             <CardTitle className="text-xl">
               Recommended Picks
             </CardTitle>
+            {matchupType === "2ball" && (
+              <p className="text-sm text-muted-foreground mt-2">
+                2-ball matchups are head-to-head betting markets between any two players.
+              </p>
+            )}
           </CardHeader>
           <CardContent className="p-6">
             <div className="space-y-4">
