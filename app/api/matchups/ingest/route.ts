@@ -17,6 +17,10 @@ function getDGModelURL(tour: string = 'pga') {
   return `https://feeds.datagolf.com/betting-tools/matchups-all-pairings?tour=${tour}&odds_format=decimal&file_format=json&key=${DATA_GOLF_API_KEY}`
 }
 
+function getDGFieldUpdatesURL(tour: string = 'pga') {
+  return `https://feeds.datagolf.com/field-updates?tour=${tour}&file_format=json&key=${DATA_GOLF_API_KEY}`
+}
+
 async function fetchDG(url: string) {
   const res = await fetch(url, { cache: 'no-store' })
   if (!res.ok) throw new Error(`Failed to fetch DataGolf: ${url}`)
@@ -45,18 +49,64 @@ function validateMatchList(matchData: any, marketType: string): any[] {
   return matchData.match_list;
 }
 
+// Create tee time mapping from field updates
+function createTeeTimeMap(fieldData: any, roundNum: number): Record<number, { teetime: string | null, start_hole: number }> {
+  const teeTimeMap: Record<number, { teetime: string | null, start_hole: number }> = {};
+  
+  if (!fieldData.field || !Array.isArray(fieldData.field)) {
+    console.log('⚠️ No field data available for tee times');
+    return teeTimeMap;
+  }
+  
+  const roundKey = `r${roundNum}_teetime`;
+  console.log(`📅 Creating tee time map for round ${roundNum} using field key: ${roundKey}`);
+  
+  fieldData.field.forEach((player: any) => {
+    if (player.dg_id && typeof player.dg_id === 'number') {
+      const teetime = player[roundKey];
+      const start_hole = player.start_hole || 1;
+      
+      // For R3+, null teetime means didn't make the cut
+      if (roundNum >= 3 && teetime === null) {
+        console.log(`❌ Player ${player.player_name} (${player.dg_id}) didn't make the cut (no R${roundNum} tee time)`);
+      }
+      
+      teeTimeMap[player.dg_id] = {
+        teetime: teetime,
+        start_hole: start_hole
+      };
+    }
+  });
+  
+  console.log(`✅ Created tee time map for ${Object.keys(teeTimeMap).length} players`);
+  return teeTimeMap;
+}
+
 function findPairing(pairings: any[], playerIds: number[]) {
   const inputIds = playerIds.filter(Boolean).map(Number).sort((a, b) => a - b);
+  
   for (const pairing of pairings) {
     const ids = [pairing.p1?.dg_id, pairing.p2?.dg_id, pairing.p3?.dg_id].filter(Boolean).map(Number).sort((a, b) => a - b);
-    if (ids.length === inputIds.length && ids.every((id, i) => id === inputIds[i])) {
-      return pairing;
+    
+    // For 2-ball matchups, we need to check if the 2 input players are part of any 3-player pairing
+    // OR if there's an exact 2-player match
+    if (inputIds.length === 2) {
+      // Check if both players are in this pairing (regardless of whether it's 2 or 3 players)
+      if (inputIds.every(id => ids.includes(id))) {
+        return pairing;
+      }
+    } else {
+      // For 3-ball matchups, require exact match
+      if (ids.length === inputIds.length && ids.every((id, i) => id === inputIds[i])) {
+        return pairing;
+      }
     }
   }
+  
   return null;
 }
 
-function transformMatchups(matchups: any[], pairings: any[], type: '2ball' | '3ball', event_id: number, round_num: number, created_at: string, dgIdToUuid: Record<number, string>) {
+function transformMatchups(matchups: any[], pairings: any[], type: '2ball' | '3ball', event_id: number, round_num: number, created_at: string, dgIdToUuid: Record<number, string>, teeTimeMap: Record<number, { teetime: string | null, start_hole: number }>) {
   // Debug: Log the first few 2-ball matchups' odds structure
   if (type === '2ball' && matchups.length > 0) {
     console.log(`\n=== 2-BALL ODDS DEBUG (${type}) ===`);
@@ -75,7 +125,31 @@ function transformMatchups(matchups: any[], pairings: any[], type: '2ball' | '3b
     const playerIds = type === '3ball'
       ? [m.p1_dg_id, m.p2_dg_id, m.p3_dg_id]
       : [m.p1_dg_id, m.p2_dg_id];
-    const pairing = findPairing(pairings, playerIds);
+    
+    // Get tee time from the first player (they should all have the same tee time in a group)
+    const player1TeeTime = teeTimeMap[m.p1_dg_id];
+    const player2TeeTime = teeTimeMap[m.p2_dg_id];
+    
+    // Use the earliest tee time if they differ, or fallback to pairing logic
+    let teetime = player1TeeTime?.teetime || player2TeeTime?.teetime;
+    let start_hole = player1TeeTime?.start_hole || player2TeeTime?.start_hole || 1;
+    
+    // For 3-ball, check the third player too
+    if (type === '3ball' && m.p3_dg_id) {
+      const player3TeeTime = teeTimeMap[m.p3_dg_id];
+      if (!teetime && player3TeeTime?.teetime) {
+        teetime = player3TeeTime.teetime;
+        start_hole = player3TeeTime.start_hole || 1;
+      }
+    }
+    
+    // Fallback to pairing logic if no tee time found
+    if (!teetime) {
+      const pairing = findPairing(pairings, playerIds);
+      teetime = pairing?.teetime ?? null;
+      start_hole = pairing?.start_hole ?? start_hole;
+    }
+    
     return {
       event_id,
       round_num,
@@ -95,9 +169,9 @@ function transformMatchups(matchups: any[], pairings: any[], type: '2ball' | '3b
       dg_odds1: m.odds?.datagolf?.p1 ?? null,
       dg_odds2: m.odds?.datagolf?.p2 ?? null,
       dg_odds3: type === '3ball' ? (m.odds?.datagolf?.p3 ?? null) : null,
-      start_hole: pairing?.start_hole ?? null,
-      teetime: pairing?.teetime ?? null,
-      tee_time: pairing?.teetime ? new Date(pairing.teetime).toISOString() : null,
+      start_hole: start_hole,
+      teetime: teetime,
+      tee_time: teetime ? new Date(teetime).toISOString() : null,
       created_at,
     }
   });
@@ -121,11 +195,12 @@ export async function POST(req: NextRequest) {
 
   const supabase = createSupabaseClient()
   try {
-    // Fetch from DataGolf (main + model odds) for the specified tour
-    const [dg3, dg2, dgModel] = await Promise.all([
+    // Fetch from DataGolf (main + model odds + field updates) for the specified tour
+    const [dg3, dg2, dgModel, dgField] = await Promise.all([
       fetchDG(getDG3BallURL(tour)),
       fetchDG(getDG2BallURL(tour)),
       fetchDG(getDGModelURL(tour)),
+      fetchDG(getDGFieldUpdatesURL(tour)),
     ])
 
     // Validate and normalize match lists
@@ -226,8 +301,12 @@ export async function POST(req: NextRequest) {
       if (row.dg_id && row.uuid) dgIdToUuid[Number(row.dg_id)] = row.uuid;
     });
 
-    const matchups3 = transformMatchups(matchList3, dgModel.pairings, '3ball', event_id, round_num_3, created_at_3, dgIdToUuid);
-    const matchups2 = transformMatchups(matchList2, dgModel.pairings, '2ball', event_id, round_num_2, created_at_2, dgIdToUuid);
+    // Create tee time maps for each round
+    const teeTimeMap3 = createTeeTimeMap(dgField, round_num_3);
+    const teeTimeMap2 = createTeeTimeMap(dgField, round_num_2);
+
+    const matchups3 = transformMatchups(matchList3, dgModel.pairings, '3ball', event_id, round_num_3, created_at_3, dgIdToUuid, teeTimeMap3);
+    const matchups2 = transformMatchups(matchList2, dgModel.pairings, '2ball', event_id, round_num_2, created_at_2, dgIdToUuid, teeTimeMap2);
     
     // Insert into matchups table
     const allMatchups = [...matchups3, ...matchups2]
