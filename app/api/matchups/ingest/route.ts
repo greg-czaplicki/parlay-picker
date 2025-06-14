@@ -177,6 +177,84 @@ function transformMatchups(matchups: any[], pairings: any[], type: '2ball' | '3b
   });
 }
 
+// New function to update tee times for existing matchups
+async function updateExistingTeetimes(supabase: any, event_id: number, round_num: number, teeTimeMap: Record<number, { teetime: string | null, start_hole: number }>) {
+  console.log(`🔄 Updating tee times for existing matchups - Event ${event_id}, Round ${round_num}`);
+  
+  // Get all existing matchups for this event/round
+  const { data: existingMatchups, error: fetchError } = await supabase
+    .from('matchups')
+    .select('id, player1_dg_id, player2_dg_id, player3_dg_id, teetime, type')
+    .eq('event_id', event_id)
+    .eq('round_num', round_num);
+    
+  if (fetchError) {
+    throw new Error(`Could not fetch existing matchups: ${fetchError.message}`);
+  }
+  
+  if (!existingMatchups || existingMatchups.length === 0) {
+    console.log('⚠️ No existing matchups found to update');
+    return { updated: 0 };
+  }
+  
+  console.log(`📊 Found ${existingMatchups.length} existing matchups to check for tee time updates`);
+  
+  const updates = [];
+  
+  for (const matchup of existingMatchups) {
+    // Get tee time from any of the players in the matchup
+    const player1TeeTime = teeTimeMap[matchup.player1_dg_id];
+    const player2TeeTime = teeTimeMap[matchup.player2_dg_id];
+    const player3TeeTime = matchup.player3_dg_id ? teeTimeMap[matchup.player3_dg_id] : null;
+    
+    // Use the first available tee time
+    let newTeetime = player1TeeTime?.teetime || player2TeeTime?.teetime || player3TeeTime?.teetime;
+    let start_hole = player1TeeTime?.start_hole || player2TeeTime?.start_hole || player3TeeTime?.start_hole || 1;
+    
+    // Only update if the tee time has changed
+    if (newTeetime !== matchup.teetime) {
+      updates.push({
+        id: matchup.id,
+        teetime: newTeetime,
+        tee_time: newTeetime ? new Date(newTeetime).toISOString() : null,
+        start_hole: start_hole
+      });
+      
+      if (newTeetime) {
+        console.log(`✅ Will update matchup ${matchup.id} (${matchup.type}) with tee time: ${newTeetime}`);
+      } else {
+        console.log(`❌ Will clear tee time for matchup ${matchup.id} (${matchup.type}) - player(s) didn't make cut`);
+      }
+    }
+  }
+  
+  // Batch update all matchups that need tee time changes
+  if (updates.length > 0) {
+    console.log(`🔄 Updating ${updates.length} matchups with new tee times...`);
+    
+    for (const update of updates) {
+      const { error: updateError } = await supabase
+        .from('matchups')
+        .update({
+          teetime: update.teetime,
+          tee_time: update.tee_time,
+          start_hole: update.start_hole
+        })
+        .eq('id', update.id);
+        
+      if (updateError) {
+        console.error(`❌ Failed to update matchup ${update.id}:`, updateError);
+      }
+    }
+    
+    console.log(`✅ Successfully updated tee times for ${updates.length} matchups`);
+  } else {
+    console.log('ℹ️ No tee time updates needed - all matchups already have current tee times');
+  }
+  
+  return { updated: updates.length };
+}
+
 export async function POST(req: NextRequest) {
   // Security: require secret
   const auth = req.headers.get('authorization')
@@ -207,15 +285,58 @@ export async function POST(req: NextRequest) {
     const matchList3 = validateMatchList(dg3, '3-ball');
     const matchList2 = validateMatchList(dg2, '2-ball');
 
-    // If no matchups are available at all, return early
+    // If no matchups are available, try to update tee times for existing matchups
     if (matchList3.length === 0 && matchList2.length === 0) {
+      console.log('⚠️ No new matchups available - attempting to update existing tee times');
+      
+      const eventName = dg3.event_name || dg2.event_name || dgField.event_name;
+      const currentRound = dgField.current_round;
+      
+      if (eventName) {
+        // Find the event_id
+        const { data: eventRows, error: eventError } = await supabase
+          .from('tournaments')
+          .select('event_id')
+          .eq('event_name', eventName)
+          .limit(1);
+        
+        if (!eventError && eventRows && eventRows.length > 0) {
+          const event_id = eventRows[0].event_id;
+          
+          // Create tee time map for current round
+          const teeTimeMap = createTeeTimeMap(dgField, currentRound);
+          
+          // Update existing matchups
+          const updateResult = await updateExistingTeetimes(supabase, event_id, currentRound, teeTimeMap);
+          
+          return NextResponse.json({
+            inserted: 0,
+            updated: updateResult.updated,
+            three_ball: 0,
+            two_ball: 0,
+            message: `No new matchups available. Updated tee times for ${updateResult.updated} existing matchups.`,
+            tour: tour,
+            event_name: eventName,
+            round: currentRound,
+            debug: {
+              eventName: eventName,
+              match_list_3_type: typeof dg3.match_list,
+              match_list_2_type: typeof dg2.match_list,
+              match_list_3_value: dg3.match_list,
+              match_list_2_value: dg2.match_list,
+            }
+          });
+        }
+      }
+      
       return NextResponse.json({ 
-        inserted: 0, 
+        inserted: 0,
+        updated: 0,
         three_ball: 0,
         two_ball: 0,
-        message: `No matchups available for ${tour.toUpperCase()} tour`,
+        message: `No matchups available for ${tour.toUpperCase()} tour and could not update existing tee times`,
         debug: {
-          eventName: dg3.event_name,
+          eventName: eventName,
           match_list_3_type: typeof dg3.match_list,
           match_list_2_type: typeof dg2.match_list,
           match_list_3_value: dg3.match_list,
