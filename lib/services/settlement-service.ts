@@ -298,6 +298,16 @@ export class SettlementService {
       return { winner: null, reason: `Player ${player1Withdrew ? '1' : '2'} withdrew`, isVoid: true }
     }
 
+    // Check if both players have completed their round
+    const player1Finished = this.isRoundComplete(player1)
+    const player2Finished = this.isRoundComplete(player2)
+    
+    if (!player1Finished || !player2Finished) {
+      const player1Thru = player1.thru || 0
+      const player2Thru = player2.thru || 0
+      throw new Error(`Cannot settle - players have not completed their round. Player 1: ${player1Thru} holes, Player 2: ${player2Thru} holes`)
+    }
+
     // For round-based parlays, compare round scores directly
     const score1 = player1.today_score || player1.total_score || 0
     const score2 = player2.today_score || player2.total_score || 0
@@ -336,6 +346,18 @@ export class SettlementService {
         reason: `Player${withdrawnPlayers.length > 1 ? 's' : ''} ${withdrawnPlayers.join(', ')} withdrew`, 
         isVoid: true 
       }
+    }
+
+    // Check if all players have completed their round
+    const player1Finished = this.isRoundComplete(player1)
+    const player2Finished = this.isRoundComplete(player2)
+    const player3Finished = this.isRoundComplete(player3)
+    
+    if (!player1Finished || !player2Finished || !player3Finished) {
+      const player1Thru = player1.thru || 0
+      const player2Thru = player2.thru || 0
+      const player3Thru = player3.thru || 0
+      throw new Error(`Cannot settle - players have not completed their round. Player 1: ${player1Thru} holes, Player 2: ${player2Thru} holes, Player 3: ${player3Thru} holes`)
     }
 
     // For round-based parlays, compare round scores directly
@@ -389,6 +411,19 @@ export class SettlementService {
   private isWithdrawn(player: PlayerStats): boolean {
     const position = player.current_position?.toString().toLowerCase()
     return position === 'wd'
+  }
+
+  /**
+   * Check if player has completed their round
+   */
+  private isRoundComplete(player: PlayerStats): boolean {
+    // If explicitly marked as finished, trust that
+    if (player.finished === true) return true
+    if (player.finished === false) return false
+    
+    // Otherwise check holes completed - standard golf round is 18 holes
+    const holesCompleted = player.thru || 0
+    return holesCompleted >= 18
   }
 
   /**

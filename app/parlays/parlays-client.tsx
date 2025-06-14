@@ -215,16 +215,17 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
         const syncRes = await fetch('/api/live-stats/sync', { method: 'GET' });
         if (!syncRes.ok) throw new Error('Failed to sync live stats');
         
-        // Then settle any unsettled parlays
-        const settleRes = await fetch('/api/settle', { 
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ autoDetect: true })
-        });
-        
-        if (!settleRes.ok) throw new Error('Failed to settle parlays');
-        
-        const settleData = await settleRes.json();
+        // DISABLED: Settlement is now handled by dedicated background process
+        // to avoid duplicate settlement logic and ensure consistent behavior
+        // const settleRes = await fetch('/api/settle', { 
+        //   method: 'POST',
+        //   headers: { 'Content-Type': 'application/json' },
+        //   body: JSON.stringify({ autoDetect: true })
+        // });
+        // 
+        // if (!settleRes.ok) throw new Error('Failed to settle parlays');
+        // 
+        // const settleData = await settleRes.json();
         
         // Update last sync timestamp
         const now = new Date();
@@ -233,21 +234,19 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
           localStorage.setItem('lastSync', now.toISOString());
         }
         
-        // Show success message only if settlements were made
-        if (settleData.total_settlements > 0) {
-          toast({ 
-            title: 'Auto-Settlement Complete', 
-            description: `Settled ${settleData.total_settlements} picks across ${settleData.events_checked || 0} events`,
-            variant: 'default' 
-          });
-        }
+        // Show success message for sync only
+        toast({ 
+          title: 'Live Stats Synced', 
+          description: 'Latest player data has been updated',
+          variant: 'default' 
+        });
         
         // Refresh parlay data
         await refetch();
       } catch (err: any) {
         toast({ 
-          title: 'Auto-Process Failed', 
-          description: err.message || 'Could not auto-sync and settle',
+          title: 'Auto-Sync Failed', 
+          description: err.message || 'Could not sync live stats',
           variant: 'destructive' 
         });
       } finally {
@@ -255,7 +254,7 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
       }
     };
 
-    // Run auto-sync and settle on mount
+    // Run auto-sync on mount (settlement disabled)
     autoSyncAndSettle();
   }, []); // Empty dependency array means this runs once on mount
 
@@ -384,7 +383,7 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
           {autoProcessing && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="animate-spin w-4 h-4" />
-              Auto-syncing and settling...
+              Syncing live stats...
             </div>
           )}
           <span className="text-xs text-muted-foreground">

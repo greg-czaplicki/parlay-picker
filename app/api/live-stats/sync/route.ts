@@ -287,6 +287,39 @@ export async function GET() {
             logger.warn(`Snapshot trigger check failed for ${eventName}:`, snapshotError);
             // Don't fail the sync if snapshot triggers fail
           }
+
+          // 🎯 NEW: Trigger automatic settlement after successful sync
+          try {
+            if (eventId) {
+              logger.info(`Triggering automatic settlement for event ${eventId} (${eventName})`);
+              
+              // Call the settlement API internally
+              const settlementResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/settle`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  eventId: eventId,
+                  method: 'automatic'
+                })
+              });
+
+              if (settlementResponse.ok) {
+                const settlementData = await settlementResponse.json();
+                if (settlementData.total_settlements > 0) {
+                  logger.info(`Settlement completed for event ${eventId}: ${settlementData.total_settlements} picks settled`);
+                } else {
+                  logger.debug(`No settlements needed for event ${eventId}`);
+                }
+              } else {
+                logger.warn(`Settlement API call failed for event ${eventId}: ${settlementResponse.status}`);
+              }
+            }
+          } catch (settlementError) {
+            logger.warn(`Settlement trigger failed for ${eventName}:`, settlementError);
+            // Don't fail the sync if settlement fails
+          }
         }
       } catch (err: any) {
         errors.push(err.message || String(err));
