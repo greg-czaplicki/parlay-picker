@@ -382,20 +382,15 @@ export default function MatchupsTable({
     }
     return false;
   }).sort((a, b) => {
-    // Different sorting logic for 2ball vs 3ball matchups
-    if (matchupType === "3ball") {
-      // For 3ball: Sort by tee time first (players in same group play together)
-      const aTeeTime = a.teetime ? new Date(a.teetime).getTime() : Infinity;
-      const bTeeTime = b.teetime ? new Date(b.teetime).getTime() : Infinity;
-      
-      if (aTeeTime !== bTeeTime) {
-        return aTeeTime - bTeeTime;
-      }
+    // Sort by tee time first for both 2ball and 3ball matchups (earliest first)
+    const aTeeTime = a.teetime ? new Date(a.teetime).getTime() : Infinity;
+    const bTeeTime = b.teetime ? new Date(b.teetime).getTime() : Infinity;
+    
+    if (aTeeTime !== bTeeTime) {
+      return aTeeTime - bTeeTime;
     }
     
-    // For 2ball: Skip tee time sorting (betting matchups, not playing groups)
-    // For 3ball: Fallback after tee time sorting
-    // Sort by odds-based value (favorites first)
+    // Fallback after tee time sorting: Sort by odds-based value (favorites first)
     if (isSupabaseMatchupRow(a) && isSupabaseMatchupRow(b)) {
       const aMinOdds = Math.min(
         Number((a as SupabaseMatchupRow).odds1 ?? Infinity),
