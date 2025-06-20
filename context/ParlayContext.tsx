@@ -1,6 +1,6 @@
 "use client"
 
-import React, { createContext, useContext, useState, ReactNode, useEffect } from "react"
+import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from "react"
 
 export type ParlaySelection = {
   id: string
@@ -66,11 +66,16 @@ export function ParlayProvider({ children }: { children: ReactNode }) {
   }, [selections]);
 
   // Add selection to parlay
-  const addSelection = (newSelection: Partial<ParlaySelection>) => {
+  const addSelection = useCallback((newSelection: Partial<ParlaySelection>) => {
     if (typeof newSelection.id !== 'string' || newSelection.id.length === 0) {
       // Only allow adding selections with a valid uuid as id
       return;
     }
+    // Check for duplicate ID first (prevents multiple clicks on same selection)
+    if (selections.some(s => s.id === newSelection.id)) {
+      return;
+    }
+    // Check for duplicate player name as secondary check
     if (newSelection.player && newSelection.player.trim() !== "" &&
         selections.some(s => s.player.toLowerCase() === newSelection.player?.toLowerCase())) {
       return
@@ -89,14 +94,14 @@ export function ParlayProvider({ children }: { children: ReactNode }) {
     } as ParlaySelection]
     setSelections(updatedSelections)
     recalculate(updatedSelections, stake)
-  }
+  }, [selections, stake])
 
   // Remove selection from parlay
-  const removeSelection = (id: string) => {
+  const removeSelection = useCallback((id: string) => {
     const updatedSelections = selections.filter((selection) => selection.id !== id)
     setSelections(updatedSelections)
     recalculate(updatedSelections, stake)
-  }
+  }, [selections, stake])
 
   // Update a selection field
   const updateSelection = (id: string, field: keyof ParlaySelection, value: string | number) => {

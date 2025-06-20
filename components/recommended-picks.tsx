@@ -593,7 +593,16 @@ export default function RecommendedPicks({
                         <Button
                           variant={hasMatchupConflict ? "outline" : "default"}
                           size="lg"
-                          onClick={() => {
+                          onClick={(e) => {
+                                                  // Prevent double clicks
+                      const button = e.currentTarget;
+                      button.disabled = true;
+                      setTimeout(() => {
+                        if (button) {
+                          button.disabled = false;
+                        }
+                      }, 1000);
+                            
                             if (hasMatchupConflict) {
                               // Show warning toast for betting against yourself
                               const conflictNames = conflictingOpponents.map(o => formatPlayerName(o.name)).join(', ');
@@ -619,7 +628,7 @@ export default function RecommendedPicks({
                             }
                             addToParlay(selection, playerId)
                           }}
-                          className={`w-full py-3 ${hasMatchupConflict ? 'border-amber-400 text-amber-700 hover:bg-amber-500' : ''}`}
+                          className={`w-full py-3 transition-all duration-200 hover:scale-[1.02] active:scale-95 ${hasMatchupConflict ? 'border-amber-400 text-amber-700 hover:bg-amber-500' : ''}`}
                         >
                           <Plus className="h-5 w-5 mr-2" />
                           {hasMatchupConflict 

@@ -859,7 +859,7 @@ export default function MatchupsTable({
                                         onClick={() => {
                                           if (typeof player.dg_id !== 'number' || isNaN(player.dg_id)) return;
                                           // Remove from current parlay
-                                          removeSelection(String(player.dg_id));
+                                          removeSelection(`${player.dg_id}-${matchup.uuid}`);
                                         }}
                                       >
                                         <CheckCircle className="text-green-400" size={16} />
@@ -872,9 +872,18 @@ export default function MatchupsTable({
                                       <Button 
                                         size="icon" 
                                         variant="outline" 
-                                        className="h-6 w-6 p-0" 
-                                        onClick={() => {
+                                        className="h-6 w-6 p-0 transition-all duration-200 hover:scale-105 active:scale-95" 
+                                        onClick={(e) => {
                                           if (typeof player.dg_id !== 'number' || isNaN(player.dg_id)) return;
+                                          
+                                          // Prevent double clicks
+                                          const button = e.currentTarget;
+                                          button.disabled = true;
+                                          setTimeout(() => {
+                                            if (button) {
+                                              button.disabled = false;
+                                            }
+                                          }, 1000);
                                           
                                           // Check if user is already picking someone else from this group
                                           const otherPlayersInGroup = sortedPlayers.filter(p => 
@@ -892,7 +901,7 @@ export default function MatchupsTable({
                                           }
                                           
                                           addSelection({
-                                            id: String(player.dg_id),
+                                            id: `${player.dg_id}-${matchup.uuid}`,
                                             matchupType,
                                             group: `Event ${eventId || 'Unknown'}`,
                                             player: formatPlayerName(player.name),
@@ -1175,7 +1184,7 @@ export default function MatchupsTable({
                                         onClick={() => {
                                           if (typeof player.dg_id !== 'number' || isNaN(player.dg_id)) return;
                                           // Remove from current parlay
-                                          removeSelection(String(player.dg_id));
+                                          removeSelection(`${player.dg_id}-${m2.uuid}`);
                                         }}
                                       >
                                         <CheckCircle className="text-green-400" size={16} />
@@ -1188,9 +1197,18 @@ export default function MatchupsTable({
                                       <Button 
                                         size="icon" 
                                         variant="outline" 
-                                        className="h-6 w-6 p-0" 
-                                        onClick={() => {
+                                        className="h-6 w-6 p-0 transition-all duration-200 hover:scale-105 active:scale-95" 
+                                        onClick={(e) => {
                                           if (typeof player.dg_id !== 'number' || isNaN(player.dg_id)) return;
+                                          
+                                          // Prevent double clicks
+                                          const button = e.currentTarget;
+                                          button.disabled = true;
+                                          setTimeout(() => {
+                                            if (button) {
+                                              button.disabled = false;
+                                            }
+                                          }, 1000);
                                           
                                           // Check if user is already picking someone else from this group
                                           const otherPlayersInGroup = sortedPlayers.filter(p => 
@@ -1208,7 +1226,7 @@ export default function MatchupsTable({
                                           }
                                           
                                           addSelection({
-                                            id: String(player.dg_id),
+                                            id: `${player.dg_id}-${m2.uuid}`,
                                             matchupType,
                                             group: `Event ${eventId || 'Unknown'}`,
                                             player: formatPlayerName(player.name),
