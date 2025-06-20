@@ -83,6 +83,11 @@ interface SupabaseMatchupRow2Ball {
   dg_odds2?: number | null;
   teetime?: string | null;
   tee_time?: string | null;
+  // Individual player tee times for 2-ball matchups
+  player1_teetime?: string | null;
+  player2_teetime?: string | null;
+  player1_tee_time?: string | null;
+  player2_tee_time?: string | null;
 }
 
 // Interface for live tournament stats
@@ -1244,13 +1249,44 @@ export default function MatchupsTable({
                           {/* Tee Time column for 2-ball */}
                           <TableCell className="text-center">
                             {(() => {
-                              const { localTime: teeTimeLocal, easternDiff: teeTimeDiff } = formatTeeTime(m2.teetime ?? null);
-                              return (
-                                <div className="text-center">
-                                  <div className="text-xs font-medium">{teeTimeLocal}</div>
-                                  {teeTimeDiff && <div className="text-xs text-muted-foreground">{teeTimeDiff}</div>}
-                                </div>
-                              );
+                              // Show individual player tee times if available, otherwise show matchup tee time
+                              if (m2.player1_teetime && m2.player2_teetime) {
+                                const { localTime: player1Time, easternDiff: player1Diff } = formatTeeTime(m2.player1_teetime);
+                                const { localTime: player2Time, easternDiff: player2Diff } = formatTeeTime(m2.player2_teetime);
+                                
+                                // If both players have the same tee time, show just one
+                                if (m2.player1_teetime === m2.player2_teetime) {
+                                  return (
+                                    <div className="text-center">
+                                      <div className="text-xs font-medium">{player1Time}</div>
+                                      {player1Diff && <div className="text-xs text-muted-foreground">{player1Diff}</div>}
+                                    </div>
+                                  );
+                                } else {
+                                  // Different tee times - show both
+                                  return (
+                                    <div className="text-center space-y-1">
+                                      <div className="border-b border-border/30 pb-1">
+                                        <div className="text-xs font-medium">{player1Time}</div>
+                                        {player1Diff && <div className="text-xs text-muted-foreground">{player1Diff}</div>}
+                                      </div>
+                                      <div>
+                                        <div className="text-xs font-medium">{player2Time}</div>
+                                        {player2Diff && <div className="text-xs text-muted-foreground">{player2Diff}</div>}
+                                      </div>
+                                    </div>
+                                  );
+                                }
+                              } else {
+                                // Fallback to matchup tee time
+                                const { localTime: teeTimeLocal, easternDiff: teeTimeDiff } = formatTeeTime(m2.teetime ?? null);
+                                return (
+                                  <div className="text-center">
+                                    <div className="text-xs font-medium">{teeTimeLocal}</div>
+                                    {teeTimeDiff && <div className="text-xs text-muted-foreground">{teeTimeDiff}</div>}
+                                  </div>
+                                );
+                              }
                             })()}
                           </TableCell>
                           

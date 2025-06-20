@@ -53,6 +53,10 @@ export async function GET(req: NextRequest) {
         start_hole,
         teetime,
         tee_time,
+        player1_teetime,
+        player2_teetime,
+        player1_tee_time,
+        player2_tee_time,
         created_at
       `)
 

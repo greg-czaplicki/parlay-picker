@@ -150,7 +150,8 @@ function transformMatchups(matchups: any[], pairings: any[], type: '2ball' | '3b
       start_hole = pairing?.start_hole ?? start_hole;
     }
     
-    return {
+    // For 2-ball matchups, also store individual player tee times
+    const record: any = {
       event_id,
       round_num,
       type,
@@ -173,7 +174,17 @@ function transformMatchups(matchups: any[], pairings: any[], type: '2ball' | '3b
       teetime: teetime,
       tee_time: teetime ? new Date(teetime).toISOString() : null,
       created_at,
+    };
+
+    // For 2-ball matchups, store individual player tee times
+    if (type === '2ball') {
+      record.player1_teetime = player1TeeTime?.teetime ?? null;
+      record.player2_teetime = player2TeeTime?.teetime ?? null;
+      record.player1_tee_time = player1TeeTime?.teetime ? new Date(player1TeeTime.teetime).toISOString() : null;
+      record.player2_tee_time = player2TeeTime?.teetime ? new Date(player2TeeTime.teetime).toISOString() : null;
     }
+
+    return record;
   });
 }
 
@@ -213,12 +224,22 @@ async function updateExistingTeetimes(supabase: any, event_id: number, round_num
     
     // Only update if the tee time has changed
     if (newTeetime !== matchup.teetime) {
-      updates.push({
+      const updateRecord: any = {
         id: matchup.id,
         teetime: newTeetime,
         tee_time: newTeetime ? new Date(newTeetime).toISOString() : null,
         start_hole: start_hole
-      });
+      };
+
+      // For 2-ball matchups, also update individual player tee times
+      if (matchup.type === '2ball') {
+        updateRecord.player1_teetime = player1TeeTime?.teetime ?? null;
+        updateRecord.player2_teetime = player2TeeTime?.teetime ?? null;
+        updateRecord.player1_tee_time = player1TeeTime?.teetime ? new Date(player1TeeTime.teetime).toISOString() : null;
+        updateRecord.player2_tee_time = player2TeeTime?.teetime ? new Date(player2TeeTime.teetime).toISOString() : null;
+      }
+
+      updates.push(updateRecord);
       
       if (newTeetime) {
         console.log(`✅ Will update matchup ${matchup.id} (${matchup.type}) with tee time: ${newTeetime}`);
@@ -233,13 +254,23 @@ async function updateExistingTeetimes(supabase: any, event_id: number, round_num
     console.log(`🔄 Updating ${updates.length} matchups with new tee times...`);
     
     for (const update of updates) {
+      const updateFields: any = {
+        teetime: update.teetime,
+        tee_time: update.tee_time,
+        start_hole: update.start_hole
+      };
+
+      // Include individual player tee times if they exist in the update record
+      if (update.player1_teetime !== undefined) {
+        updateFields.player1_teetime = update.player1_teetime;
+        updateFields.player2_teetime = update.player2_teetime;
+        updateFields.player1_tee_time = update.player1_tee_time;
+        updateFields.player2_tee_time = update.player2_tee_time;
+      }
+
       const { error: updateError } = await supabase
         .from('matchups')
-        .update({
-          teetime: update.teetime,
-          tee_time: update.tee_time,
-          start_hole: update.start_hole
-        })
+        .update(updateFields)
         .eq('id', update.id);
         
       if (updateError) {
