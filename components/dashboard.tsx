@@ -28,6 +28,8 @@ import { Filter as FilterIcon, CloudRain } from "lucide-react"
 import { OddsFreshnessIndicator } from "@/components/odds-freshness-indicator"
 import { ManualIngestButton } from "@/components/manual-ingest-button"
 import { useMatchupsQuery } from "@/hooks/use-matchups-query"
+import { PlayerSearchWithCount, usePlayerSearch } from "@/components/ui/player-search"
+import { formatPlayerName } from "@/lib/utils"
 
 // Register filters once at module load
 registerCoreFilters()
@@ -66,6 +68,55 @@ export default function Dashboard({
     isError: isErrorMatchups, 
     error: errorMatchups 
   } = useMatchupsQuery(selectedEventId, matchupType, currentRound);
+
+  // **PLAYER SEARCH** - Centralized search for both matchups and recommendations
+  const [playerSearchTerm, setPlayerSearchTerm] = useState("")
+  
+  // Create a flat list of all players from matchups for search
+  const allPlayersFromMatchups = (sharedMatchupsData || []).flatMap(matchup => {
+    const players: Array<{ name: string; matchupId: string }> = []
+    
+    // Handle both 3ball and 2ball matchups
+    if (matchup.type === '3ball') {
+      players.push({ name: matchup.player1_name, matchupId: matchup.uuid })
+      players.push({ name: matchup.player2_name, matchupId: matchup.uuid })
+      if (matchup.player3_name) {
+        players.push({ name: matchup.player3_name, matchupId: matchup.uuid })
+      }
+    } else if (matchup.type === '2ball') {
+      players.push({ name: matchup.player1_name, matchupId: matchup.uuid })
+      players.push({ name: matchup.player2_name, matchupId: matchup.uuid })
+    }
+    
+    return players
+  })
+
+  // Use player search to get highlighting function and match count
+  const { 
+    matchingCount: searchMatchingCount,
+    highlightText 
+  } = usePlayerSearch({
+    players: allPlayersFromMatchups,
+    searchTerm: playerSearchTerm,
+    caseSensitive: false
+  })
+
+  // Filter matchups based on search - show matchup if any player matches
+  const searchFilteredMatchups = playerSearchTerm 
+    ? (sharedMatchupsData || []).filter(matchup => {
+        const playerNames = matchup.type === '3ball' 
+          ? [matchup.player1_name, matchup.player2_name, matchup.player3_name].filter(Boolean)
+          : [matchup.player1_name, matchup.player2_name]
+        
+        return playerNames.some(name => {
+          if (!name) return false
+          const formattedName = formatPlayerName(name)
+          const nameToSearch = formattedName.toLowerCase()
+          const searchTerms = playerSearchTerm.toLowerCase().split(' ').filter(term => term.length > 0)
+          return searchTerms.every(term => nameToSearch.includes(term))
+        })
+      })
+    : sharedMatchupsData
 
   // Filter management - only for recommended picks
   const filterManager = useFilterManager({ 
@@ -207,9 +258,6 @@ export default function Dashboard({
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <div className="relative">
-              <Input placeholder="Search players..." className="pl-10 w-64 bg-[#1e1e23] border-none rounded-xl" />
-            </div>
             <Avatar>
               <AvatarImage src="/placeholder.svg" />
               <AvatarFallback>JD</AvatarFallback>
@@ -340,6 +388,20 @@ export default function Dashboard({
             </Card>
           </div>
 
+          {/* Player Search - Positioned above content for better UX */}
+          <div className="md:col-span-3">
+            <div className="flex justify-center">
+              <PlayerSearchWithCount
+                players={allPlayersFromMatchups}
+                placeholder="Search players across matchups & picks..."
+                className="w-full bg-[#1e1e23] border-none rounded-xl"
+                caseSensitive={false}
+                value={playerSearchTerm}
+                onSearchChange={setPlayerSearchTerm}
+              />
+            </div>
+          </div>
+
           {/* Row 2: Main Matchups Table (Left) - Larger allocation */}
           <div className="md:col-span-2">
             <MatchupsTable 
@@ -348,11 +410,14 @@ export default function Dashboard({
               roundNum={currentRound}
               showFilters={true}
               compactFilters={false}
-              // Pass shared data to prevent duplicate API calls
-              sharedMatchupsData={sharedMatchupsData}
+              // Pass search-filtered shared data to prevent duplicate API calls
+              sharedMatchupsData={searchFilteredMatchups}
               isLoading={isLoadingMatchups}
               isError={isErrorMatchups}
               error={errorMatchups}
+              // Pass search props for highlighting
+              playerSearchTerm={playerSearchTerm}
+              highlightText={highlightText}
             />
           </div>
 
@@ -370,6 +435,9 @@ export default function Dashboard({
               isLoading={isLoadingRecommendations}
               isError={isErrorRecommendations}
               error={errorRecommendations}
+              // Pass search props for highlighting
+              playerSearchTerm={playerSearchTerm}
+              highlightText={highlightText}
             />
           </div>
         </div>

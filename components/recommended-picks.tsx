@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -17,6 +17,7 @@ import { FilterPanel } from "@/components/ui/filter-panel"
 import { FilterChipList } from "@/components/ui/filter-chip"
 import { Badge } from "@/components/ui/badge"
 import { formatPlayerName } from "@/lib/utils"
+// Player search functionality is now handled by parent component
 
 interface RecommendedPicksProps {
   eventId: number | null;
@@ -31,6 +32,9 @@ interface RecommendedPicksProps {
   isLoading?: boolean;
   isError?: boolean;
   error?: Error | null;
+  // Player search props
+  playerSearchTerm?: string;
+  highlightText?: (text: string) => React.ReactNode;
 }
 
 // Helper to format Decimal odds into American odds string
@@ -92,6 +96,8 @@ export default function RecommendedPicks({
   isLoading: externalIsLoading,
   isError: externalIsError,
   error: externalError,
+  playerSearchTerm,
+  highlightText,
 }: RecommendedPicksProps) {
   // Get the parlay context
   const { addSelection, removeSelection, selections } = useParlayContext()
@@ -166,8 +172,22 @@ export default function RecommendedPicks({
   const isPlayerInAnyParlay = (playerName: string) =>
     allParlayPicks.some((pick: any) => formatPlayerName(pick.picked_player_name || '').toLowerCase() === formatPlayerName(playerName).toLowerCase());
 
-  // Use filtered recommendations directly - no cross-filtering with main matchups table
-  const finalRecommendations = filteredRecommendations;
+  // Add player search state and functionality
+
+
+  // Apply player search filtering if search term is provided
+  const finalRecommendations = useMemo(() => {
+    if (!playerSearchTerm) {
+      return filteredRecommendations || []
+    }
+    
+    return (filteredRecommendations || []).filter(player => {
+      const formattedName = formatPlayerName(player.name)
+      const nameToSearch = formattedName.toLowerCase()
+      const searchTerms = playerSearchTerm.toLowerCase().split(' ').filter(term => term.length > 0)
+      return searchTerms.every(term => nameToSearch.includes(term))
+    })
+  }, [filteredRecommendations, playerSearchTerm]);
 
   // Helper function to find opponents for a player in the same matchup
   const getOpponents = (currentPlayer: Player) => {
@@ -349,13 +369,15 @@ export default function RecommendedPicks({
         )}
 
         {/* Results Summary - only show if not using external data */}
+
+
         {!shouldUseExternalData && filterManager.hasFilters && (
           <Card className="glass-card">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <Badge variant="outline" className="text-sm">
-                    {filteredCount} of {originalCount} players
+                    {playerSearchTerm ? `${finalRecommendations.length} of ${filteredCount}` : `${filteredCount} of ${originalCount}`} players
                   </Badge>
                   {appliedFilters.length > 0 && (
                     <FilterChipList
@@ -415,7 +437,9 @@ export default function RecommendedPicks({
                   >
                     {/* Player Header */}
                     <div className="flex items-center justify-between mb-2">
-                      <h3 className="font-semibold text-lg text-foreground">{formatPlayerName(player.name)}</h3>
+                      <h3 className="font-semibold text-lg text-foreground">
+                        {playerSearchTerm && highlightText ? highlightText(player.name) : formatPlayerName(player.name)}
+                      </h3>
                       <div className="flex items-center gap-2">
                         {hasMatchupConflict && (
                           <Tooltip>
@@ -450,13 +474,14 @@ export default function RecommendedPicks({
                             .map((opponent, index) => {
                               const isConflicting = conflictingOpponents.some(conflicted => conflicted.dg_id === opponent.dg_id);
                               const opponentText = `${formatPlayerName(opponent.name)} (${formatOdds(opponent.odds)})`;
+                              const highlightedName = playerSearchTerm && highlightText ? highlightText(opponent.name) : formatPlayerName(opponent.name);
                               
                               return (
                                 <span key={opponent.dg_id}>
                                   {index > 0 && ', '}
                                   <span className={isConflicting ? 'text-amber-800 font-semibold' : ''}>
                                     {isConflicting && '⚠️ '}
-                                    {opponentText}
+                                    {highlightedName} ({formatOdds(opponent.odds)})
                                   </span>
                                 </span>
                               );

@@ -34,6 +34,7 @@ import { useMatchupsQuery } from "@/hooks/use-matchups-query"
 import { usePlayerStatsQuery, PlayerStat } from "@/hooks/use-player-stats-query"
 import { useParlayContext } from "@/context/ParlayContext"
 import { useParlaysQuery } from '@/hooks/use-parlays-query'
+import { PlayerSearchWithCount, usePlayerSearch } from "@/components/ui/player-search"
 
 // Only 3-ball matchups
 interface SupabaseMatchupRow {
@@ -120,6 +121,9 @@ interface MatchupsTableProps {
   isLoading?: boolean;
   isError?: boolean;
   error?: Error | null;
+  // Player search props for highlighting
+  playerSearchTerm?: string;
+  highlightText?: (text: string) => React.ReactNode;
 }
 
 export default function MatchupsTable({ 
@@ -129,7 +133,9 @@ export default function MatchupsTable({
   sharedMatchupsData,
   isLoading,
   isError,
-  error
+  error,
+  playerSearchTerm,
+  highlightText
 }: MatchupsTableProps) {
   // Odds gap filter state
   const [oddsGapThreshold, setOddsGapThreshold] = useState(0);
@@ -413,6 +419,9 @@ export default function MatchupsTable({
     
     return 0;
   });
+
+  // Use filteredMatchups directly since search filtering is now handled at the Dashboard level
+  const searchFilteredMatchups = filteredMatchups
     
   return (
     <TooltipProvider>
@@ -909,7 +918,7 @@ export default function MatchupsTable({
                                     ${playerStatus.status === 'used' ? 'text-yellow-600/70 font-medium' : ''}
                                     ${playerStatus.status === 'current' ? 'text-blue-600/70 font-medium' : ''}
                                   `}>
-                                    {formatPlayerName(player.name)}
+                                    {playerSearchTerm && highlightText ? highlightText(player.name) : formatPlayerName(player.name)}
                                   </span>
                                 </div>
                               );
@@ -1225,7 +1234,7 @@ export default function MatchupsTable({
                                     ${playerStatus.status === 'used' ? 'text-yellow-600/70 font-medium' : ''}
                                     ${playerStatus.status === 'current' ? 'text-blue-600/70 font-medium' : ''}
                                   `}>
-                                    {formatPlayerName(player.name)}
+                                    {playerSearchTerm && highlightText ? highlightText(player.name) : formatPlayerName(player.name)}
                                   </span>
                                 </div>
                               );
