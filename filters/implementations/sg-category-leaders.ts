@@ -77,7 +77,9 @@ export function createSGCategoryLeadersFilter(): Filter<any> {
 
       // Apply consistency filtering if required
       if (requireConsistency) {
+        const beforeConsistency = qualifiedPlayers.length;
         qualifiedPlayers = filterByConsistency(qualifiedPlayers);
+        // Debug info can be accessed via meta if needed
       }
 
       // Group by matchupId and select top performers
@@ -134,8 +136,9 @@ export function createSGCategoryLeadersFilter(): Filter<any> {
  * Calculate SG values for all categories
  */
 function calculateSGCategories(player: any, inTournament: boolean, tournamentWeight: number) {
+  // Use consistent field mapping that matches the data structure throughout the app
   const tournament = {
-    total: player.sgTotal,
+    total: player.sgTotal || player.sg_total,
     putting: player.sgPutt || player.sg_putt,
     approach: player.sgApp || player.sg_app,
     'around-green': player.sgArg || player.sg_arg,
@@ -143,11 +146,11 @@ function calculateSGCategories(player: any, inTournament: boolean, tournamentWei
   };
 
   const season = {
-    total: player.seasonSgTotal,
-    putting: player.seasonSgPutt,
-    approach: player.seasonSgApp,
-    'around-green': player.seasonSgArg,
-    'off-tee': player.seasonSgOtt
+    total: player.seasonSgTotal || player.season_sg_total,
+    putting: player.season_sg_putt || player.seasonSgPutt,
+    approach: player.season_sg_app || player.seasonSgApp,
+    'around-green': player.season_sg_arg || player.seasonSgArg,
+    'off-tee': player.season_sg_ott || player.seasonSgOtt
   };
 
   const result: Record<string, number> = {};
@@ -211,13 +214,20 @@ function filterByConsistency(players: any[]): any[] {
     const values = Object.values(player.sgCategories).filter((v): v is number => typeof v === 'number');
     if (values.length < 3) return false; // Need at least 3 categories
 
-    // Calculate coefficient of variation (lower = more consistent)
+    // Calculate standard deviation of SG values
     const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
     const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
-    const cv = Math.sqrt(variance) / Math.abs(mean);
+    const stdDev = Math.sqrt(variance);
     
-    // Consider consistent if CV < 0.5 and no category is extremely poor (< -1.5)
-    return cv < 0.5 && values.every(val => val > -1.5);
+    // For consistency, we want:
+    // 1. Standard deviation not too high (< 1.0 SG units)
+    // 2. No category is extremely poor (< -2.0)
+    // 3. Player has at least one category above average (> 0)
+    const hasReasonableVariation = stdDev < 1.0;
+    const noExtremeWeakness = values.every(val => val > -2.0);
+    const hasAtLeastOneStrength = values.some(val => val > 0);
+    
+    return hasReasonableVariation && noExtremeWeakness && hasAtLeastOneStrength;
   });
 }
 
@@ -252,10 +262,15 @@ function calculateConsistencyScore(sgCategories: Record<string, number>): number
 
   const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
   const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
+  const stdDev = Math.sqrt(variance);
   
-  // Return inverse of coefficient of variation (higher = more consistent)
-  const cv = Math.sqrt(variance) / Math.abs(mean || 1);
-  return Math.max(0, 1 - cv);
+  // Consistency score based on standard deviation
+  // Lower standard deviation = higher consistency
+  // Scale from 0-100 where 100 is perfect consistency (stdDev = 0)
+  // and reasonable consistency (stdDev = 1.0) gets ~60 points
+  const consistencyScore = Math.max(0, 100 - (stdDev * 40));
+  
+  return Math.round(consistencyScore);
 }
 
 /**

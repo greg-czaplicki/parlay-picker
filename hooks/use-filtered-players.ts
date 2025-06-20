@@ -72,19 +72,37 @@ export function useFilteredPlayers(
         
         // Helper function to extract SG data from enhanced matchup
         const extractSGData = (playerSgData: any) => {
-          if (!playerSgData) return { sgTotal: 0, seasonSgTotal: null };
-          
-          // Prefer tournament SG data if available, fallback to season SG
-          const tournamentSG = playerSgData.sgTotal;
-          const seasonSG = playerSgData.seasonSgTotal;
-          
-          if (tournamentSG !== null && tournamentSG !== undefined) {
-            return { sgTotal: tournamentSG, seasonSgTotal: seasonSG };
-          } else if (seasonSG !== null && seasonSG !== undefined) {
-            return { sgTotal: seasonSG, seasonSgTotal: seasonSG };
-          } else {
-            return { sgTotal: 0, seasonSgTotal: null };
+          if (!playerSgData) {
+            return { 
+              sgTotal: 0, 
+              seasonSgTotal: null,
+              sgPutt: null,
+              sgApp: null,
+              sgArg: null,
+              sgOtt: null,
+              season_sg_putt: null,
+              season_sg_app: null,
+              season_sg_arg: null,
+              season_sg_ott: null
+            };
           }
+          
+          // Extract all SG category data for filtering
+          return {
+            // Tournament SG data
+            sgTotal: playerSgData.sgTotal ?? null,
+            sgPutt: playerSgData.sgPutt ?? null,
+            sgApp: playerSgData.sgApp ?? null,
+            sgArg: playerSgData.sgArg ?? null,
+            sgOtt: playerSgData.sgOtt ?? null,
+            
+            // Season SG data
+            seasonSgTotal: playerSgData.seasonSgTotal ?? null,
+            season_sg_putt: playerSgData.seasonSgPutt ?? null,
+            season_sg_app: playerSgData.seasonSgApp ?? null,
+            season_sg_arg: playerSgData.seasonSgArg ?? null,
+            season_sg_ott: playerSgData.seasonSgOtt ?? null
+          };
         };
         
         if (matchupType === "3ball") {
@@ -106,8 +124,17 @@ export function useFilteredPlayers(
               dg_id: matchup.player1_dg_id || 0,
               name: matchup.player1_name,
               odds: matchup.odds1,
-              sgTotal: player1SG.sgTotal,
+              sgTotal: player1SG.sgTotal || 0,
               seasonSgTotal: player1SG.seasonSgTotal,
+              // Add all SG category data for filtering
+              sgPutt: player1SG.sgPutt,
+              sgApp: player1SG.sgApp,
+              sgArg: player1SG.sgArg,
+              sgOtt: player1SG.sgOtt,
+              season_sg_putt: player1SG.season_sg_putt,
+              season_sg_app: player1SG.season_sg_app,
+              season_sg_arg: player1SG.season_sg_arg,
+              season_sg_ott: player1SG.season_sg_ott,
               valueRating: 0,
               confidenceScore: 0,
               isRecommended: false,
@@ -119,8 +146,17 @@ export function useFilteredPlayers(
               dg_id: matchup.player2_dg_id || 0,
               name: matchup.player2_name,
               odds: matchup.odds2,
-              sgTotal: player2SG.sgTotal,
+              sgTotal: player2SG.sgTotal || 0,
               seasonSgTotal: player2SG.seasonSgTotal,
+              // Add all SG category data for filtering
+              sgPutt: player2SG.sgPutt,
+              sgApp: player2SG.sgApp,
+              sgArg: player2SG.sgArg,
+              sgOtt: player2SG.sgOtt,
+              season_sg_putt: player2SG.season_sg_putt,
+              season_sg_app: player2SG.season_sg_app,
+              season_sg_arg: player2SG.season_sg_arg,
+              season_sg_ott: player2SG.season_sg_ott,
               valueRating: 0,
               confidenceScore: 0,
               isRecommended: false,
@@ -132,8 +168,17 @@ export function useFilteredPlayers(
               dg_id: matchup.player3_dg_id || 0,
               name: matchup.player3_name,
               odds: matchup.odds3,
-              sgTotal: player3SG.sgTotal,
+              sgTotal: player3SG.sgTotal || 0,
               seasonSgTotal: player3SG.seasonSgTotal,
+              // Add all SG category data for filtering
+              sgPutt: player3SG.sgPutt,
+              sgApp: player3SG.sgApp,
+              sgArg: player3SG.sgArg,
+              sgOtt: player3SG.sgOtt,
+              season_sg_putt: player3SG.season_sg_putt,
+              season_sg_app: player3SG.season_sg_app,
+              season_sg_arg: player3SG.season_sg_arg,
+              season_sg_ott: player3SG.season_sg_ott,
               valueRating: 0,
               confidenceScore: 0,
               isRecommended: false,
@@ -162,6 +207,15 @@ export function useFilteredPlayers(
               odds: matchup.odds1,
               sgTotal: player1SG.sgTotal,
               seasonSgTotal: player1SG.seasonSgTotal,
+              // Add all SG category data for filtering
+              sgPutt: player1SG.sgPutt,
+              sgApp: player1SG.sgApp,
+              sgArg: player1SG.sgArg,
+              sgOtt: player1SG.sgOtt,
+              season_sg_putt: player1SG.season_sg_putt,
+              season_sg_app: player1SG.season_sg_app,
+              season_sg_arg: player1SG.season_sg_arg,
+              season_sg_ott: player1SG.season_sg_ott,
               valueRating: 0,
               confidenceScore: 0,
               isRecommended: false,
@@ -175,6 +229,15 @@ export function useFilteredPlayers(
               odds: matchup.odds2,
               sgTotal: player2SG.sgTotal,
               seasonSgTotal: player2SG.seasonSgTotal,
+              // Add all SG category data for filtering
+              sgPutt: player2SG.sgPutt,
+              sgApp: player2SG.sgApp,
+              sgArg: player2SG.sgArg,
+              sgOtt: player2SG.sgOtt,
+              season_sg_putt: player2SG.season_sg_putt,
+              season_sg_app: player2SG.season_sg_app,
+              season_sg_arg: player2SG.season_sg_arg,
+              season_sg_ott: player2SG.season_sg_ott,
               valueRating: 0,
               confidenceScore: 0,
               isRecommended: false,

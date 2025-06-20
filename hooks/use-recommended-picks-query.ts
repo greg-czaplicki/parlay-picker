@@ -14,6 +14,19 @@ export interface Player {
   odds: number;
   sgTotal: number;
   seasonSgTotal?: number | null;
+  
+  // Individual SG category data (tournament)
+  sgPutt?: number | null;
+  sgApp?: number | null;
+  sgArg?: number | null;
+  sgOtt?: number | null;
+  
+  // Individual SG category data (season)
+  season_sg_putt?: number | null;
+  season_sg_app?: number | null;
+  season_sg_arg?: number | null;
+  season_sg_ott?: number | null;
+  
   valueRating: number;
   confidenceScore: number;
   isRecommended: boolean;
