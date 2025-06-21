@@ -79,15 +79,36 @@ export function useMatchupsQuery(eventId: number | null, matchupType: "2ball" | 
       roundNum ?? 'allRounds',
     ],
     enabled: !!eventId,
-    staleTime: 2 * 60 * 1000, // 2 minutes - don't refetch for 2 minutes
+    staleTime: 30 * 1000, // Reduced from 2 minutes to 30 seconds for faster updates
     gcTime: 5 * 60 * 1000, // 5 minutes - keep in cache for 5 minutes
+    refetchOnWindowFocus: true, // Refetch when window regains focus
+    refetchOnMount: true, // Always refetch on mount
+    refetchOnReconnect: true, // Refetch when reconnecting
+    retry: 3, // Retry failed requests up to 3 times
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
     queryFn: async () => {
       console.log(`🔌 Fetching enhanced matchups: eventId=${eventId}, type=${matchupType}, round=${roundNum}`);
+      
+      // Add cache-busting timestamp when data might be stale
+      const now = Date.now()
+      const cacheParam = `&_t=${now}`
+      
       let endpoint = eventId
         ? `/api/matchups?type=${matchupType}&event_id=${eventId}`
         : `/api/matchups?type=${matchupType}`;
       if (roundNum) endpoint += `&round_num=${roundNum}`;
-      const response = await fetch(endpoint);
+      
+      // Add cache-busting parameter
+      endpoint += cacheParam;
+      
+      const response = await fetch(endpoint, {
+        headers: {
+          // Add cache-busting headers
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+      
       if (!response.ok) throw new Error(await response.text());
       const data = await response.json();
       let matchupsData: MatchupRow[] = [];

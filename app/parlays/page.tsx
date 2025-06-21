@@ -1,6 +1,11 @@
 import ParlaysClient from './parlays-client';
 import { createServerClient } from "@/lib/supabase";
 
+// Enable dynamic rendering and disable static generation for this page
+// This ensures fresh data on each request in production
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export default async function ParlaysPage() {
   const supabase = createServerClient();
   // Get the max round_num from matchups for the current event

@@ -62,21 +62,36 @@ export async function POST(request: NextRequest) {
     
     console.log('✅ Manual refresh completed. Total inserted:', totalInserted)
     
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       message: 'Odds refreshed successfully',
       timestamp: new Date().toISOString(),
       totalInserted,
-      results
+      results,
+      inserted: totalInserted // Add for compatibility with manual-ingest-button
     })
+
+    // Ensure this endpoint is never cached
+    response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
+    response.headers.set('Pragma', 'no-cache')
+    response.headers.set('Expires', '0')
+
+    return response
 
   } catch (error: any) {
     console.error('❌ Manual refresh failed:', error)
     
-    return NextResponse.json({
+    const errorResponse = NextResponse.json({
       success: false,
       error: error.message,
       timestamp: new Date().toISOString()
     }, { status: 500 })
+
+    // Ensure error responses are also not cached
+    errorResponse.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
+    errorResponse.headers.set('Pragma', 'no-cache')
+    errorResponse.headers.set('Expires', '0')
+
+    return errorResponse
   }
 } 

@@ -144,7 +144,20 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const user_id = searchParams.get('user_id')
-  if (!user_id) return NextResponse.json({ parlays: [] })
+  const bustCache = searchParams.get('_t') // Cache-busting timestamp
+  
+  if (!user_id) {
+    const response = NextResponse.json({ parlays: [] })
+    
+    // If cache busting is requested, set no-cache headers
+    if (bustCache) {
+      response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
+      response.headers.set('Pragma', 'no-cache')
+      response.headers.set('Expires', '0')
+    }
+    
+    return response
+  }
   
   // Fetch parlays with stored calculated values
   const { data: parlays, error: parlaysError } = await supabase
@@ -329,5 +342,14 @@ export async function GET(req: NextRequest) {
     }
   })
   
-  return NextResponse.json({ parlays: parlaysWithDetails })
+  const response = NextResponse.json({ parlays: parlaysWithDetails })
+
+  // If cache busting is requested, set no-cache headers
+  if (bustCache) {
+    response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
+    response.headers.set('Pragma', 'no-cache')
+    response.headers.set('Expires', '0')
+  }
+
+  return response
 } 

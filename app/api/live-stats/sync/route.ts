@@ -1,6 +1,7 @@
 import { logger } from '@/lib/logger'
 import { createSupabaseClient, handleApiError, jsonSuccess } from '@/lib/api-utils'
 import { TournamentSnapshotService } from '@/lib/services/tournament-snapshot-service'
+import { NextRequest, NextResponse } from 'next/server'
 
 // Define interfaces for the Data Golf API response
 interface LivePlayerData {
@@ -172,7 +173,7 @@ function mapInPlayDataToInsert(players: any[], tournament: string, timestamp: st
   return allStats;
 }
 
-export async function GET() {
+export async function GET(req?: NextRequest) {
   const supabase = createSupabaseClient();
   logger.info('Starting live-stats sync process');
 
@@ -190,14 +191,21 @@ export async function GET() {
 
     if (!activeTournaments || activeTournaments.length === 0) {
       logger.info('No active tournaments found, skipping live stats sync.');
-      return jsonSuccess({
+      const response = NextResponse.json({
         message: 'No active tournaments found',
         events: [],
         totalRecords: 0,
         errors: [],
         lastUpdated: null,
         syncTime: new Date().toISOString()
-      });
+      })
+
+      // Ensure this endpoint is never cached
+      response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
+      response.headers.set('Pragma', 'no-cache')
+      response.headers.set('Expires', '0')
+
+      return response
     }
 
     logger.info(`Found ${activeTournaments.length} active tournaments`);
@@ -333,14 +341,35 @@ export async function GET() {
       logger.warn("Sync completed with errors:", errors);
     }
 
-    return jsonSuccess({
+    const response = NextResponse.json({
+      success: true,
+      message: finalMessage + (errors.length > 0 ? ` Errors: ${errors.join(', ')}` : ''),
       processedCount: totalInsertedCount,
       sourceTimestamp: lastSourceTimestamp,
       eventNames: fetchedEventNames,
       errors,
-    }, finalMessage + (errors.length > 0 ? ` Errors: ${errors.join(', ')}` : ''));
+    });
+
+    // Ensure this endpoint is never cached
+    response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
+    response.headers.set('Pragma', 'no-cache')
+    response.headers.set('Expires', '0')
+
+    return response;
   } catch (error) {
     logger.error("Error in live-stats sync GET function:", error);
-    return handleApiError('Live stats sync failed');
+    
+    const errorResponse = NextResponse.json({
+      success: false,
+      error: 'Live stats sync failed',
+      details: error instanceof Error ? error.message : String(error)
+    }, { status: 500 });
+
+    // Ensure error responses are also not cached
+    errorResponse.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
+    errorResponse.headers.set('Pragma', 'no-cache')
+    errorResponse.headers.set('Expires', '0')
+
+    return errorResponse;
   }
 }

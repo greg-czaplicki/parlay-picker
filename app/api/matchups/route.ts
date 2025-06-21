@@ -9,6 +9,7 @@ export async function GET(req: NextRequest) {
   const event_id = searchParams.get('eventId') || searchParams.get('event_id')
   const round_num = searchParams.get('roundNum') || searchParams.get('round_num')
   const checkOnly = searchParams.get('checkOnly') === 'true'
+  const bustCache = searchParams.get('_t') // Cache-busting timestamp
 
   // Handle checkOnly requests separately (no need for SG data)
   if (checkOnly) {
@@ -23,10 +24,19 @@ export async function GET(req: NextRequest) {
     const { error, count } = await completeCountQuery
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
-    return NextResponse.json({ 
+    const response = NextResponse.json({ 
       matchups: (count ?? 0) > 0 ? [{ available: true }] : [], 
       count: count ?? 0
     })
+
+    // If cache busting is requested, set no-cache headers
+    if (bustCache) {
+      response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
+      response.headers.set('Pragma', 'no-cache')
+      response.headers.set('Expires', '0')
+    }
+
+    return response
   }
 
   try {
@@ -67,7 +77,16 @@ export async function GET(req: NextRequest) {
     const { data: matchupsData, error: matchupsError } = await completeQuery
     if (matchupsError) return NextResponse.json({ error: matchupsError.message }, { status: 400 })
     if (!matchupsData || matchupsData.length === 0) {
-      return NextResponse.json({ matchups: [] })
+      const response = NextResponse.json({ matchups: [] })
+      
+      // If cache busting is requested, set no-cache headers
+      if (bustCache) {
+        response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
+        response.headers.set('Pragma', 'no-cache')
+        response.headers.set('Expires', '0')
+      }
+      
+      return response
     }
 
     // 2. Extract unique player IDs from matchups
@@ -207,7 +226,16 @@ export async function GET(req: NextRequest) {
 
     console.log(`✅ Enhanced ${enhancedMatchups.length} matchups with SG data (Season: ${seasonSgMap.size}, Tournament: ${tournamentSgMap.size} players)`)
 
-    return NextResponse.json({ matchups: enhancedMatchups })
+    const response = NextResponse.json({ matchups: enhancedMatchups })
+
+    // If cache busting is requested, set no-cache headers
+    if (bustCache) {
+      response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
+      response.headers.set('Pragma', 'no-cache')
+      response.headers.set('Expires', '0')
+    }
+
+    return response
 
   } catch (error: any) {
     console.error('Error fetching enhanced matchup data:', error)
