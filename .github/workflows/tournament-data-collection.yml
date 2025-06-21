@@ -59,9 +59,9 @@ jobs:
           fi
           
           # Parse and display sync results
-          processed_count=$(echo $content | jq -r '.data.processedCount // 0')
-          event_name=$(echo $content | jq -r '.data.eventName // "Unknown"')
-          errors=$(echo $content | jq -r '.data.errors | length')
+          processed_count=$(echo $content | jq -r '.processedCount // 0')
+          event_name=$(echo $content | jq -r '.eventName // "Unknown"')
+          errors=$(echo $content | jq -r '.errors | length')
           
           echo "✅ PGA Sync completed: $processed_count records processed for $event_name"
           if [ $errors -gt 0 ]; then
@@ -88,9 +88,9 @@ jobs:
             # Don't exit here since Euro tour might not always have data
             echo "⚠️ Continuing despite Euro sync failure (tour might be inactive)"
           else
-            processed_count=$(echo $content | jq -r '.data.processedCount // 0')
-            event_name=$(echo $content | jq -r '.data.eventName // "Unknown"')
-            errors=$(echo $content | jq -r '.data.errors | length')
+            processed_count=$(echo $content | jq -r '.processedCount // 0')
+            event_name=$(echo $content | jq -r '.eventName // "Unknown"')
+            errors=$(echo $content | jq -r '.errors | length')
             
             echo "✅ Euro Sync completed: $processed_count records processed for $event_name"
             if [ $errors -gt 0 ]; then
@@ -118,10 +118,10 @@ jobs:
           fi
           
           # Parse comprehensive results
-          processed_count=$(echo $content | jq -r '.data.processedCount // 0')
-          event_names=$(echo $content | jq -r '.data.eventNames | join(", ") // "None"')
-          errors=$(echo $content | jq -r '.data.errors | length')
-          timestamp=$(echo $content | jq -r '.data.sourceTimestamp // "Unknown"')
+          processed_count=$(echo $content | jq -r '.processedCount // 0')
+          event_names=$(echo $content | jq -r '.eventNames | join(", ") // "None"')
+          errors=$(echo $content | jq -r '.errors | length')
+          timestamp=$(echo $content | jq -r '.sourceTimestamp // "Unknown"')
           
           echo "✅ Multi-Tour Sync Summary:"
           echo "   📈 Total Records: $processed_count"
