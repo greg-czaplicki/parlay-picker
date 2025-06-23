@@ -307,6 +307,183 @@ export async function GET(request: NextRequest) {
       }, `Retrieved ${liveData?.length || 0} live tournament records`)
     }
 
+    // 🤖 ENDPOINT: Bet Snapshots for ML Model Training
+    if (endpoint === 'bet_snapshots') {
+      const includeOutcomes = searchParams.get('include_outcomes') === 'true'
+      const flattenFeatures = searchParams.get('flatten_features') === 'true'
+      
+      let query = supabase
+        .from('bet_snapshots')
+        .select(`
+          id,
+          parlay_pick_id,
+          snapshot,
+          created_at
+        `)
+        .order('created_at', { ascending: sortOrder === 'asc' })
+        .range(offset, offset + limit - 1)
+
+      // Apply filters
+      if (startDate) query = query.gte('created_at', startDate)
+      if (endDate) query = query.lte('created_at', endDate)
+
+      const { data: snapshots, error, count } = await query
+
+      if (error) {
+        logger.error('Failed to fetch bet snapshots:', error)
+        return handleApiError('Failed to fetch bet snapshots')
+      }
+
+      let processedData = snapshots || []
+
+      // Include outcomes if requested
+      if (includeOutcomes && processedData.length > 0) {
+        const pickIds = processedData.map(s => s.parlay_pick_id)
+        const { data: pickOutcomes } = await supabase
+          .from('parlay_picks')
+          .select(`
+            uuid,
+            outcome,
+            parlays!inner(outcome, payout_amount)
+          `)
+          .in('uuid', pickIds)
+
+        // Create outcome lookup
+        const outcomeMap = new Map()
+        pickOutcomes?.forEach((pick: any) => {
+          const parlay = Array.isArray(pick.parlays) ? pick.parlays[0] : pick.parlays
+          outcomeMap.set(pick.uuid, {
+            pick_outcome: pick.outcome,
+            parlay_outcome: parlay?.outcome,
+            parlay_payout: parlay?.payout_amount
+          })
+        })
+
+        // Add outcomes to processed data
+        processedData = processedData.map(snapshot => ({
+          ...snapshot,
+          ...outcomeMap.get(snapshot.parlay_pick_id)
+        }))
+      }
+
+      // Flatten JSONB snapshot data for ML if requested
+      if (flattenFeatures && processedData.length > 0) {
+        processedData = processedData.map(snapshot => {
+          const flatSnapshot = flattenSnapshotForML(snapshot.snapshot)
+          return {
+            id: snapshot.id,
+            parlay_pick_id: snapshot.parlay_pick_id,
+            created_at: snapshot.created_at,
+            ...flatSnapshot,
+            // Include outcomes if they exist
+            ...(snapshot.pick_outcome ? {
+              pick_outcome: snapshot.pick_outcome,
+              parlay_outcome: snapshot.parlay_outcome,
+              parlay_payout: snapshot.parlay_payout
+            } : {})
+          }
+        })
+      }
+
+      const response = format === 'csv' ? convertToCSVArray(processedData) : processedData
+
+      return jsonSuccess({
+        data: response,
+        metadata: {
+          total_records: count,
+          page, limit, format,
+          features_flattened: flattenFeatures,
+          outcomes_included: includeOutcomes,
+          filters_applied: { startDate, endDate }
+        }
+      }, `Retrieved ${processedData.length} bet snapshots`)
+    }
+
+    // 🤖 ENDPOINT: Outcome Labeled Training Data
+    if (endpoint === 'outcome_training_data') {
+      // First get bet snapshots with outcomes
+      const { data: snapshotsWithPicks, error } = await supabase
+        .from('bet_snapshots')
+        .select(`
+          id,
+          snapshot,
+          created_at,
+          parlay_pick_id
+        `)
+        .order('created_at', { ascending: sortOrder === 'asc' })
+        .limit(limit)
+
+      if (error) {
+        logger.error('Failed to fetch snapshots for training data:', error)
+        return handleApiError('Failed to fetch training data')
+      }
+
+      if (!snapshotsWithPicks || snapshotsWithPicks.length === 0) {
+        return jsonSuccess({
+          data: [],
+          metadata: { total_records: 0, format, supervised_learning_ready: false }
+        }, 'No training data available')
+      }
+
+      // Get outcomes for these picks
+      const pickIds = snapshotsWithPicks.map(s => s.parlay_pick_id)
+      const { data: pickOutcomes } = await supabase
+        .from('parlay_picks')
+        .select(`
+          uuid,
+          outcome,
+          picked_player_dg_id,
+          parlays!inner(outcome, payout_amount)
+        `)
+        .in('uuid', pickIds)
+        .not('outcome', 'is', null)
+
+      // Filter to only snapshots with outcomes
+      const snapshotsWithOutcomes = snapshotsWithPicks.filter(snapshot => 
+        pickOutcomes?.some(pick => pick.uuid === snapshot.parlay_pick_id)
+      )
+
+      // Process for ML training
+      const mlTrainingData = snapshotsWithOutcomes.map(snapshot => {
+        const pickData = pickOutcomes?.find(pick => pick.uuid === snapshot.parlay_pick_id)
+        const flatSnapshot = flattenSnapshotForML(snapshot.snapshot)
+        
+        return {
+          // Features from snapshot
+          ...flatSnapshot,
+          
+          // Labels for supervised learning
+          pick_outcome: pickData?.outcome, // 'win', 'loss', 'push', 'void'
+          parlay_outcome: pickData?.parlays?.outcome, // 'win', 'loss', 'push'
+          parlay_payout: pickData?.parlays?.payout_amount,
+          
+          // Binary labels for classification
+          pick_won: pickData?.outcome === 'win' ? 1 : 0,
+          parlay_won: pickData?.parlays?.outcome === 'win' ? 1 : 0,
+          
+          // Metadata
+          snapshot_id: snapshot.id,
+          bet_timestamp: snapshot.created_at,
+          picked_player_dg_id: pickData?.picked_player_dg_id
+        }
+      })
+
+      const response = format === 'csv' ? convertToCSVArray(mlTrainingData) : mlTrainingData
+
+      return jsonSuccess({
+        data: response,
+        metadata: {
+          total_records: mlTrainingData.length,
+          format,
+          supervised_learning_ready: true,
+          outcome_distribution: {
+            wins: mlTrainingData.filter(d => d.pick_won === 1).length,
+            losses: mlTrainingData.filter(d => d.pick_won === 0).length
+          }
+        }
+      }, `Retrieved ${mlTrainingData.length} labeled training records`)
+    }
+
     // 🤖 Default: Comprehensive API Documentation
     return jsonSuccess({
       api_version: '2.0',
@@ -543,6 +720,91 @@ function convertToCSVArray(data: any[]): any[] {
   })
   
   return rows
+}
+
+/**
+ * Flatten JSONB snapshot data into ML-ready features
+ */
+function flattenSnapshotForML(snapshot: any): any {
+  if (!snapshot) return {}
+  
+  const flattened: any = {}
+  
+  // Basic betting context
+  flattened.bet_timestamp = snapshot.bet_timestamp
+  flattened.round_num = snapshot.round_num
+  flattened.event_name = snapshot.event_name
+  
+  // Matchup data
+  if (snapshot.matchup) {
+    flattened.matchup_type = snapshot.matchup.type
+    flattened.event_id = snapshot.matchup.event_id
+    flattened.matchup_round_num = snapshot.matchup.round_num
+    
+    // Player data
+    snapshot.matchup.players?.forEach((player: any, idx: number) => {
+      const playerPrefix = `player${idx + 1}`
+      flattened[`${playerPrefix}_dg_id`] = player.dg_id
+      flattened[`${playerPrefix}_name`] = player.name
+      flattened[`${playerPrefix}_fanduel_odds`] = player.fanduel_odds
+      flattened[`${playerPrefix}_draftkings_odds`] = player.draftkings_odds
+      flattened[`${playerPrefix}_dg_odds`] = player.dg_odds
+    })
+  }
+  
+  // Player stats at bet time
+  if (snapshot.player_stats) {
+    Object.entries(snapshot.player_stats).forEach(([dgId, stats]: [string, any]) => {
+      const prefix = `stats_${dgId}`
+      flattened[`${prefix}_sg_total`] = stats.sg_total
+      flattened[`${prefix}_sg_ott`] = stats.sg_ott
+      flattened[`${prefix}_sg_app`] = stats.sg_app
+      flattened[`${prefix}_sg_arg`] = stats.sg_arg
+      flattened[`${prefix}_sg_putt`] = stats.sg_putt
+      flattened[`${prefix}_driving_acc`] = stats.driving_acc
+      flattened[`${prefix}_driving_dist`] = stats.driving_dist
+    })
+  }
+  
+  // Live stats at bet time
+  if (snapshot.live_stats) {
+    Object.entries(snapshot.live_stats).forEach(([dgId, stats]: [string, any]) => {
+      const prefix = `live_${dgId}`
+      flattened[`${prefix}_position`] = stats.position
+      flattened[`${prefix}_total`] = stats.total
+      flattened[`${prefix}_today`] = stats.today
+      flattened[`${prefix}_thru`] = stats.thru
+      flattened[`${prefix}_sg_total`] = stats.sg_total
+      flattened[`${prefix}_sg_ott`] = stats.sg_ott
+      flattened[`${prefix}_sg_app`] = stats.sg_app
+      flattened[`${prefix}_sg_putt`] = stats.sg_putt
+    })
+  }
+  
+  // Calculated features
+  if (snapshot.calculated_features) {
+    const features = snapshot.calculated_features
+    
+    // Picked player features
+    if (features.picked_player) {
+      flattened.picked_player_dg_id = features.picked_player.dg_id
+      flattened.picked_player_name = features.picked_player.name
+      flattened.picked_player_position = features.picked_player.position_in_matchup
+      flattened.implied_probability = features.picked_player.implied_probability
+      flattened.value_rating = features.picked_player.value_rating
+      flattened.confidence_score = features.picked_player.confidence_score
+    }
+    
+    // Group analysis features
+    if (features.group_analysis) {
+      flattened.avg_sg_total = features.group_analysis.avg_sg_total
+      flattened.odds_spread = features.group_analysis.odds_spread
+      flattened.favorite_dg_id = features.group_analysis.favorite_dg_id
+      flattened.underdog_dg_id = features.group_analysis.underdog_dg_id
+    }
+  }
+  
+  return flattened
 }
 
 // Bulk extraction helper functions

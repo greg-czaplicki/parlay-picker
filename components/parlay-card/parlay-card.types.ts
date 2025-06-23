@@ -1,3 +1,6 @@
+import type { PlayerMatchupData } from '@/app/actions/matchups';
+import type { LiveTournamentStat } from '@/types/definitions';
+
 /**
  * Represents a player in the parlay, including matchup and stats info.
  */
@@ -7,9 +10,9 @@ export interface ParlayPlayer {
   /** ID from the parlay_picks table */
   pickId?: string;
   /** Matchup data for the player */
-  matchup: any | null; // TODO: Replace 'any' with PlayerMatchupData type import
+  matchup: PlayerMatchupData | null;
   /** Live stats keyed by dg_id */
-  liveStats: Record<number, any> | null; // TODO: Replace 'any' with LiveTournamentStat type import
+  liveStats: Record<number, LiveTournamentStat> | null;
   /** Loading state for matchup */
   isLoadingMatchup: boolean;
   /** Loading state for stats */
