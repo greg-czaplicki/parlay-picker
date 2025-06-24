@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseClient } from '@/lib/api-utils'
+import { TournamentNameResolver } from '@/lib/services/tournament-name-resolver'
 
 const DATA_GOLF_API_KEY = process.env.DATAGOLF_API_KEY
 const INGEST_SECRET = process.env.INGEST_SECRET // Set this in your env for security
@@ -376,15 +377,12 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Dynamically map event_name to event_id
+    // Use tournament name resolver for robust name matching
     const eventName = dg3.event_name;
-    const { data: eventRows, error: eventError } = await supabase
-      .from('tournaments')
-      .select('event_id')
-      .eq('event_name', eventName)
-      .limit(1);
+    const resolver = new TournamentNameResolver();
+    const tournamentMatch = await resolver.resolveTournamentName(eventName, tour);
     
-    if (eventError || !eventRows || eventRows.length === 0) {
+    if (!tournamentMatch) {
       // Check if this is a known issue (like LIV events not in database)
       if (eventName && eventName.toLowerCase().includes('liv')) {
         return NextResponse.json({ 
@@ -396,9 +394,29 @@ export async function POST(req: NextRequest) {
         })
       }
       
-      throw new Error(`Could not find event_id for event_name: ${eventName}`);
+      // Get suggestions for better error reporting
+      const validation = await resolver.validateTournamentName(eventName, tour);
+      
+      return NextResponse.json({ 
+        inserted: 0,
+        three_ball: 0,
+        two_ball: 0,
+        message: `Could not find tournament for event_name: ${eventName}`,
+        debug: { 
+          eventName, 
+          tour,
+          suggestions: validation.suggestions,
+          recommendedAction: validation.recommendedAction
+        }
+      }, { status: 404 })
     }
-    const event_id = eventRows[0].event_id;
+    
+    const event_id = tournamentMatch.event_id;
+    
+    // If this was a fuzzy match, add an alias to prevent future issues
+    if (tournamentMatch.match_type === 'fuzzy' && tournamentMatch.confidence < 1.0) {
+      await resolver.addTournamentAlias(event_id, eventName, 'datagolf');
+    }
     const round_num_3 = dg3.round_num;
     const round_num_2 = dg2.round_num;
     const created_at_3 = new Date(dg3.last_updated.replace(' UTC', 'Z')).toISOString();

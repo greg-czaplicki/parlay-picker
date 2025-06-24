@@ -110,6 +110,36 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    // 4. Check and settle completed tournaments
+    console.log('🏆 Checking for completed tournaments to settle...')
+    try {
+      const settleResponse = await fetch(`${baseUrl}/api/settle-completed`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (settleResponse.ok) {
+        const settleResult = await settleResponse.json()
+        results.push({
+          task: 'settle_completed',
+          success: true,
+          data: settleResult
+        })
+        console.log('✅ Settlement check completed')
+      } else {
+        throw new Error(`Settlement check failed: ${settleResponse.statusText}`)
+      }
+    } catch (error: any) {
+      console.error('❌ Settlement check failed:', error)
+      results.push({
+        task: 'settle_completed',
+        success: false,
+        error: error.message
+      })
+    }
+
     const endTime = Date.now()
     const executionTime = endTime - startTime
     

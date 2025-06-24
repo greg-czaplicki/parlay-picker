@@ -758,12 +758,19 @@ export class TournamentSnapshotService {
 
       // 6. Create position change records if we have previous data
       if (previousSnapshots.length > 0 && insertedSnapshots.length > 0) {
+        // Use the full snapshots array with complete data instead of insertedSnapshots
+        // which only contains limited fields (id, dg_id, position_numeric)
+        const currentSnapshotsWithFullData = snapshots.map((snapshot, index) => ({
+          ...snapshot,
+          id: insertedSnapshots[index]?.id // Add the database ID from the insert
+        }))
+        
         await this.createPositionChangeRecords(
           eventId,
           previousRoundNumber!,
           roundNumber,
           previousSnapshots,
-          insertedSnapshots,
+          currentSnapshotsWithFullData,
           liveStats
         )
       }
@@ -805,29 +812,49 @@ export class TournamentSnapshotService {
       const liveStat = liveStats.find(s => s.dg_id === currentSnapshot.dg_id)
       
       if (prevSnapshot && liveStat) {
-        const positionChange = currentSnapshot.position_numeric - prevSnapshot.position_numeric
-        const scoreChange = (liveStat.total || 0) - (prevSnapshot.total_score || 0)
+        // Ensure we have valid position data
+        const currentPos = currentSnapshot.position_numeric
+        const prevPos = prevSnapshot.position_numeric
         
-        // Calculate improvement streak (simplified)
-        const improving = positionChange < 0 // Negative means better position
-        const streakRounds = improving ? 1 : 0 // TODO: Calculate actual streak
+        if (currentPos != null && prevPos != null) {
+          const positionChange = currentPos - prevPos
+          const scoreChange = (liveStat.total || 0) - (prevSnapshot.total_score || 0)
+          
+          // Calculate improvement streak (simplified)
+          const improving = positionChange < 0 // Negative means better position
+          const streakRounds = improving ? 1 : 0 // TODO: Calculate actual streak
 
-        positionChanges.push({
-          event_id: eventId,
-          dg_id: currentSnapshot.dg_id,
-          player_name: liveStat.player_name,
-          from_round: fromRound,
-          to_round: toRound,
-          from_snapshot_id: prevSnapshot.id,
-          to_snapshot_id: currentSnapshot.id,
-          position_change: positionChange,
-          from_position_numeric: prevSnapshot.position_numeric,
-          to_position_numeric: currentSnapshot.position_numeric,
-          score_change: scoreChange,
-          round_score: liveStat.today,
-          improving,
-          streak_rounds: streakRounds
-        })
+          positionChanges.push({
+            event_id: eventId,
+            dg_id: currentSnapshot.dg_id,
+            player_name: liveStat.player_name,
+            from_round: fromRound,
+            to_round: toRound,
+            from_snapshot_id: prevSnapshot.id,
+            to_snapshot_id: currentSnapshot.id,
+            position_change: positionChange,
+            from_position_numeric: prevPos,
+            to_position_numeric: currentPos,
+            score_change: scoreChange,
+            round_score: liveStat.today,
+            improving,
+            streak_rounds: streakRounds
+          })
+          
+          // Debug logging for significant position changes
+          if (Math.abs(positionChange) > 10) {
+            logger.info(`Significant position change for ${liveStat.player_name}: ${prevPos} → ${currentPos} (${positionChange > 0 ? '+' : ''}${positionChange})`)
+          }
+        } else {
+          logger.warn(`Missing position data for player ${liveStat.player_name} (DG_ID: ${currentSnapshot.dg_id}): current=${currentPos}, prev=${prevPos}`)
+        }
+      } else {
+        if (!prevSnapshot) {
+          logger.debug(`No previous snapshot found for player DG_ID: ${currentSnapshot.dg_id} (new player in round ${toRound})`)
+        }
+        if (!liveStat) {
+          logger.warn(`No live stat found for player DG_ID: ${currentSnapshot.dg_id}`)
+        }
       }
     }
 
@@ -839,8 +866,16 @@ export class TournamentSnapshotService {
       if (error) {
         logger.error('Failed to insert position changes:', error)
       } else {
-        logger.info(`Created ${positionChanges.length} position change records`)
+        logger.info(`Created ${positionChanges.length} position change records for ${fromRound}→${toRound}`)
+        
+        // Log summary statistics
+        const improvements = positionChanges.filter(p => p.improving).length
+        const declines = positionChanges.filter(p => !p.improving).length
+        const avgChange = positionChanges.reduce((sum, p) => sum + Math.abs(p.position_change), 0) / positionChanges.length
+        logger.info(`Position changes summary: ${improvements} improved, ${declines} declined, avg change: ${avgChange.toFixed(1)} positions`)
       }
+    } else {
+      logger.warn(`No valid position changes found for ${fromRound}→${toRound} (${currentSnapshots.length} current, ${previousSnapshots.length} previous)`)
     }
   }
 
