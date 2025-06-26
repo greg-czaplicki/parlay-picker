@@ -112,43 +112,7 @@ function mapInPlayDataToInsert(players: any[], tournament: string, timestamp: st
       continue;
     }
     
-    // Add historical round data first (R1, R2, R3, R4)
-    ['R1', 'R2', 'R3', 'R4'].forEach((roundKey, index) => {
-      const roundScore = player[roundKey];
-      if (roundScore !== null && roundScore !== undefined) {
-        const roundNum = (index + 1).toString();
-        const uniqueKey = `${player.dg_id}-${roundNum}-${tournament}`;
-        
-        if (!uniqueKeys.has(uniqueKey)) {
-          uniqueKeys.add(uniqueKey);
-          allStats.push({
-            dg_id: player.dg_id,
-            player_name: player.player_name,
-            event_name: tournament,
-            course_name: player.course || '',
-            round_num: roundNum,
-            sg_app: null,
-            sg_ott: null,
-            sg_putt: null,
-            sg_arg: null,
-            sg_t2g: null,
-            sg_total: null,
-            accuracy: null,
-            distance: null,
-            gir: null,
-            prox_fw: null,
-            scrambling: null,
-            position: null,
-            thru: 18,
-            today: roundScore,
-            total: roundScore,
-            data_golf_updated_at: timestamp,
-          });
-        }
-      }
-    });
-
-    // Add current round state (only if not already added as historical data)
+    // Add current round state only (simplified for debugging)
     const currentRound = (player.round || 1).toString();
     const currentUniqueKey = `${player.dg_id}-${currentRound}-${tournament}`;
     
@@ -174,7 +138,7 @@ function mapInPlayDataToInsert(players: any[], tournament: string, timestamp: st
         position: player.current_pos || player.position || null,
         thru: player.thru || 0,
         today: player.today || 0,
-        total: player.current_score || player.total || 0,
+        total: player.current_score || player.total || player.today || 0,
         data_golf_updated_at: timestamp,
       });
     }
@@ -282,9 +246,15 @@ export async function GET(req?: NextRequest) {
         if (error) {
           errors.push(`${tour.toUpperCase()} upsert failed: ${error.message}`);
           logger.error(`${tour.toUpperCase()} upsert failed: ${error.message}`);
-          // 🔍 DEBUG: Log the error details for Euro tour
+          // 🔍 DEBUG: Log the error details and sample data causing the issue
           if (tour === 'euro') {
             logger.error(`🔍 EURO DEBUG - Upsert error details:`, error);
+            logger.error(`🔍 EURO DEBUG - Sample failing records:`, JSON.stringify(statsToInsert.slice(0, 3), null, 2));
+            // Check for invalid dg_id values
+            const invalidRecords = statsToInsert.filter(r => !r.dg_id || typeof r.dg_id !== 'number');
+            if (invalidRecords.length > 0) {
+              logger.error(`🔍 EURO DEBUG - Invalid dg_id records:`, invalidRecords.length, JSON.stringify(invalidRecords.slice(0, 2), null, 2));
+            }
           }
         } else {
           totalInsertedCount += statsToInsert.length;
@@ -292,15 +262,15 @@ export async function GET(req?: NextRequest) {
           
           // 🔍 DEBUG: Verify records were actually saved for Euro tour
           if (tour === 'euro') {
-            const { data: verifyData, error: verifyError } = await supabase
+            const { count, error: verifyError } = await supabase
               .from("live_tournament_stats")
-              .select("count(*)")
+              .select("*", { count: "exact", head: true })
               .eq("event_name", eventName);
             
             if (verifyError) {
               logger.error(`🔍 EURO DEBUG - Verification query failed:`, verifyError);
             } else {
-              logger.info(`🔍 EURO DEBUG - Records in DB for ${eventName}:`, verifyData);
+              logger.info(`🔍 EURO DEBUG - Records in DB for ${eventName}: ${count} records`);
             }
           }
 
