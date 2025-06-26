@@ -272,7 +272,6 @@ interface SGHeavyOptions extends FilterOptions {
   minSgThreshold?: number;
   tournamentWeight?: number;
   minOddsGap?: number;
-  maxOdds?: number;
   sortBy?: 'sg' | 'odds-gap' | 'composite';
   seasonDataSource?: 'pga' | 'datagolf' | 'aggregate';
 }
@@ -284,34 +283,25 @@ interface GenericFilterOptions extends FilterOptions {
 type AllFilterOptions = SGHeavyOptions | GenericFilterOptions;
 
 function FilterOptionsEditor({ filterId, options, onChange }: FilterOptionsEditorProps) {
-  const filterService = FilterService.getInstance()
-  const filter = filterService.getFilterById(filterId)
+  const filterService = FilterService.getInstance();
+  const filter = filterService.getFilterById(filterId);
+  if (!filter) return null;
 
-  // Simple debounced handlers - reduced from 300ms to 100ms for faster response
-  const debouncedOptionChange = useCallback(
-    debounce((key: keyof AllFilterOptions, value: number) => {
-      onChange({ ...options, [key]: value } as FilterOptions)
-    }, 100), // Much faster debounce for responsiveness
-    [options, onChange]
-  )
+  const handleOptionChange = (key: keyof AllFilterOptions, value: any) => {
+    onChange({ ...options, [key]: value });
+  };
 
-  // Handle slider changes with immediate visual feedback (no local state needed)
   const handleSliderChange = (key: keyof AllFilterOptions, value: number) => {
-    debouncedOptionChange(key, value)
-  }
+    handleOptionChange(key, value);
+  };
 
-  // Helper function to get slider value with proper type handling
   function getSliderValue(key: keyof SGHeavyOptions, defaultValue: number): number {
-    if (!options || typeof options !== 'object') return defaultValue;
     const value = (options as SGHeavyOptions)[key];
     return typeof value === 'number' ? value : defaultValue;
   }
 
-  if (!filter) return null
-
-  // Handle SG Heavy filter with its enhanced options
   if (filterId === 'sg-heavy') {
-    const sgOptions = options as SGHeavyOptions
+    const sgOptions = options as SGHeavyOptions;
     return (
       <div className="p-3 border rounded-lg space-y-4">
         <div className="flex items-center justify-between">
@@ -338,6 +328,9 @@ function FilterOptionsEditor({ filterId, options, onChange }: FilterOptionsEdito
             />
             <div className="text-xs text-gray-400">
               Current: {getSliderValue('minSgThreshold', 0).toFixed(1)} strokes gained
+              <div className="mt-1">
+                Filter out players performing below this Strokes Gained threshold
+              </div>
             </div>
           </div>
 
@@ -368,13 +361,16 @@ function FilterOptionsEditor({ filterId, options, onChange }: FilterOptionsEdito
             <select
               id={`${filterId}-seasonDataSource`}
               value={sgOptions.seasonDataSource || 'pga'}
-              onChange={(e) => onChange({ ...sgOptions, seasonDataSource: e.target.value as 'pga' | 'datagolf' | 'aggregate' })}
+              onChange={(e) => handleOptionChange('seasonDataSource', e.target.value as 'pga' | 'datagolf' | 'aggregate')}
               className="w-full h-8 px-2 text-xs border rounded"
             >
               <option value="pga">PGA Tour</option>
               <option value="datagolf">Data Golf</option>
               <option value="aggregate">Aggregate (Both)</option>
             </select>
+            <div className="text-xs text-gray-400">
+              Choose where to pull season-long stats from: PGA Tour official, Data Golf, or aggregate (both)
+            </div>
           </div>
 
           {/* Sort By */}
@@ -385,13 +381,24 @@ function FilterOptionsEditor({ filterId, options, onChange }: FilterOptionsEdito
             <select
               id={`${filterId}-sortBy`}
               value={sgOptions.sortBy || 'sg'}
-              onChange={(e) => onChange({ ...sgOptions, sortBy: e.target.value as 'sg' | 'odds-gap' | 'composite' })}
+              onChange={(e) => handleOptionChange('sortBy', e.target.value as 'sg' | 'odds-gap' | 'composite')}
               className="w-full h-8 px-2 text-xs border rounded"
             >
               <option value="sg">SG Performance</option>
               <option value="odds-gap">Odds Gap</option>
               <option value="composite">Composite Score</option>
             </select>
+            <div className="text-xs text-gray-400">
+              Note: Players must first meet all filter criteria (min. odds gap, etc.)
+              <br />
+              Then results are ordered by:
+              <br />
+              SG Performance: Best strokes gained first
+              <br />
+              Odds Gap: Largest odds advantage first
+              <br />
+              Composite: Balance of SG and odds advantage
+            </div>
           </div>
 
           {/* Minimum Odds Gap */}
@@ -413,38 +420,20 @@ function FilterOptionsEditor({ filterId, options, onChange }: FilterOptionsEdito
             </div>
           </div>
 
-          {/* Max Odds */}
-          <div className="space-y-2">
-            <Label htmlFor={`${filterId}-maxOdds`} className="text-xs font-medium">
-              Maximum Odds (+100 to +500)
-            </Label>
-            <Input
-              id={`${filterId}-maxOdds`}
-              type="number"
-              min="100"
-              max="500"
-              step="25"
-              value={String(sgOptions.maxOdds || 999)}
-              onChange={(e) => onChange({ ...sgOptions, maxOdds: parseInt(e.target.value) || 999 })}
-              className="h-8"
-              placeholder="999 (no limit)"
-            />
-          </div>
-
           {/* Include Underdogs */}
           <div className="space-y-2">
             <div className="flex items-center space-x-2">
               <Switch
                 id={`${filterId}-includeUnderdogs`}
                 checked={Boolean(sgOptions.includeUnderdogs)}
-                onCheckedChange={(checked) => onChange({ ...sgOptions, includeUnderdogs: checked })}
+                onCheckedChange={(checked: boolean) => handleOptionChange('includeUnderdogs', checked)}
               />
               <Label htmlFor={`${filterId}-includeUnderdogs`} className="text-xs font-medium">
-                Include All Qualified Players
+                Include Underdogs
               </Label>
             </div>
             <div className="text-xs text-gray-400">
-              {sgOptions.includeUnderdogs ? 'Shows all players meeting criteria' : 'Shows only top SG player per group'}
+              When enabled, includes players who aren't favorites but meet the SG criteria. Otherwise, only shows the top SG player if they're the favorite.
             </div>
           </div>
         </div>
@@ -456,7 +445,7 @@ function FilterOptionsEditor({ filterId, options, onChange }: FilterOptionsEdito
           </div>
         </div>
       </div>
-    )
+    );
   }
 
   // Handle SG Category Leaders filter
