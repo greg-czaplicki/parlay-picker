@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
@@ -32,6 +32,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { debounce } from "lodash"
 
 interface FilterPanelProps {
   selectedFilters: string[]
@@ -267,14 +268,57 @@ interface FilterOptionsEditorProps {
   onChange: (options: FilterOptions) => void
 }
 
+interface SGHeavyOptions extends FilterOptions {
+  minSgThreshold?: number;
+  tournamentWeight?: number;
+  minOddsGap?: number;
+  maxOdds?: number;
+  sortBy?: 'sg' | 'odds-gap' | 'composite';
+  seasonDataSource?: 'pga' | 'datagolf' | 'aggregate';
+}
+
+interface GenericFilterOptions extends FilterOptions {
+  threshold?: number;
+}
+
+type AllFilterOptions = SGHeavyOptions | GenericFilterOptions;
+
 function FilterOptionsEditor({ filterId, options, onChange }: FilterOptionsEditorProps) {
   const filterService = FilterService.getInstance()
   const filter = filterService.getFilterById(filterId)
+  const [localValues, setLocalValues] = useState<Partial<Record<keyof AllFilterOptions, number>>>({})
+
+  // Add debounced handlers for all sliders with a longer delay
+  const debouncedOptionChange = useCallback(
+    debounce((key: keyof AllFilterOptions, value: number) => {
+      onChange({ ...options, [key]: value } as FilterOptions)
+      setLocalValues(prev => {
+        const newValues = { ...prev }
+        delete newValues[key]
+        return newValues
+      })
+    }, 300), // Increased debounce timeout
+    [options, onChange]
+  )
+
+  // Handle immediate visual feedback
+  const handleSliderChange = (key: keyof AllFilterOptions, value: number) => {
+    setLocalValues(prev => ({ ...prev, [key]: value }))
+    debouncedOptionChange(key, value)
+  }
+
+  // Helper function to get slider value with proper type handling
+  function getSliderValue(key: keyof SGHeavyOptions, defaultValue: number): number {
+    if (!options || typeof options !== 'object') return defaultValue;
+    const value = (options as SGHeavyOptions)[key];
+    return typeof value === 'number' ? value : defaultValue;
+  }
 
   if (!filter) return null
 
   // Handle SG Heavy filter with its enhanced options
   if (filterId === 'sg-heavy') {
+    const sgOptions = options as SGHeavyOptions
     return (
       <div className="p-3 border rounded-lg space-y-4">
         <div className="flex items-center justify-between">
@@ -295,30 +339,49 @@ function FilterOptionsEditor({ filterId, options, onChange }: FilterOptionsEdito
               min={-2}
               max={3}
               step={0.1}
-              value={[Number(options.minSgThreshold) || 0]}
-              onValueChange={([value]) => onChange({ ...options, minSgThreshold: value })}
+              value={[getSliderValue('minSgThreshold', 0)]}
+              onValueChange={([value]) => handleSliderChange('minSgThreshold', value)}
+              className="transition-opacity"
             />
             <div className="text-xs text-gray-400">
-              Current: {(options.minSgThreshold || 0).toFixed(1)} strokes gained
+              Current: {getSliderValue('minSgThreshold', 0).toFixed(1)} strokes gained
             </div>
           </div>
 
           {/* Tournament Weight */}
           <div className="space-y-2">
             <Label htmlFor={`${filterId}-tournamentWeight`} className="text-xs font-medium">
-              Tournament vs Season Weight
+              Tournament Weight
             </Label>
             <Slider
               id={`${filterId}-tournamentWeight`}
               min={0}
               max={1}
               step={0.1}
-              value={[Number(options.tournamentWeight) || 0.6]}
-              onValueChange={([value]) => onChange({ ...options, tournamentWeight: value })}
+              value={[getSliderValue('tournamentWeight', 0.6)]}
+              onValueChange={([value]) => handleSliderChange('tournamentWeight', value)}
+              className="transition-opacity"
             />
             <div className="text-xs text-gray-400">
-              Current: {Math.round((options.tournamentWeight || 0.6) * 100)}% tournament, {Math.round((1 - (options.tournamentWeight || 0.6)) * 100)}% season
+              Current: {(getSliderValue('tournamentWeight', 0.6) * 100).toFixed(0)}% tournament, {((1 - getSliderValue('tournamentWeight', 0.6)) * 100).toFixed(0)}% season
             </div>
+          </div>
+
+          {/* Season Data Source */}
+          <div className="space-y-2">
+            <Label htmlFor={`${filterId}-seasonDataSource`} className="text-xs font-medium">
+              Season Data Source
+            </Label>
+            <select
+              id={`${filterId}-seasonDataSource`}
+              value={sgOptions.seasonDataSource || 'pga'}
+              onChange={(e) => onChange({ ...sgOptions, seasonDataSource: e.target.value as 'pga' | 'datagolf' | 'aggregate' })}
+              className="w-full h-8 px-2 text-xs border rounded"
+            >
+              <option value="pga">PGA Tour</option>
+              <option value="datagolf">Data Golf</option>
+              <option value="aggregate">Aggregate (Both)</option>
+            </select>
           </div>
 
           {/* Sort By */}
@@ -328,8 +391,8 @@ function FilterOptionsEditor({ filterId, options, onChange }: FilterOptionsEdito
             </Label>
             <select
               id={`${filterId}-sortBy`}
-              value={options.sortBy || 'sg'}
-              onChange={(e) => onChange({ ...options, sortBy: e.target.value })}
+              value={sgOptions.sortBy || 'sg'}
+              onChange={(e) => onChange({ ...sgOptions, sortBy: e.target.value as 'sg' | 'odds-gap' | 'composite' })}
               className="w-full h-8 px-2 text-xs border rounded"
             >
               <option value="sg">SG Performance</option>
@@ -348,11 +411,12 @@ function FilterOptionsEditor({ filterId, options, onChange }: FilterOptionsEdito
               min={0}
               max={2}
               step={0.1}
-              value={[Number(options.minOddsGap) || 0]}
-              onValueChange={([value]) => onChange({ ...options, minOddsGap: value })}
+              value={[getSliderValue('minOddsGap', 0)]}
+              onValueChange={([value]) => handleSliderChange('minOddsGap', value)}
+              className="transition-opacity"
             />
             <div className="text-xs text-gray-400">
-              Current: {(options.minOddsGap || 0).toFixed(1)} decimal odds gap
+              Current: {getSliderValue('minOddsGap', 0).toFixed(1)} decimal odds gap
             </div>
           </div>
 
@@ -367,8 +431,8 @@ function FilterOptionsEditor({ filterId, options, onChange }: FilterOptionsEdito
               min="100"
               max="500"
               step="25"
-              value={String(options.maxOdds || 999)}
-              onChange={(e) => onChange({ ...options, maxOdds: parseInt(e.target.value) || 999 })}
+              value={String(sgOptions.maxOdds || 999)}
+              onChange={(e) => onChange({ ...sgOptions, maxOdds: parseInt(e.target.value) || 999 })}
               className="h-8"
               placeholder="999 (no limit)"
             />
@@ -379,15 +443,15 @@ function FilterOptionsEditor({ filterId, options, onChange }: FilterOptionsEdito
             <div className="flex items-center space-x-2">
               <Switch
                 id={`${filterId}-includeUnderdogs`}
-                checked={Boolean(options.includeUnderdogs)}
-                onCheckedChange={(checked) => onChange({ ...options, includeUnderdogs: checked })}
+                checked={Boolean(sgOptions.includeUnderdogs)}
+                onCheckedChange={(checked) => onChange({ ...sgOptions, includeUnderdogs: checked })}
               />
               <Label htmlFor={`${filterId}-includeUnderdogs`} className="text-xs font-medium">
                 Include All Qualified Players
               </Label>
             </div>
             <div className="text-xs text-gray-400">
-              {options.includeUnderdogs ? 'Shows all players meeting criteria' : 'Shows only top SG player per group'}
+              {sgOptions.includeUnderdogs ? 'Shows all players meeting criteria' : 'Shows only top SG player per group'}
             </div>
           </div>
         </div>
@@ -544,11 +608,12 @@ function FilterOptionsEditor({ filterId, options, onChange }: FilterOptionsEdito
             min={0}
             max={100}
             step={1}
-            value={[Number(options.threshold) || 50]}
-            onValueChange={([value]) => onChange({ ...options, threshold: value })}
+            value={[getSliderValue('threshold', 50)]}
+            onValueChange={([value]) => handleSliderChange('threshold', value)}
+            className="transition-opacity"
           />
           <div className="text-xs text-gray-400">
-            Current: {options.threshold || 50}
+            Current: {Math.round(getSliderValue('threshold', 50))}
           </div>
         </div>
         

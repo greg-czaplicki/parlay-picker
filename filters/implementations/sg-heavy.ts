@@ -6,13 +6,19 @@ interface Player {
   name: string;
   odds: number | null;
   sgTotal: number;
-  seasonSgTotal?: number | null;
+  sg_total?: number | null;  // Tournament SG total from API
+  season_sg_total?: number | null;  // Season SG total from PGA Tour data
+  dgSeasonSgTotal?: number | null; // Season SG total from DataGolf
   
   // Individual SG category data (tournament)
   sgPutt?: number | null;
+  sg_putt?: number | null;  // API field name
   sgApp?: number | null;
+  sg_app?: number | null;  // API field name
   sgArg?: number | null;
+  sg_arg?: number | null;  // API field name
   sgOtt?: number | null;
+  sg_ott?: number | null;  // API field name
   
   // Individual SG category data (season)
   season_sg_putt?: number | null;
@@ -44,6 +50,8 @@ interface SGHeavyOptions extends FilterOptions {
   sortBy?: 'sg' | 'odds-gap' | 'composite';
   /** Include players even if they're not the odds favorite in their group */
   includeUnderdogs?: boolean;
+  /** Data source for season stats: 'pga' | 'datagolf' | 'aggregate' (default: 'pga') */
+  seasonDataSource?: 'pga' | 'datagolf' | 'aggregate';
 }
 
 /**
@@ -67,7 +75,8 @@ export function createSGHeavyFilter(): Filter<Player> {
         minOddsGap = 0,
         maxOdds = Infinity,
         sortBy = 'sg',
-        includeUnderdogs = false
+        includeUnderdogs = false,
+        seasonDataSource = 'pga'
       } = options || {};
       
       if (!Array.isArray(data) || data.length === 0) {
@@ -75,10 +84,15 @@ export function createSGHeavyFilter(): Filter<Player> {
       }
 
       // Check if players have SG data
-      const playersWithSG = data.filter(player => 
-        typeof player.sgTotal === 'number' || 
-        typeof player.seasonSgTotal === 'number'
-      );
+      const playersWithSG = data.filter(player => {
+        const hasTournamentSG = typeof player.sgTotal === 'number';
+        const hasSeasonSG = seasonDataSource === 'pga' ? 
+          typeof player.season_sg_total === 'number' :
+          seasonDataSource === 'datagolf' ?
+            typeof player.dgSeasonSgTotal === 'number' :
+            typeof player.season_sg_total === 'number' || typeof player.dgSeasonSgTotal === 'number';
+        return hasTournamentSG || hasSeasonSG;
+      });
 
       if (playersWithSG.length === 0) {
         return { 
@@ -91,21 +105,14 @@ export function createSGHeavyFilter(): Filter<Player> {
         };
       }
 
-      // Enhanced tournament detection - if any player has different sgTotal vs seasonSgTotal
-      const inTournament = playersWithSG.some(player => 
-        typeof player.sgTotal === 'number' && 
-        typeof player.seasonSgTotal === 'number' &&
-        player.sgTotal !== player.seasonSgTotal
-      );
-
       // Calculate weighted SG for each player
       const playersWithWeightedSG = playersWithSG.map(player => {
-        const sgTotalWeighted = calculateWeightedSGFromPlayer(player, inTournament, tournamentWeight);
+        const sgTotalWeighted = calculateWeightedSGFromPlayer(player, false, tournamentWeight, options);
         return {
           ...player,
           sgTotalWeighted,
-          tournamentPhase: inTournament,
-          sgCalculationMethod: getSGCalculationMethodFromPlayer(player, inTournament)
+          sgCalculationMethod: getSGCalculationMethodFromPlayer(player, false, options),
+          sgDebugInfo: {}
         };
       });
 
@@ -121,6 +128,7 @@ export function createSGHeavyFilter(): Filter<Player> {
       let processedGroups = 0;
       let totalPlayersSeen = 0;
       let playersWithValidSG = 0;
+      let debugCalculations: any[] = [];
 
       Object.values(groups).forEach(group => {
         processedGroups++;
@@ -135,6 +143,12 @@ export function createSGHeavyFilter(): Filter<Player> {
 
         validOddsGroup.forEach(p => {
           if (p.sgTotalWeighted > 0) playersWithValidSG++;
+          // Collect debug info for each player
+          debugCalculations.push({
+            name: p.name,
+            odds: p.odds,
+            ...p.sgDebugInfo
+          });
         });
 
         // Apply SG-based filtering
@@ -184,11 +198,17 @@ export function createSGHeavyFilter(): Filter<Player> {
       return { 
         filtered: sgHeavy,
         meta: {
-          tournamentPhase: inTournament,
           totalGroups: Object.keys(groups).length,
           playersWithSG: playersWithSG.length,
           optionsUsed: options,
-          dataStructure: 'player'
+          dataStructure: 'player',
+          debugCalculations,
+          filterStats: {
+            processedGroups,
+            totalPlayersSeen,
+            playersWithValidSG,
+            playersInFinalResults: sgHeavy.length
+          }
         }
       };
     },
@@ -201,55 +221,101 @@ export function createSGHeavyFilter(): Filter<Player> {
 function calculateWeightedSGFromPlayer(
   player: Player,
   inTournament: boolean,
-  tournamentWeight: number
+  tournamentWeight: number,
+  options?: SGHeavyOptions
 ): number {
-  const tournamentSgTotal = player.sgTotal;
-  const seasonSgTotal = player.seasonSgTotal;
+  const tournamentSgTotal = player.sgTotal || player.sg_total;
+  const dataSource = options?.seasonDataSource || 'pga';
   
-  // If we have both pieces of data and in tournament, use weighted combination
-  if (inTournament &&
-      tournamentSgTotal !== null && tournamentSgTotal !== undefined && 
+  let seasonSgTotal: number | null | undefined;
+  
+  switch (dataSource) {
+    case 'pga':
+      seasonSgTotal = player.season_sg_total;  // Use season_sg_total from API
+      break;
+    case 'datagolf':
+      seasonSgTotal = player.dgSeasonSgTotal;
+      break;
+    case 'aggregate':
+      // If both sources available, use average
+      if (player.season_sg_total !== null && player.season_sg_total !== undefined &&
+          player.dgSeasonSgTotal !== null && player.dgSeasonSgTotal !== undefined) {
+        seasonSgTotal = (player.season_sg_total + player.dgSeasonSgTotal) / 2;
+      } else {
+        // Otherwise use whichever is available
+        seasonSgTotal = player.season_sg_total ?? player.dgSeasonSgTotal;
+      }
+      break;
+  }
+  
+  // Debug logging
+  console.log(`[SG Heavy Debug] Calculating SG for ${player.name}:`, {
+    tournamentSgTotal,
+    seasonSgTotal,
+    dataSource,
+    tournamentWeight,
+    pgaSeasonSg: player.season_sg_total,  // Update debug log field name
+    dgSeasonSg: player.dgSeasonSgTotal
+  });
+  
+  // Special cases for 0% and 100% tournament weight
+  if (tournamentWeight === 0 && seasonSgTotal !== null && seasonSgTotal !== undefined) {
+    console.log(`[SG Heavy Debug] Using 100% season data for ${player.name}: ${seasonSgTotal}`);
+    return seasonSgTotal;
+  }
+  if (tournamentWeight === 1 && tournamentSgTotal !== null && tournamentSgTotal !== undefined) {
+    console.log(`[SG Heavy Debug] Using 100% tournament data for ${player.name}: ${tournamentSgTotal}`);
+    return tournamentSgTotal;
+  }
+
+  // If we have both tournament and season data, use weighted average
+  if (tournamentSgTotal !== null && tournamentSgTotal !== undefined &&
       seasonSgTotal !== null && seasonSgTotal !== undefined) {
-    return tournamentWeight * tournamentSgTotal + (1 - tournamentWeight) * seasonSgTotal;
+    const weightedSG = (tournamentSgTotal * tournamentWeight) + (seasonSgTotal * (1 - tournamentWeight));
+    console.log(`[SG Heavy Debug] Using weighted average for ${player.name}: ${weightedSG}`);
+    return weightedSG;
   }
-  
-  if (inTournament) {
-    // During tournament: prefer tournament data, fallback to season
-    if (tournamentSgTotal !== null && tournamentSgTotal !== undefined) {
-      return tournamentSgTotal;
-    } else if (seasonSgTotal !== null && seasonSgTotal !== undefined) {
-      return seasonSgTotal;
-    }
-  } else {
-    // Pre-tournament: prefer season data, accept tournament data as fallback
-    if (seasonSgTotal !== null && seasonSgTotal !== undefined) {
-      return seasonSgTotal;
-    } else if (tournamentSgTotal !== null && tournamentSgTotal !== undefined) {
-      return tournamentSgTotal;
-    }
+
+  // If we only have one type of data, use that
+  if (tournamentSgTotal !== null && tournamentSgTotal !== undefined) {
+    console.log(`[SG Heavy Debug] Only tournament data available for ${player.name}: ${tournamentSgTotal}`);
+    return tournamentSgTotal;
   }
-  
-  // No valid SG data found
+  if (seasonSgTotal !== null && seasonSgTotal !== undefined) {
+    console.log(`[SG Heavy Debug] Only season data available for ${player.name}: ${seasonSgTotal}`);
+    return seasonSgTotal;
+  }
+
+  // No valid data
+  console.log(`[SG Heavy Debug] No valid SG data for ${player.name}`);
   return 0;
 }
 
 /**
  * Get description of how SG was calculated from Player data
  */
-function getSGCalculationMethodFromPlayer(player: Player, inTournament: boolean): string {
-  const tournamentSgTotal = player.sgTotal;
-  const seasonSgTotal = player.seasonSgTotal;
-  
-  if (inTournament) {
-    if (tournamentSgTotal !== null && tournamentSgTotal !== undefined && 
-        seasonSgTotal !== null && seasonSgTotal !== undefined) return 'tournament+season';
-    if (tournamentSgTotal !== null && tournamentSgTotal !== undefined) return 'tournament-only';
-    if (seasonSgTotal !== null && seasonSgTotal !== undefined) return 'season-fallback';
-  } else {
-    if (seasonSgTotal !== null && seasonSgTotal !== undefined) return 'season-primary';
-    if (tournamentSgTotal !== null && tournamentSgTotal !== undefined) return 'tournament-fallback';
+function getSGCalculationMethodFromPlayer(
+  player: Player,
+  inTournament: boolean,
+  options?: SGHeavyOptions
+): string {
+  const dataSource = options?.seasonDataSource || 'pga';
+  const hasTournamentSG = typeof player.sgTotal === 'number';
+  const hasSeasonSG = dataSource === 'pga' ? 
+    typeof player.season_sg_total === 'number' :
+    dataSource === 'datagolf' ?
+      typeof player.dgSeasonSgTotal === 'number' :
+      typeof player.season_sg_total === 'number' || typeof player.dgSeasonSgTotal === 'number';
+
+  if (hasTournamentSG && hasSeasonSG && inTournament) {
+    return 'weighted';
   }
-  
+  if (hasTournamentSG) {
+    return 'tournament-only';
+  }
+  if (hasSeasonSG) {
+    return `season-only (${dataSource})`;
+  }
   return 'no-data';
 }
 
@@ -323,4 +389,110 @@ function decimalToAmerican(decimalOdds: number): number {
   if (decimalOdds >= 2.0) return Math.round((decimalOdds - 1) * 100);
   else if (decimalOdds > 1.0) return Math.round(-100 / (decimalOdds - 1));
   else return 0;
+}
+
+function filterPlayersByMinSgThreshold(
+  players: Player[],
+  minSgThreshold: number,
+  inTournament: boolean,
+  tournamentWeight: number,
+  options?: SGHeavyOptions
+): Player[] {
+  return players.filter(player => {
+    const weightedSg = calculateWeightedSGFromPlayer(player, inTournament, tournamentWeight, options);
+    return weightedSg >= minSgThreshold;
+  });
+}
+
+function filterPlayersByOddsGap(
+  players: Player[],
+  minOddsGap: number,
+  maxOdds: number | undefined,
+  includeUnderdogs: boolean
+): Player[] {
+  return players.filter(player => {
+    // Skip players with no odds
+    if (!player.odds) return false;
+    
+    // Apply max odds filter if specified
+    if (maxOdds && player.odds > maxOdds) return false;
+    
+    // Get all players in the same matchup
+    const matchupPlayers = players.filter(p => p.matchupId === player.matchupId);
+    
+    // Skip if we can't find the matchup
+    if (matchupPlayers.length < 2) return false;
+    
+    // Sort by odds ascending (lowest/best odds first)
+    const sortedByOdds = [...matchupPlayers].sort((a, b) => {
+      if (!a.odds || !b.odds) return 0;
+      return a.odds - b.odds;
+    });
+    
+    // Get odds gap between this player and the favorite
+    const favorite = sortedByOdds[0];
+    const favoriteOdds = favorite.odds || 0;
+    const playerOdds = player.odds;
+    const oddsGap = playerOdds - favoriteOdds;
+    
+    // If player is the favorite, check if gap to next player is sufficient
+    if (player === favorite) {
+      const nextBestOdds = sortedByOdds[1].odds || 0;
+      return (nextBestOdds - playerOdds) >= minOddsGap;
+    }
+    
+    // If not the favorite and underdogs not allowed, filter out
+    if (!includeUnderdogs) return false;
+    
+    // For underdogs, check if gap to favorite is within threshold
+    return oddsGap <= minOddsGap;
+  });
+}
+
+function sortPlayersByCriteria(
+  players: Player[],
+  sortBy: 'sg' | 'odds-gap' | 'composite',
+  inTournament: boolean,
+  tournamentWeight: number,
+  options?: SGHeavyOptions
+): Player[] {
+  return [...players].sort((a, b) => {
+    if (sortBy === 'sg') {
+      const aWeightedSg = calculateWeightedSGFromPlayer(a, inTournament, tournamentWeight, options);
+      const bWeightedSg = calculateWeightedSGFromPlayer(b, inTournament, tournamentWeight, options);
+      return bWeightedSg - aWeightedSg;
+    }
+    
+    if (sortBy === 'odds-gap') {
+      const aOdds = a.odds || 0;
+      const bOdds = b.odds || 0;
+      return aOdds - bOdds;
+    }
+    
+    // Composite sort (weighted SG + odds gap)
+    const aWeightedSg = calculateWeightedSGFromPlayer(a, inTournament, tournamentWeight, options);
+    const bWeightedSg = calculateWeightedSGFromPlayer(b, inTournament, tournamentWeight, options);
+    const aOdds = a.odds || 0;
+    const bOdds = b.odds || 0;
+    
+    // Normalize SG and odds to 0-1 range for fair comparison
+    const maxSg = Math.max(aWeightedSg, bWeightedSg);
+    const minSg = Math.min(aWeightedSg, bWeightedSg);
+    const sgRange = maxSg - minSg || 1;
+    
+    const maxOdds = Math.max(aOdds, bOdds);
+    const minOdds = Math.min(aOdds, bOdds);
+    const oddsRange = maxOdds - minOdds || 1;
+    
+    const aNormalizedSg = (aWeightedSg - minSg) / sgRange;
+    const bNormalizedSg = (bWeightedSg - minSg) / sgRange;
+    const aNormalizedOdds = 1 - ((aOdds - minOdds) / oddsRange);
+    const bNormalizedOdds = 1 - ((bOdds - minOdds) / oddsRange);
+    
+    // Weight SG more heavily than odds in composite score
+    const aComposite = (aNormalizedSg * 0.7) + (aNormalizedOdds * 0.3);
+    const bComposite = (bNormalizedSg * 0.7) + (bNormalizedOdds * 0.3);
+    
+    return bComposite - aComposite;
+  });
 } 

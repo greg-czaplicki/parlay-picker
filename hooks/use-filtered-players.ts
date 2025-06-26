@@ -83,7 +83,12 @@ export function useFilteredPlayers(
               season_sg_putt: null,
               season_sg_app: null,
               season_sg_arg: null,
-              season_sg_ott: null
+              season_sg_ott: null,
+              dgSeasonSgTotal: null,
+              dgSeasonSgPutt: null,
+              dgSeasonSgApp: null,
+              dgSeasonSgArg: null,
+              dgSeasonSgOtt: null
             };
           }
           
@@ -96,12 +101,18 @@ export function useFilteredPlayers(
             sgArg: playerSgData.sgArg ?? null,
             sgOtt: playerSgData.sgOtt ?? null,
             
-            // Season SG data
-            season_sg_total: playerSgData.seasonSgTotal ?? null,  // Fix field name mapping
-            season_sg_putt: playerSgData.seasonSgPutt ?? null,
-            season_sg_app: playerSgData.seasonSgApp ?? null,
-            season_sg_arg: playerSgData.seasonSgArg ?? null,
-            season_sg_ott: playerSgData.seasonSgOtt ?? null
+            // Season SG data (PGA Tour)
+            season_sg_total: playerSgData.pgaSeasonSgTotal ?? null,  // PGA Tour season data
+            season_sg_putt: playerSgData.pgaSeasonSgPutt ?? null,
+            season_sg_app: playerSgData.pgaSeasonSgApp ?? null,
+            season_sg_arg: playerSgData.pgaSeasonSgArg ?? null,
+            season_sg_ott: playerSgData.pgaSeasonSgOtt ?? null,
+            // DataGolf Season SG data
+            dgSeasonSgTotal: playerSgData.seasonSgTotal ?? null,  // DataGolf season data
+            dgSeasonSgPutt: playerSgData.seasonSgPutt ?? null,
+            dgSeasonSgApp: playerSgData.seasonSgApp ?? null,
+            dgSeasonSgArg: playerSgData.seasonSgArg ?? null,
+            dgSeasonSgOtt: playerSgData.seasonSgOtt ?? null
           };
         };
         

@@ -102,8 +102,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ matchups: matchupsData })
     }
 
-    // 3. Fetch season-long SG data from player_skill_ratings (Data Golf season stats)
-    const { data: seasonSgData, error: seasonSgError } = await supabase
+    // 3a. Fetch DataGolf season-long SG data from player_skill_ratings
+    const { data: dgSeasonSgData, error: dgSeasonSgError } = await supabase
       .from('player_skill_ratings')
       .select(`
         dg_id,
@@ -118,12 +118,26 @@ export async function GET(req: NextRequest) {
       `)
       .in('dg_id', playerIds)
 
-    // Create season SG lookup map
-    const seasonSgMap = new Map()
-    if (!seasonSgError && seasonSgData) {
-      seasonSgData.forEach(player => {
+    // 3b. Fetch PGA Tour season-long SG data from player_season_stats
+    const { data: pgaSeasonSgData, error: pgaSeasonSgError } = await supabase
+      .from('player_season_stats')
+      .select(`
+        dg_id,
+        player_name,
+        sg_total,
+        sg_putt,
+        sg_arg,
+        sg_app,
+        sg_ott
+      `)
+      .in('dg_id', playerIds)
+
+    // Create DataGolf season SG lookup map
+    const dgSeasonSgMap = new Map()
+    if (!dgSeasonSgError && dgSeasonSgData) {
+      dgSeasonSgData.forEach(player => {
         if (player.dg_id) {
-          seasonSgMap.set(player.dg_id, {
+          dgSeasonSgMap.set(player.dg_id, {
             seasonSgTotal: player.sg_total,
             seasonSgPutt: player.sg_putt,
             seasonSgArg: player.sg_arg,
@@ -131,6 +145,22 @@ export async function GET(req: NextRequest) {
             seasonSgOtt: player.sg_ott,
             seasonDrivingAcc: player.driving_acc,
             seasonDrivingDist: player.driving_dist
+          })
+        }
+      })
+    }
+
+    // Create PGA Tour season SG lookup map
+    const pgaSeasonSgMap = new Map()
+    if (!pgaSeasonSgError && pgaSeasonSgData) {
+      pgaSeasonSgData.forEach(player => {
+        if (player.dg_id) {
+          pgaSeasonSgMap.set(player.dg_id, {
+            pgaSeasonSgTotal: player.sg_total,
+            pgaSeasonSgPutt: player.sg_putt,
+            pgaSeasonSgArg: player.sg_arg,
+            pgaSeasonSgApp: player.sg_app,
+            pgaSeasonSgOtt: player.sg_ott
           })
         }
       })
@@ -195,10 +225,12 @@ export async function GET(req: NextRequest) {
     const enhancedMatchups = matchupsData.map(matchup => {
       // Helper function to get player SG data
       const getPlayerSGData = (dgId: number) => {
-        const seasonData = seasonSgMap.get(dgId) || {}
+        const dgSeasonData = dgSeasonSgMap.get(dgId) || {}
+        const pgaSeasonData = pgaSeasonSgMap.get(dgId) || {}
         const tournamentData = tournamentSgMap.get(dgId) || {}
         return {
-          ...seasonData,
+          ...dgSeasonData,
+          ...pgaSeasonData,
           ...tournamentData
         }
       }
@@ -219,12 +251,13 @@ export async function GET(req: NextRequest) {
         }),
         // Add metadata
         sg_data_enhanced: true,
-        season_sg_players: seasonSgMap.size,
+        dg_season_sg_players: dgSeasonSgMap.size,
+        pga_season_sg_players: pgaSeasonSgMap.size,
         tournament_sg_players: tournamentSgMap.size
       }
     })
 
-    console.log(`✅ Enhanced ${enhancedMatchups.length} matchups with SG data (Season: ${seasonSgMap.size}, Tournament: ${tournamentSgMap.size} players)`)
+    console.log(`✅ Enhanced ${enhancedMatchups.length} matchups with SG data (DG Season: ${dgSeasonSgMap.size}, PGA Season: ${pgaSeasonSgMap.size}, Tournament: ${tournamentSgMap.size} players)`)
 
     const response = NextResponse.json({ matchups: enhancedMatchups })
 
