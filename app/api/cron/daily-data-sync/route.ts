@@ -110,8 +110,38 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // 4. Check and settle completed tournaments
-    console.log('🏆 Checking for completed tournaments to settle...')
+    // 4. Check and settle completed rounds (new round-based settlement)
+    console.log('🏆 Checking for completed rounds to settle...')
+    try {
+      const settleResponse = await fetch(`${baseUrl}/api/settle-rounds`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (settleResponse.ok) {
+        const settleResult = await settleResponse.json()
+        results.push({
+          task: 'settle_rounds',
+          success: true,
+          data: settleResult
+        })
+        console.log('✅ Round settlement check completed')
+      } else {
+        throw new Error(`Round settlement check failed: ${settleResponse.statusText}`)
+      }
+    } catch (error: any) {
+      console.error('❌ Round settlement check failed:', error)
+      results.push({
+        task: 'settle_rounds',
+        success: false,
+        error: error.message
+      })
+    }
+
+    // 5. Also check and settle completed tournaments (legacy fallback)
+    console.log('🏆 Checking for completed tournaments to settle (legacy)...')
     try {
       const settleResponse = await fetch(`${baseUrl}/api/settle-completed`, {
         method: 'POST',
@@ -127,12 +157,12 @@ export async function GET(request: NextRequest) {
           success: true,
           data: settleResult
         })
-        console.log('✅ Settlement check completed')
+        console.log('✅ Tournament settlement check completed')
       } else {
-        throw new Error(`Settlement check failed: ${settleResponse.statusText}`)
+        throw new Error(`Tournament settlement check failed: ${settleResponse.statusText}`)
       }
     } catch (error: any) {
-      console.error('❌ Settlement check failed:', error)
+      console.error('❌ Tournament settlement check failed:', error)
       results.push({
         task: 'settle_completed',
         success: false,

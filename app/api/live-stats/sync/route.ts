@@ -300,36 +300,30 @@ export async function GET(req?: NextRequest) {
             // Don't fail the sync if snapshot triggers fail
           }
 
-          // 🎯 NEW: Trigger automatic settlement after successful sync
+          // 🎯 NEW: Trigger automatic round-based settlement after successful sync
           try {
-            if (eventId) {
-              logger.info(`Triggering automatic settlement for event ${eventId} (${eventName})`);
-              
-              // Call the settlement API internally
-              const settlementResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/settle`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  eventId: eventId,
-                  method: 'automatic'
-                })
-              });
-
-              if (settlementResponse.ok) {
-                const settlementData = await settlementResponse.json();
-                if (settlementData.total_settlements > 0) {
-                  logger.info(`Settlement completed for event ${eventId}: ${settlementData.total_settlements} picks settled`);
-                } else {
-                  logger.debug(`No settlements needed for event ${eventId}`);
-                }
-              } else {
-                logger.warn(`Settlement API call failed for event ${eventId}: ${settlementResponse.status}`);
+            logger.info(`Triggering round-based settlement check for ${eventName}`);
+            
+            // Call the round settlement API internally
+            const settlementResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/settle-rounds`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
               }
+            });
+
+            if (settlementResponse.ok) {
+              const settlementData = await settlementResponse.json();
+              if (settlementData.data?.total_picks_settled > 0) {
+                logger.info(`Round settlement completed: ${settlementData.data.total_picks_settled} picks settled across ${settlementData.data.successful_settlements} rounds`);
+              } else {
+                logger.debug(`No round settlements needed`);
+              }
+            } else {
+              logger.warn(`Round settlement API call failed: ${settlementResponse.status}`);
             }
           } catch (settlementError) {
-            logger.warn(`Settlement trigger failed for ${eventName}:`, settlementError);
+            logger.warn(`Round settlement trigger failed for ${eventName}:`, settlementError);
             // Don't fail the sync if settlement fails
           }
         }
