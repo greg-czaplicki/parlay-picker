@@ -15,7 +15,7 @@ export default function MatchupsLayout({
   return (
     <div className="min-h-screen text-white">
       <Sidebar />
-      <div className="ml-16 p-4">
+              <div className="p-4 md:ml-16">
         <TopNavigation />
         {children}
       </div>

@@ -15,7 +15,7 @@ export default function PlayersLayout({
   return (
     <div className="min-h-screen text-white">
       <Sidebar />
-      <div className="ml-16 p-4">
+              <div className="p-4 md:ml-16">
         <TopNavigation />
         <div className="mt-6 mb-8">
           <h1 className="text-3xl font-bold">Player Statistics</h1>

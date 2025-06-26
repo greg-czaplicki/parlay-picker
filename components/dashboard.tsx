@@ -277,7 +277,7 @@ export default function Dashboard({
         {/* Professional Tab Navigation */}
         <div className="mb-8">
           <div className="card-clean">
-            <div className="flex items-center gap-2 p-1 bg-glass rounded-xl border border-border/20 backdrop-blur-md">
+            <div className="flex flex-wrap items-center gap-2 p-1 bg-glass rounded-xl border border-border/20 backdrop-blur-md">
               <button
                 className={`relative px-6 py-3 rounded-lg font-medium transition-all duration-300 ${
                   isMounted && activeTab === "matchups" 
@@ -309,21 +309,20 @@ export default function Dashboard({
         </div>
 
         {activeTab === "matchups" && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Row 1: Event Selection and Recommendation Filters */}
             <div className="md:col-span-3">
               <Card className="card-clean shadow-card-lg border-border/10">
-                <CardContent className="p-8">
-                  <div className="flex flex-col gap-6">
+                <CardContent>
+                  <div className="flex flex-col gap-4">
                     {/* Event and Matchup Type Selectors */}
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-                      <h2 className="text-display-sm text-gradient">Event Selection</h2>
+                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pt-6">
                       {currentEvents && (
-                        <div className="flex items-center gap-4">
-                          <div className="flex items-center gap-3">
+                        <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4">
+                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
                             <span className="text-label">Event:</span>
                             <Select value={selectedEventId ? String(selectedEventId) : undefined} onValueChange={handleEventChange}>
-                              <SelectTrigger className="w-[240px] card-clean border border-border/20 bg-white/8 hover:bg-white/12 transition-all">
+                              <SelectTrigger className="w-full lg:w-[240px] card-clean border border-border/20 bg-white/8 hover:bg-white/12 transition-all">
                                 <SelectValue placeholder="Select Event" />
                               </SelectTrigger>
                               <SelectContent className="card-clean border-border/20 backdrop-blur-md shadow-dropdown">
@@ -342,10 +341,10 @@ export default function Dashboard({
                             </Select>
                           </div>
 
-                          <div className="flex items-center gap-3">
+                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
                             <span className="text-label">Type:</span>
                             <Select value={matchupType} onValueChange={handleMatchupTypeChange}>
-                              <SelectTrigger className="w-[130px] card-clean border border-border/20 bg-white/8 hover:bg-white/12 transition-all">
+                              <SelectTrigger className="w-full lg:w-[130px] card-clean border border-border/20 bg-white/8 hover:bg-white/12 transition-all">
                                 <SelectValue placeholder="Type" />
                               </SelectTrigger>
                               <SelectContent className="card-clean border-border/20 backdrop-blur-md shadow-dropdown">
@@ -416,7 +415,7 @@ export default function Dashboard({
                     )}
 
                     {/* Player Search - Positioned above content for better UX */}
-                    <div className="md:col-span-3">
+                    <div className="lg:col-span-3">
                       <div className="flex justify-center">
                         <PlayerSearchWithCount
                           players={allPlayersFromMatchups}
@@ -434,7 +433,7 @@ export default function Dashboard({
             </div>
 
             {/* Row 2: Main Matchups Table (Left) - Larger allocation */}
-            <div className="md:col-span-2">
+            <div className="lg:col-span-2">
               <MatchupsTable 
                 eventId={selectedEventId} 
                 matchupType={matchupType} 
@@ -453,7 +452,7 @@ export default function Dashboard({
             </div>
 
             {/* Row 2: Recommended Picks (Right) - Better space utilization */}
-            <div className="md:col-span-1">
+            <div className="lg:col-span-1">
               <RecommendedPicks 
                 eventId={selectedEventId}
                 matchupType={matchupType} 

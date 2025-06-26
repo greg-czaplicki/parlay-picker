@@ -82,7 +82,7 @@ export default function Sidebar() {
   ]
 
   return (
-    <div className="fixed top-0 left-0 z-50 flex h-screen w-16 flex-col items-center bg-surface/80 backdrop-blur-xl border-r border-border/20 shadow-2xl">
+    <div className="hidden md:flex fixed top-0 left-0 z-50 h-screen w-16 flex-col items-center bg-surface/80 backdrop-blur-xl border-r border-border/20 shadow-2xl">
       {/* Logo */}
       <div className="mt-6 mb-8 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary-dark shadow-lg shadow-primary/20">
         <GolfBall size={24} className="text-white drop-shadow-sm" />
