@@ -543,8 +543,8 @@ export function RecommendedPicksContent({
 
                           {/* Season SG */}
                           <div className="flex flex-col justify-center">
-                            <div className={`text-lg font-bold ${getSGColorClass(player.seasonSgTotal)}`}>
-                              {player.seasonSgTotal?.toFixed(2) ?? 'N/A'}
+                            <div className={`text-lg font-bold ${getSGColorClass(player.season_sg_total)}`}>
+                              {player.season_sg_total?.toFixed(2) ?? 'N/A'}
                             </div>
                             <div className="text-xs text-muted-foreground mt-1">Season SG</div>
                           </div>
