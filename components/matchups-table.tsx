@@ -498,7 +498,7 @@ export default function MatchupsTable({
                       <Sliders className="h-4 w-4" />
                       <span>Filter</span>
                       {oddsGapThreshold > 0 && 
-                        <span className="ml-1 bg-green-700 text-green-100 text-xs px-1.5 py-0.5 rounded-full">
+                        <span className="ml-1 bg-green-500/20 text-green-400 text-xs px-1.5 py-0.5 rounded-full">
                           {oddsGapThreshold}+
                         </span>
                       }
@@ -541,7 +541,7 @@ export default function MatchupsTable({
                           
                           if (highlightedCount > 0) {
                             return (
-                              <span className="ml-1 bg-green-900 text-green-100 text-xs px-1.5 py-0.5 rounded-full">
+                              <span className="ml-1 bg-green-500/20 text-green-400 text-xs px-1.5 py-0.5 rounded-full">
                                 {highlightedCount}
                               </span>
                             );
@@ -718,6 +718,88 @@ export default function MatchupsTable({
                             const positionData = formatPlayerPosition(String(player.dg_id), player.teetime);
                             const { localTime: playerTeeTime } = formatTeeTime(player.teetime);
 
+                            // Check if this player has a significant odds gap (only for favorites)
+                            const isOddsGapHighlight = (() => {
+                              if (oddsGapThreshold <= 0 || !player.odds) return false;
+                              
+                              // For 3-ball: highlight if this is the favorite and has gap against all others
+                              if (matchupType === "3ball") {
+                                const allPlayers = players.filter(p => p.odds && p.odds > 1);
+                                if (allPlayers.length < 2) return false;
+                                const sortedByOdds = allPlayers.sort((a, b) => (a.odds || 999) - (b.odds || 999));
+                                const favorite = sortedByOdds[0];
+                                const others = sortedByOdds.slice(1);
+                                
+                                // Only highlight if this player is the favorite and has gap against all others
+                                return player.dg_id === favorite.dg_id && 
+                                       others.every(other => hasSignificantOddsGap(favorite.odds ?? null, other.odds ?? null));
+                              }
+                              
+                              // For 2-ball: highlight if this is the favorite and has gap against the other
+                              if (matchupType === "2ball") {
+                                const validPlayers = players.filter(p => p.odds && p.odds > 1);
+                                if (validPlayers.length !== 2) return false;
+                                const [p1, p2] = validPlayers.sort((a, b) => (a.odds || 999) - (b.odds || 999));
+                                
+                                // Only highlight the favorite if there's a significant gap
+                                return player.dg_id === p1.dg_id && hasSignificantOddsGap(p1.odds ?? null, p2.odds ?? null);
+                              }
+                              
+                              return false;
+                            })();
+
+                            // Check for FanDuel odds gap highlighting
+                            const hasFanDuelOddsGap = (() => {
+                              if (oddsGapThreshold <= 0 || !player.odds) return false;
+                              
+                              if (matchupType === "3ball") {
+                                const allPlayers = players.filter(p => p.odds && p.odds > 1);
+                                if (allPlayers.length < 2) return false;
+                                const sortedByOdds = allPlayers.sort((a, b) => (a.odds || 999) - (b.odds || 999));
+                                const favorite = sortedByOdds[0];
+                                const others = sortedByOdds.slice(1);
+                                
+                                return player.dg_id === favorite.dg_id && 
+                                       others.every(other => hasSignificantOddsGap(favorite.odds ?? null, other.odds ?? null));
+                              }
+                              
+                              if (matchupType === "2ball") {
+                                const validPlayers = players.filter(p => p.odds && p.odds > 1);
+                                if (validPlayers.length !== 2) return false;
+                                const [p1, p2] = validPlayers.sort((a, b) => (a.odds || 999) - (b.odds || 999));
+                                
+                                return player.dg_id === p1.dg_id && hasSignificantOddsGap(p1.odds ?? null, p2.odds ?? null);
+                              }
+                              
+                              return false;
+                            })();
+
+                            // Check for DataGolf odds gap highlighting
+                            const hasDataGolfOddsGap = (() => {
+                              if (oddsGapThreshold <= 0 || !player.dgOdds) return false;
+                              
+                              if (matchupType === "3ball") {
+                                const allPlayers = players.filter(p => p.dgOdds && p.dgOdds > 1);
+                                if (allPlayers.length < 2) return false;
+                                const sortedByOdds = allPlayers.sort((a, b) => (a.dgOdds || 999) - (b.dgOdds || 999));
+                                const favorite = sortedByOdds[0];
+                                const others = sortedByOdds.slice(1);
+                                
+                                return player.dg_id === favorite.dg_id && 
+                                       others.every(other => hasSignificantOddsGap(favorite.dgOdds ?? null, other.dgOdds ?? null));
+                              }
+                              
+                              if (matchupType === "2ball") {
+                                const validPlayers = players.filter(p => p.dgOdds && p.dgOdds > 1);
+                                if (validPlayers.length !== 2) return false;
+                                const [p1, p2] = validPlayers.sort((a, b) => (a.dgOdds || 999) - (b.dgOdds || 999));
+                                
+                                return player.dg_id === p1.dg_id && hasSignificantOddsGap(p1.dgOdds ?? null, p2.dgOdds ?? null);
+                              }
+                              
+                              return false;
+                            })();
+
                             return (
                               <TableRow 
                                 key={`${matchup.uuid}-${player.id}`}
@@ -725,6 +807,7 @@ export default function MatchupsTable({
                                   ${idx === players.length - 1 ? 'border-b-8 border-b-gray-900' : 'border-b border-b-gray-800'}
                                   ${playerStatus.status === 'used' ? 'bg-yellow-50/5' : ''}
                                   ${playerStatus.status === 'current' ? 'bg-primary/5' : ''}
+                                  ${isOddsGapHighlight ? 'bg-green-500/10 border-l-4 border-l-green-500' : ''}
                                   bg-gray-950/30
                                 `}
                               >
@@ -757,8 +840,12 @@ export default function MatchupsTable({
                                   <div>{positionData.position}</div>
                                   <div className="text-xs text-muted-foreground">{positionData.score}</div>
                                 </TableCell>
-                                <TableCell className="text-center">{formatOdds(player.odds ?? null)}</TableCell>
-                                <TableCell className="text-center">{formatOdds(player.dgOdds ?? null)}</TableCell>
+                                <TableCell className={`text-center ${hasFanDuelOddsGap ? 'bg-green-500/20 text-green-300 font-semibold' : ''}`}>
+                                  {formatOdds(player.odds ?? null)}
+                                </TableCell>
+                                <TableCell className={`text-center ${hasDataGolfOddsGap ? 'bg-green-500/20 text-green-300 font-semibold' : ''}`}>
+                                  {formatOdds(player.dgOdds ?? null)}
+                                </TableCell>
                                 <TableCell>
                                   {playerStatus.status === 'current' ? (
                                     <Button 
@@ -906,6 +993,88 @@ export default function MatchupsTable({
                             const positionData = formatPlayerPosition(String(player.dg_id), player.teetime);
                             const { localTime: playerTeeTime } = formatTeeTime(player.teetime);
 
+                            // Check if this player has a significant odds gap (only for favorites)
+                            const isOddsGapHighlight = (() => {
+                              if (oddsGapThreshold <= 0 || !player.odds) return false;
+                              
+                              // For 3-ball: highlight if this is the favorite and has gap against all others
+                              if (matchupType === "3ball") {
+                                const allPlayers = players.filter(p => p.odds && p.odds > 1);
+                                if (allPlayers.length < 2) return false;
+                                const sortedByOdds = allPlayers.sort((a, b) => (a.odds || 999) - (b.odds || 999));
+                                const favorite = sortedByOdds[0];
+                                const others = sortedByOdds.slice(1);
+                                
+                                // Only highlight if this player is the favorite and has gap against all others
+                                return player.dg_id === favorite.dg_id && 
+                                       others.every(other => hasSignificantOddsGap(favorite.odds ?? null, other.odds ?? null));
+                              }
+                              
+                              // For 2-ball: highlight if this is the favorite and has gap against the other
+                              if (matchupType === "2ball") {
+                                const validPlayers = players.filter(p => p.odds && p.odds > 1);
+                                if (validPlayers.length !== 2) return false;
+                                const [p1, p2] = validPlayers.sort((a, b) => (a.odds || 999) - (b.odds || 999));
+                                
+                                // Only highlight the favorite if there's a significant gap
+                                return player.dg_id === p1.dg_id && hasSignificantOddsGap(p1.odds ?? null, p2.odds ?? null);
+                              }
+                              
+                              return false;
+                            })();
+
+                            // Check for FanDuel odds gap highlighting
+                            const hasFanDuelOddsGap = (() => {
+                              if (oddsGapThreshold <= 0 || !player.odds) return false;
+                              
+                              if (matchupType === "3ball") {
+                                const allPlayers = players.filter(p => p.odds && p.odds > 1);
+                                if (allPlayers.length < 2) return false;
+                                const sortedByOdds = allPlayers.sort((a, b) => (a.odds || 999) - (b.odds || 999));
+                                const favorite = sortedByOdds[0];
+                                const others = sortedByOdds.slice(1);
+                                
+                                return player.dg_id === favorite.dg_id && 
+                                       others.every(other => hasSignificantOddsGap(favorite.odds ?? null, other.odds ?? null));
+                              }
+                              
+                              if (matchupType === "2ball") {
+                                const validPlayers = players.filter(p => p.odds && p.odds > 1);
+                                if (validPlayers.length !== 2) return false;
+                                const [p1, p2] = validPlayers.sort((a, b) => (a.odds || 999) - (b.odds || 999));
+                                
+                                return player.dg_id === p1.dg_id && hasSignificantOddsGap(p1.odds ?? null, p2.odds ?? null);
+                              }
+                              
+                              return false;
+                            })();
+
+                            // Check for DataGolf odds gap highlighting
+                            const hasDataGolfOddsGap = (() => {
+                              if (oddsGapThreshold <= 0 || !player.dgOdds) return false;
+                              
+                              if (matchupType === "3ball") {
+                                const allPlayers = players.filter(p => p.dgOdds && p.dgOdds > 1);
+                                if (allPlayers.length < 2) return false;
+                                const sortedByOdds = allPlayers.sort((a, b) => (a.dgOdds || 999) - (b.dgOdds || 999));
+                                const favorite = sortedByOdds[0];
+                                const others = sortedByOdds.slice(1);
+                                
+                                return player.dg_id === favorite.dg_id && 
+                                       others.every(other => hasSignificantOddsGap(favorite.dgOdds ?? null, other.dgOdds ?? null));
+                              }
+                              
+                              if (matchupType === "2ball") {
+                                const validPlayers = players.filter(p => p.dgOdds && p.dgOdds > 1);
+                                if (validPlayers.length !== 2) return false;
+                                const [p1, p2] = validPlayers.sort((a, b) => (a.dgOdds || 999) - (b.dgOdds || 999));
+                                
+                                return player.dg_id === p1.dg_id && hasSignificantOddsGap(p1.dgOdds ?? null, p2.dgOdds ?? null);
+                              }
+                              
+                              return false;
+                            })();
+
                             return (
                               <div 
                                 key={`${matchup.uuid}-${player.id}`}
@@ -913,6 +1082,7 @@ export default function MatchupsTable({
                                   ${idx === players.length - 1 ? 'border-b-8 border-b-gray-900' : 'border-b border-b-gray-800'}
                                   ${playerStatus.status === 'used' ? 'bg-yellow-50/5' : ''}
                                   ${playerStatus.status === 'current' ? 'bg-primary/5' : ''}
+                                  ${isOddsGapHighlight ? 'bg-green-500/10 border-l-4 border-l-green-500' : ''}
                                   bg-gray-950/30 p-4
                                 `}
                               >
@@ -993,8 +1163,12 @@ export default function MatchupsTable({
                                   </div>
                                   <div>
                                     <div className="text-muted-foreground text-xs mb-1">Odds</div>
-                                    <div className="font-medium">{formatOdds(player.odds ?? null)}</div>
-                                    <div className="text-xs text-muted-foreground">DG: {formatOdds(player.dgOdds ?? null)}</div>
+                                    <div className={`font-medium ${hasFanDuelOddsGap ? 'text-green-300 font-semibold' : ''}`}>
+                                      {formatOdds(player.odds ?? null)}
+                                    </div>
+                                    <div className={`text-xs ${hasDataGolfOddsGap ? 'text-green-300 font-semibold' : 'text-muted-foreground'}`}>
+                                      DG: {formatOdds(player.dgOdds ?? null)}
+                                    </div>
                                   </div>
                                 </div>
                               </div>
