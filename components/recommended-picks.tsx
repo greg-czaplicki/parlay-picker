@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Plus, AlertCircle, Info, Filter as FilterIcon } from "lucide-react"
+import { Plus, AlertCircle, Info, Filter as FilterIcon, Star } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 import { useParlayContext, ParlaySelection } from "@/context/ParlayContext"
 import { useRecommendedPicksQuery, Player } from "@/hooks/use-recommended-picks-query"
@@ -17,6 +17,7 @@ import { FilterPanel } from "@/components/ui/filter-panel"
 import { FilterChipList } from "@/components/ui/filter-chip"
 import { Badge } from "@/components/ui/badge"
 import { formatPlayerName } from "@/lib/utils"
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetDescription } from "@/components/ui/sheet"
 // Player search functionality is now handled by parent component
 
 interface RecommendedPicksProps {
@@ -83,7 +84,56 @@ function getSGColorClass(sg: number | null | undefined) {
   return "text-red-800 font-bold";
 }
 
-export default function RecommendedPicks({
+// Create a wrapper component for the slide-out panel
+export function RecommendedPicksPanel(props: RecommendedPicksProps) {
+  const [isOpen, setIsOpen] = useState(false)
+
+  return (
+    <>
+      {/* Show panel trigger and content only on mobile */}
+      <div className="md:hidden">
+        <Sheet open={isOpen} onOpenChange={setIsOpen}>
+          <SheetTrigger asChild>
+            <Button 
+              variant="default" 
+              size="sm" 
+              className="fixed h-auto right-0 top-1/2 -translate-y-1/2 z-50 shadow-lg py-8 flex flex-col items-center gap-2 rounded-tr-none rounded-br-none"
+            >
+              <Star className="h-4 w-4" />
+              <span className="[writing-mode:vertical-rl] rotate-180 text-xs">Recommended Picks</span>
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto bg-background border-l">
+            <SheetHeader>
+              <SheetTitle>Recommended Picks</SheetTitle>
+              <SheetDescription>
+                Our top picks based on odds value and player performance
+              </SheetDescription>
+            </SheetHeader>
+            <div className="mt-4">
+              <RecommendedPicksContent {...props} />
+            </div>
+          </SheetContent>
+        </Sheet>
+      </div>
+
+      {/* Show content directly on desktop */}
+      <div className="hidden md:block">
+        <Card>
+          <CardHeader>
+            <CardTitle>Recommended Picks</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <RecommendedPicksContent {...props} />
+          </CardContent>
+        </Card>
+      </div>
+    </>
+  )
+}
+
+// Rename the default export to indicate it's the inner component
+export function RecommendedPicksContent({
   eventId,
   matchupType,
   limit = 10,
@@ -103,6 +153,8 @@ export default function RecommendedPicks({
   const { addSelection, removeSelection, selections } = useParlayContext()
   // Track which players have been added to the parlay
   const [addedPlayers, setAddedPlayers] = useState<Record<string, boolean>>({})
+  // Add pagination state
+  const [displayLimit, setDisplayLimit] = useState(10)
 
   // Fetch complete matchup data to find opponents
   const { data: fullMatchupData } = useRecommendedPicksQuery(
@@ -413,7 +465,7 @@ export default function RecommendedPicks({
           </CardHeader>
           <CardContent className="p-6">
             <div className="space-y-4">
-              {finalRecommendations.map((player: Player, index: number) => {
+              {finalRecommendations.slice(0, displayLimit).map((player: Player, index: number) => {
                 const playerId = String(player.dg_id);
                 const { inParlay, selectionId } = isPlayerInParlay(playerId, player.name);
                 const isInOtherParlay = isPlayerInAnyParlay(player.name);
@@ -643,9 +695,28 @@ export default function RecommendedPicks({
                 )
               })}
             </div>
+
+            {/* Load More Button */}
+            {finalRecommendations.length > displayLimit && (
+              <div className="mt-4 flex justify-center">
+                <Button
+                  variant="outline"
+                  onClick={() => setDisplayLimit(prev => prev + 10)}
+                  className="gap-2"
+                >
+                  Load More
+                  <span className="text-xs text-muted-foreground">
+                    ({displayLimit} of {finalRecommendations.length})
+                  </span>
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
     </TooltipProvider>
   )
 }
+
+// Export the panel as the default for backward compatibility
+export default RecommendedPicksPanel;

@@ -15,7 +15,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { ParlayProvider } from "@/context/ParlayContext"
 import { useCurrentWeekEventsQuery, Event as TournamentEvent } from "@/hooks/use-current-week-events-query"
 import { useMatchupTypeQuery } from "@/hooks/use-matchup-type-query"
-import RecommendedPicks from "./recommended-picks"
+import { RecommendedPicksPanel } from "@/components/recommended-picks"
 import { FilterService } from "@/filters/filter-service"
 import { registerCoreFilters } from "@/filters/initFilters"
 import { useCurrentRoundForEvent } from '@/hooks/use-current-round-for-event'
@@ -453,7 +453,7 @@ export default function Dashboard({
 
             {/* Row 2: Recommended Picks (Right) - Better space utilization */}
             <div className="lg:col-span-1">
-              <RecommendedPicks 
+              <RecommendedPicksPanel 
                 eventId={selectedEventId}
                 matchupType={matchupType} 
                 limit={10} 

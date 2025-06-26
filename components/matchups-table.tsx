@@ -204,7 +204,8 @@ export default function MatchupsTable({
   };
 
   // Helper function to format golf scores properly
-  const formatGolfScore = (scoreValue: number): string => {
+  const formatGolfScore = (scoreValue: number | undefined | null): string => {
+    if (scoreValue === undefined || scoreValue === null) return '-';
     if (scoreValue === 0) {
       return 'E';
     } else if (scoreValue >= 50 && scoreValue <= 100) {
@@ -221,6 +222,44 @@ export default function MatchupsTable({
       // Outside expected ranges, might be bad data
       return '-';
     }
+  };
+
+  // Helper function to format player position data
+  const formatPlayerPosition = (playerId: string, teeTime: string | null): { position: string; score: string } => {
+    const playerStat = playerStatsMap[playerId];
+    
+    if (!playerStat) {
+      return { position: '-', score: '-' };
+    }
+
+    // If we have no tee time yet, or the tee time is in the future, show just position
+    const now = new Date();
+    const teeTimeDate = teeTime ? new Date(teeTime) : null;
+    if (!teeTimeDate || teeTimeDate > now) {
+      return { position: playerStat.position || '-', score: '-' };
+    }
+
+    // Format position
+    const position = playerStat.position || '-';
+    
+    // Format score based on available data
+    let score = '-';
+    if (playerStat.total !== null) {
+      score = formatGolfScore(playerStat.total);
+    } else if (playerStat.today !== null) {
+      score = formatGolfScore(playerStat.today);
+    }
+
+    // Add "thru" information if available
+    if (playerStat.thru !== null) {
+      if (playerStat.thru === 18) {
+        score += ' (F)';
+      } else {
+        score += ` (${playerStat.thru})`;
+      }
+    }
+
+    return { position, score };
   };
 
   // Format tee time - assume times are already in correct local tournament time
@@ -431,9 +470,9 @@ export default function MatchupsTable({
   return (
     <TooltipProvider>
       <Card className="glass-card">
-        <CardContent className="p-6">
+        <CardContent className="p-6 sm:p-4">
           <div className="flex flex-col gap-4 mb-4">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
               <div>
                 <h2 className="text-xl font-bold">{matchupType === "3ball" ? "3-Ball" : "2-Ball"} Matchups</h2>
                 {matchupType === "2ball" && (
@@ -442,7 +481,7 @@ export default function MatchupsTable({
                   </p>
                 )}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 w-full sm:w-auto">
                 <Dialog open={showFiltersDialog} onOpenChange={setShowFiltersDialog}>
                   <DialogTrigger asChild>
                     <Button variant="outline" size="sm" className="flex items-center gap-1">
@@ -572,791 +611,361 @@ export default function MatchupsTable({
 
           </div>
           {filteredMatchups && filteredMatchups.length > 0 ? (
-            <div className="rounded-lg overflow-hidden border border-gray-800">
-              <Table>
-                <TableHeader className="bg-[#1e1e23]">
-                  <TableRow>
-                    <TableHead className="text-white text-center">Players</TableHead>
-                    <TableHead className="text-white text-center">
-                      {matchupType === "3ball" ? "Group Tee Time" : "Individual Tee Times"}
-                    </TableHead>
-                    <TableHead className="text-white text-center">Position</TableHead>
-                    <TableHead className="text-white text-center">FanDuel Odds</TableHead>
-                    <TableHead className="text-white text-center">Data Golf Odds</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredMatchups.map((matchup) => {
-                    if (!matchup.uuid) return null; // Strict: only render if uuid exists
-                    if (isSupabaseMatchupRow(matchup)) {
-                      // DataGolf odds are only available in the SupabaseMatchupRow type
-                      const dg_p1_odds = isSupabaseMatchupRow(matchup) ? (matchup as SupabaseMatchupRow).dg_odds1 ?? null : null;
-                      const dg_p2_odds = isSupabaseMatchupRow(matchup) ? (matchup as SupabaseMatchupRow).dg_odds2 ?? null : null;
-                      const dg_p3_odds = isSupabaseMatchupRow(matchup) ? (matchup as SupabaseMatchupRow).dg_odds3 ?? null : null;
-                      
-                      // Check both for divergence and significant odds gaps
-                      // We're inside the isSupabaseMatchupRow branch so these props exist
-                      const divergence = detect3BallDivergence({
-                        odds: {
-                          fanduel: {
-                            p1: (matchup as SupabaseMatchupRow).odds1,
-                            p2: (matchup as SupabaseMatchupRow).odds2,
-                            p3: (matchup as SupabaseMatchupRow).odds3,
-                          },
-                          datagolf: {
-                            p1: dg_p1_odds,
-                            p2: dg_p2_odds,
-                            p3: dg_p3_odds,
-                          },
-                        },
-                      });
-                      
-                      // Initialize gap flags for both FanDuel and DataGolf
-                      let p1HasFDGap = false;
-                      let p2HasFDGap = false;
-                      let p3HasFDGap = false;
-                      let p1HasDGGap = false;
-                      let p2HasDGGap = false;
-                      let p3HasDGGap = false;
-                      
-                      // Track the favorite players for tooltips
-                      let favoriteFDPlayer = null;
-                      let favoriteDGPlayer = null;
-                      let gapFDDetails = "";
-                      let gapDGDetails = "";
-                      
-                      // For odds arrays - we're already inside isSupabaseMatchupRow guard branch
-                      const fdPlayers = [
-                        { id: 'p1', odds: (matchup as SupabaseMatchupRow).odds1, name: (matchup as SupabaseMatchupRow).player1_name },
-                        { id: 'p2', odds: (matchup as SupabaseMatchupRow).odds2, name: (matchup as SupabaseMatchupRow).player2_name },
-                        { id: 'p3', odds: (matchup as SupabaseMatchupRow).odds3, name: (matchup as SupabaseMatchupRow).player3_name ?? '' }
-                      ].filter(p => p.odds && p.odds > 1);
-                      
-                      // Only highlight if we have at least 3 valid odds to compare
-                      if (fdPlayers.length >= 3) {
-                        // Sort by odds (lowest decimal odds = favorite)
-                        fdPlayers.sort((a, b) => (a.odds || 999) - (b.odds || 999));
-                        
-                        // Get the favorite player
-                        const favorite = fdPlayers[0];
-                        // Get the other two players
-                        const otherPlayers = fdPlayers.slice(1);
-                        
-                        // Calculate the actual gaps
-                        const gaps = otherPlayers.map(other => {
-                          const gap = Math.abs(
-                            parseInt(decimalToAmerican(favorite.odds || 0)) - 
-                            parseInt(decimalToAmerican(other.odds || 0))
-                          );
-                          return { player: other, gap };
-                        });
-                        
-                        // Check if the favorite has significant gaps against BOTH other players
-                        const hasGapAgainstAll = gaps.every(({gap}) => gap >= oddsGapThreshold);
-                        
-                        // Only highlight the favorite if they have significant gaps against both others
-                        if (hasGapAgainstAll) {
-                          // Set the flag for the favorite in FanDuel column
-                          if (favorite.id === 'p1') p1HasFDGap = true;
-                          else if (favorite.id === 'p2') p2HasFDGap = true;
-                          else if (favorite.id === 'p3') p3HasFDGap = true;
-                          
-                          // Store favorite for tooltip
-                          favoriteFDPlayer = favorite;
-                          
-                          // Create gap details for tooltip
-                          gapFDDetails = gaps.map(({player, gap}) => 
-                            `${formatPlayerName(player.name)}: ${gap} points`
-                          ).join(", ");
-                        }
-                      }
-                      
-                      // Calculate DataGolf gaps
-                      const dgPlayers = [
-                        { id: 'p1', odds: dg_p1_odds, name: (matchup as SupabaseMatchupRow).player1_name ?? '' },
-                        { id: 'p2', odds: dg_p2_odds, name: (matchup as SupabaseMatchupRow).player2_name ?? '' },
-                        { id: 'p3', odds: dg_p3_odds, name: (matchup as SupabaseMatchupRow).player3_name ?? '' }
-                      ].filter(p => p.odds && p.odds > 1);
-                      
-                      // Only highlight if we have at least 3 valid odds to compare
-                      if (dgPlayers.length >= 3) {
-                        // Sort by odds (lowest decimal odds = favorite)
-                        dgPlayers.sort((a, b) => (a.odds || 999) - (b.odds || 999));
-                        
-                        // Get the favorite player
-                        const favorite = dgPlayers[0];
-                        // Get the other two players
-                        const otherPlayers = dgPlayers.slice(1);
-                        
-                        // Calculate the actual gaps
-                        const gaps = otherPlayers.map(other => {
-                          const gap = Math.abs(
-                            parseInt(decimalToAmerican(favorite.odds || 0)) - 
-                            parseInt(decimalToAmerican(other.odds || 0))
-                          );
-                          return { player: other, gap };
-                        });
-                        
-                        // Check if the favorite has significant gaps against BOTH other players
-                        const hasGapAgainstAll = gaps.every(({gap}) => gap >= oddsGapThreshold);
-                        
-                        // Only highlight the favorite if they have significant gaps against both others
-                        if (hasGapAgainstAll) {
-                          // Set the flag for the favorite in DataGolf column
-                          if (favorite.id === 'p1') p1HasDGGap = true;
-                          else if (favorite.id === 'p2') p2HasDGGap = true;
-                          else if (favorite.id === 'p3') p3HasDGGap = true;
-                          
-                          // Store favorite for tooltip
-                          favoriteDGPlayer = favorite;
-                          
-                          // Create gap details for tooltip
-                          gapDGDetails = gaps.map(({player, gap}) => 
-                            `${formatPlayerName(player.name)}: ${gap} points`
-                          ).join(", ");
-                        }
-                      }
-                      
-                      // For 3-ball matchups
-                      const sortedPlayers = [
+            <>
+              {/* Desktop Table View */}
+              <div className="hidden md:block rounded-lg overflow-hidden border border-gray-800">
+                <Table className="w-full">
+                  <TableHeader className="bg-[#1e1e23]">
+                    <TableRow>
+                      <TableHead className="text-white">Player</TableHead>
+                      <TableHead className="text-white text-center">
+                        {matchupType === "3ball" ? "Group Tee Time" : "Tee Time"}
+                      </TableHead>
+                      <TableHead className="text-white text-center">Position</TableHead>
+                      <TableHead className="text-white text-center">FanDuel</TableHead>
+                      <TableHead className="text-white text-center">DataGolf</TableHead>
+                      <TableHead className="text-white w-[50px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredMatchups.map((matchup) => {
+                      if (!matchup.uuid) return null;
+
+                      const players = isSupabaseMatchupRow(matchup) ? [
                         {
                           id: 'p1',
-                          dg_id: (matchup as SupabaseMatchupRow).player1_dg_id,
-                          odds: (matchup as SupabaseMatchupRow).odds1,
-                          name: (matchup as SupabaseMatchupRow).player1_name,
-                          dgOdds: dg_p1_odds,
-                          hasGap: p1HasFDGap,
-                          hasDGGap: p1HasDGGap,
-                          dgFavorite: divergence?.datagolfFavorite === 'p1',
+                          dg_id: matchup.player1_dg_id,
+                          name: matchup.player1_name || '',
+                          odds: matchup.odds1,
+                          dgOdds: matchup.dg_odds1,
+                          teetime: matchup.teetime || null
                         },
                         {
                           id: 'p2',
-                          dg_id: (matchup as SupabaseMatchupRow).player2_dg_id,
-                          odds: (matchup as SupabaseMatchupRow).odds2,
-                          name: (matchup as SupabaseMatchupRow).player2_name,
-                          dgOdds: dg_p2_odds,
-                          hasGap: p2HasFDGap,
-                          hasDGGap: p2HasDGGap,
-                          dgFavorite: divergence?.datagolfFavorite === 'p2',
+                          dg_id: matchup.player2_dg_id,
+                          name: matchup.player2_name || '',
+                          odds: matchup.odds2,
+                          dgOdds: matchup.dg_odds2,
+                          teetime: matchup.teetime || null
                         },
                         {
                           id: 'p3',
-                          dg_id: (matchup as SupabaseMatchupRow).player3_dg_id ?? undefined,
-                          odds: (matchup as SupabaseMatchupRow).odds3,
-                          name: (matchup as SupabaseMatchupRow).player3_name ?? '',
-                          dgOdds: dg_p3_odds,
-                          hasGap: p3HasFDGap,
-                          hasDGGap: p3HasDGGap,
-                          dgFavorite: divergence?.datagolfFavorite === 'p3',
-                        },
-                      ].filter(p => p.dg_id !== null && p.dg_id !== undefined)
-                       .sort((a, b) => {
-                          if (!a.odds || a.odds <= 1) return 1;
-                          if (!b.odds || b.odds <= 1) return -1;
-                          return (a.odds || 0) - (b.odds || 0);
-                        });
-
-                      // Format the player's tournament position and score
-                      const formatPlayerPosition = (playerId: string | number, teeTime?: string | null) => {
-                        const playerStat = playerStatsMap[String(playerId)];
-                        
-                        if (!playerStat) {
-                          return { position: '-', score: '-' };
+                          dg_id: matchup.player3_dg_id,
+                          name: matchup.player3_name || '',
+                          odds: matchup.odds3,
+                          dgOdds: matchup.dg_odds3,
+                          teetime: matchup.teetime || null
                         }
-                        
-                        // Position should be leaderboard position (T5, 1, etc.)
-                        const position = playerStat.position || '-';
-                        
-                        // Score should be from the last completed round
-                        let score: string = '-';
-                        
-                        // Check if we have round-specific data available
-                        if (playerStat.round_scores) {
-                          const roundScores = playerStat.round_scores;
-                          
-                          // Get the most recent available round score (prioritize R1 since we're showing Round 1)
-                          let roundScore: number | null = null;
-                          if (roundScores.R1 !== null && roundScores.R1 !== undefined) {
-                            roundScore = roundScores.R1;
-                          } else if (roundScores.R2 !== null && roundScores.R2 !== undefined) {
-                            roundScore = roundScores.R2;
-                          } else if (roundScores.R3 !== null && roundScores.R3 !== undefined) {
-                            roundScore = roundScores.R3;
-                          } else if (roundScores.R4 !== null && roundScores.R4 !== undefined) {
-                            roundScore = roundScores.R4;
-                          }
-                          
-                          // Format the round score
-                          if (roundScore !== null && typeof roundScore === 'number') {
-                            // This is a raw score (like 66, 68, etc.) - display as-is
-                            score = roundScore.toString();
-                          }
-                        }
-                        
-                        // Fallback to today's score if round data isn't available
-                        if (score === '-') {
-                          const scoreValue = playerStat.today ?? playerStat.total;
-                          
-                          if (typeof scoreValue === 'number') {
-                            score = formatGolfScore(scoreValue);
-                          }
-                        }
-                        
-                        return { position, score };
-                      };
-                      
-                      // Check if we have any valid position data for this matchup
-                      const hasAnyPositionData = sortedPlayers.some(player => {
-                        if (!player.dg_id) return false;
-                        const playerStat = playerStatsMap[String(player.dg_id)];
-                        return playerStat && (playerStat.position || playerStat.today !== null || playerStat.total !== null);
-                      });
-
-                      // Check for matchup-level conflicts (multiple picks from same group)
-                      const playersInThisMatchup = sortedPlayers.filter(player => {
-                        return isPlayerInAnyParlay(formatPlayerName(player.name));
-                      });
-                      
-                      const hasMultiplePicksInGroup = playersInThisMatchup.length > 1;
-                      const hasConflictInGroup = playersInThisMatchup.some(player => {
-                        const playerStatus = getPlayerStatus(formatPlayerName(player.name));
-                        return playerStatus.status === 'used'; // Has picks in submitted parlays
-                      });
-
-                      return (
-                        <TableRow 
-                          key={`3ball-${matchup.uuid}`}
-                          className={`
-                            ${hasMultiplePicksInGroup ? 'bg-yellow-50/5 border-yellow-200/10' : ''}
-                            ${hasConflictInGroup ? 'bg-yellow-50/5 border-yellow-200/10' : ''}
-                          `}
-                        >
-                          <TableCell>
-                            {hasMultiplePicksInGroup && (
-                              <div className="mb-2 p-2 bg-yellow-50/5 border border-yellow-200/20 rounded text-xs text-yellow-500/80 flex items-center gap-1">
-                                <AlertTriangle size={12} />
-                                Multiple picks in this group
-                              </div>
-                            )}
-                            {sortedPlayers.map((player, idx) => {
-                              const playerStatus = getPlayerStatus(formatPlayerName(player.name));
-                              
-                              return (
-                                <div 
-                                  key={`player-${idx}`} 
-                                  className={`
-                                    py-1 h-8 flex items-center rounded px-1 transition-colors
-                                    ${playerStatus.status === 'used' ? 'bg-yellow-50/10 border border-yellow-200/20' : ''}
-                                    ${playerStatus.status === 'current' ? 'bg-primary/5 border border-primary/20' : ''}
-                                  `}
-                                >
-                                  <span className="mr-2 flex items-center gap-1">
-                                    {playerStatus.status === 'current' ? (
-                                      <Button 
-                                        size="icon" 
-                                        variant="secondary" 
-                                        className="h-6 w-6 p-0" 
-                                        onClick={() => {
-                                          if (typeof player.dg_id !== 'number' || isNaN(player.dg_id)) return;
-                                          // Remove from current parlay
-                                          removeSelection(`${player.dg_id}-${matchup.uuid}`);
-                                        }}
-                                      >
-                                        <CheckCircle className="text-green-400" size={16} />
-                                      </Button>
-                                    ) : playerStatus.status === 'used' ? (
-                                      <Button size="icon" variant="secondary" disabled className="h-6 w-6 p-0">
-                                        <CheckCircle className="text-yellow-400/70" size={16} />
-                                      </Button>
-                                    ) : (
-                                      <Button 
-                                        size="icon" 
-                                        variant="outline" 
-                                        className="h-6 w-6 p-0 transition-all duration-200 hover:scale-105 active:scale-95" 
-                                        onClick={(e) => {
-                                          if (typeof player.dg_id !== 'number' || isNaN(player.dg_id)) return;
-                                          
-                                          // Prevent double clicks
-                                          const button = e.currentTarget;
-                                          button.disabled = true;
-                                          setTimeout(() => {
-                                            if (button) {
-                                              button.disabled = false;
-                                            }
-                                          }, 1000);
-                                          
-                                          // Check if user is already picking someone else from this group
-                                          const otherPlayersInGroup = sortedPlayers.filter(p => 
-                                            p.dg_id !== player.dg_id && isPlayerInAnyParlay(formatPlayerName(p.name))
-                                          );
-                                          
-                                          if (otherPlayersInGroup.length > 0) {
-                                            const otherPlayerNames = otherPlayersInGroup.map(p => formatPlayerName(p.name)).join(', ');
-                                            toast({
-                                              title: "Warning: Conflicting Pick",
-                                              description: `You already have ${otherPlayerNames} from this group in your parlays. Adding ${formatPlayerName(player.name)} means you're betting against yourself.`,
-                                              duration: 5000,
-                                              variant: "destructive"
-                                            });
-                                          }
-                                          
-                                          addSelection({
-                                            id: `${player.dg_id}-${matchup.uuid}`,
-                                            matchupType,
-                                            group: `Event ${eventId || 'Unknown'}`,
-                                            player: formatPlayerName(player.name),
-                                            odds: Number(player.odds) || 0,
-                                            matchupId: matchup.uuid,
-                                            eventName: matchup.event_name || '',
-                                            roundNum: matchup.round_num || 0,
-                                            valueRating: 7.5,
-                                            confidenceScore: 75
-                                          });
-                                        }}
-                                      >
-                                        <PlusCircle className="text-primary" size={16} />
-                                      </Button>
-                                    )}
-                                    {playerStatus.status !== 'available' && (
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <Info className={playerStatus.status === 'current' ? 'text-blue-400/70' : 'text-yellow-400/70'} size={14} />
-                                        </TooltipTrigger>
-                                        <TooltipContent>
-                                          {playerStatus.label}
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    )}
-                                  </span>
-                                  <span className={`
-                                    ${playerStatus.status === 'used' ? 'text-yellow-600/70 font-medium' : ''}
-                                    ${playerStatus.status === 'current' ? 'text-blue-600/70 font-medium' : ''}
-                                  `}>
-                                    {playerSearchTerm && highlightText ? highlightText(player.name) : formatPlayerName(player.name)}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </TableCell>
-                          
-                          {/* Tee Time column */}
-                          <TableCell className="text-center">
-                            {(() => {
-                              const { localTime, easternDiff } = formatTeeTime(matchup.teetime ?? null);
-                              return (
-                                <div className="text-center">
-                                  <div className="text-xs font-medium">{localTime}</div>
-                                  {easternDiff && <div className="text-xs text-muted-foreground">{easternDiff}</div>}
-                                </div>
-                              );
-                            })()}
-                          </TableCell>
-                          
-                          {/* Position column */}
-                          <TableCell className="text-center">
-                            {sortedPlayers.map((player, idx) => {
-                              let playerId = '';
-                              
-                              if (isSupabaseMatchupRow(matchup)) {
-                                if (player.id === 'p1') {
-                                  playerId = String((matchup as SupabaseMatchupRow).player1_dg_id);
-                                } else if (player.id === 'p2') {
-                                  playerId = String((matchup as SupabaseMatchupRow).player2_dg_id);
-                                } else if (player.id === 'p3' && (matchup as SupabaseMatchupRow).player3_dg_id != null) {
-                                  playerId = String((matchup as SupabaseMatchupRow).player3_dg_id);
-                                }
-                              }
-                              
-                              const positionData = formatPlayerPosition(String(playerId), matchup.teetime);
-                              
-                              return (
-                                <div key={`position-${idx}`} className="py-1 h-8 flex items-center justify-center">
-                                  <div className="text-center">
-                                    <div className="text-xs font-medium">{positionData.position}</div>
-                                    <div className="text-xs text-muted-foreground">{positionData.score}</div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </TableCell>
-                          
-                          <TableCell className="text-center">
-                            {(sortedPlayers.filter((player: typeof sortedPlayers[number]) => player.odds && player.odds > 1) as typeof sortedPlayers).map((player: typeof sortedPlayers[number], idx: number) => {
-                              const formatted = formatOdds(player.odds ?? 0);
-                              return (
-                                <div key={`odds-${idx}`} className={`py-1 h-8 flex items-center justify-center ${player.hasGap ? "font-bold text-green-400" : ""}`}>{formatted}</div>
-                              );
-                            })}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {(sortedPlayers.filter((player: typeof sortedPlayers[number]) => player.dgOdds && player.dgOdds > 1) as typeof sortedPlayers).map((player: typeof sortedPlayers[number], idx: number) => (
-                              <div key={`dg-odds-${idx}`} className={`py-1 h-8 flex items-center justify-center ${player.hasDGGap ? "font-bold text-green-400" : ""}`}>
-                                {formatOdds(player.dgOdds ?? 0)}
-                              </div>
-                            ))}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    } else if (isSupabaseMatchupRow2Ball(matchup)) {
-                      const m2 = matchup as SupabaseMatchupRow2Ball;
-                      const fdP1Odds = Number(m2.odds1 ?? 0);
-                      const fdP2Odds = Number(m2.odds2 ?? 0);
-                      const dgP1Odds = Number(m2.dg_odds1 ?? 0);
-                      const dgP2Odds = Number(m2.dg_odds2 ?? 0);
-
-                      // Check if at least one player has odds from FanDuel
-                      const hasAnyValidOdds = (fdP1Odds > 1) || (fdP2Odds > 1);
-                      if (!hasAnyValidOdds) {
-                        return null; // Skip this matchup
-                      }
-                      
-                      // Initialize gap flags for both FanDuel and DataGolf
-                      let p1HasFDGap = false;
-                      let p2HasFDGap = false;
-                      let p1HasDGGap = false;
-                      let p2HasDGGap = false;
-                      
-                      // Check for FanDuel gaps
-                      // Check if player 1 is the favorite with a significant gap in FanDuel
-                      if (fdP1Odds > 1 && fdP2Odds > 1 && fdP1Odds < fdP2Odds) {
-                        // Convert odds to American and calculate the gap
-                        const americanP1 = parseInt(decimalToAmerican(fdP1Odds));
-                        const americanP2 = parseInt(decimalToAmerican(fdP2Odds));
-                        const gap = Math.abs(americanP1 - americanP2);
-                        if (gap >= oddsGapThreshold) {
-                          p1HasFDGap = true;
-                        }
-                      }
-                      // Check if player 2 is the favorite with a significant gap in FanDuel
-                      if (fdP1Odds > 1 && fdP2Odds > 1 && fdP2Odds < fdP1Odds) {
-                        const americanP1 = parseInt(decimalToAmerican(fdP1Odds));
-                        const americanP2 = parseInt(decimalToAmerican(fdP2Odds));
-                        const gap = Math.abs(americanP1 - americanP2);
-                        if (gap >= oddsGapThreshold) {
-                          p2HasFDGap = true;
-                        }
-                      }
-                      // Check for DataGolf gaps
-                      if (dgP1Odds > 1 && dgP2Odds > 1 && dgP1Odds < dgP2Odds) {
-                        const americanP1 = parseInt(decimalToAmerican(dgP1Odds));
-                        const americanP2 = parseInt(decimalToAmerican(dgP2Odds));
-                        const gap = Math.abs(americanP1 - americanP2);
-                        if (gap >= oddsGapThreshold) {
-                          p1HasDGGap = true;
-                        }
-                      }
-                      if (dgP1Odds > 1 && dgP2Odds > 1 && dgP2Odds < dgP1Odds) {
-                        const americanP1 = parseInt(decimalToAmerican(dgP1Odds));
-                        const americanP2 = parseInt(decimalToAmerican(dgP2Odds));
-                        const gap = Math.abs(americanP1 - americanP2);
-                        if (gap >= oddsGapThreshold) {
-                          p2HasDGGap = true;
-                        }
-                      }
-                      
-                      // For 2-ball matchups (inside isSupabaseMatchupRow2Ball branch)
-                      const sortedPlayers = [
+                      ].filter(p => p.dg_id !== null && p.name).sort((a, b) => {
+                        // Sort by odds (lowest first, since that's the favorite)
+                        const aOdds = Number(a.odds) || Infinity;
+                        const bOdds = Number(b.odds) || Infinity;
+                        return aOdds - bOdds;
+                      }) : [
                         {
                           id: 'p1',
-                          dg_id: m2.player1_dg_id,
-                          odds: m2.odds1,
-                          name: m2.player1_name,
-                          dgOdds: dgP1Odds,
-                          hasGap: p1HasFDGap,
-                          hasDGGap: p1HasDGGap,
+                          dg_id: matchup.player1_dg_id,
+                          name: matchup.player1_name || '',
+                          odds: matchup.odds1,
+                          dgOdds: matchup.dg_odds1,
+                          teetime: isSupabaseMatchupRow2Ball(matchup) ? matchup.player1_teetime || matchup.teetime || null : matchup.teetime || null
                         },
                         {
                           id: 'p2',
-                          dg_id: m2.player2_dg_id,
-                          odds: m2.odds2,
-                          name: m2.player2_name,
-                          dgOdds: dgP2Odds,
-                          hasGap: p2HasFDGap,
-                          hasDGGap: p2HasDGGap,
-                        },
-                      ].filter(p => p.dg_id !== null && p.dg_id !== undefined)
-                       .sort((a, b) => {
-                          if (!a.odds || a.odds <= 1) return 1;
-                          if (!b.odds || b.odds <= 1) return -1;
-                          return (a.odds || 0) - (b.odds || 0);
-                        });
-
-                      // Format the player's tournament position and score
-                      const formatPlayerPosition = (playerId: string | number, teeTime?: string | null) => {
-                        const playerStat = playerStatsMap[String(playerId)];
-                        
-                        if (!playerStat) {
-                          return { position: '-', score: '-' };
+                          dg_id: matchup.player2_dg_id,
+                          name: matchup.player2_name || '',
+                          odds: matchup.odds2,
+                          dgOdds: matchup.dg_odds2,
+                          teetime: isSupabaseMatchupRow2Ball(matchup) ? matchup.player2_teetime || matchup.teetime || null : matchup.teetime || null
                         }
-                        
-                        // Position should be leaderboard position (T5, 1, etc.)
-                        const position = playerStat.position || '-';
-                        
-                        // Score should be from the last completed round
-                        let score: string = '-';
-                        
-                        // Check if we have round-specific data available
-                        if (playerStat.round_scores) {
-                          const roundScores = playerStat.round_scores;
-                          
-                          // Get the most recent available round score (prioritize R1 since we're showing Round 1)
-                          let roundScore: number | null = null;
-                          if (roundScores.R1 !== null && roundScores.R1 !== undefined) {
-                            roundScore = roundScores.R1;
-                          } else if (roundScores.R2 !== null && roundScores.R2 !== undefined) {
-                            roundScore = roundScores.R2;
-                          } else if (roundScores.R3 !== null && roundScores.R3 !== undefined) {
-                            roundScore = roundScores.R3;
-                          } else if (roundScores.R4 !== null && roundScores.R4 !== undefined) {
-                            roundScore = roundScores.R4;
-                          }
-                          
-                          // Format the round score
-                          if (roundScore !== null && typeof roundScore === 'number') {
-                            // This is a raw score (like 66, 68, etc.) - display as-is
-                            score = roundScore.toString();
-                          }
-                        }
-                        
-                        // Fallback to today's score if round data isn't available
-                        if (score === '-') {
-                          const scoreValue = playerStat.today ?? playerStat.total;
-                          
-                          if (typeof scoreValue === 'number') {
-                            score = formatGolfScore(scoreValue);
-                          }
-                        }
-                        
-                        return { position, score };
-                      };
-                      
-                      // Check if we have any valid position data for this matchup
-                      const hasAnyPositionData = sortedPlayers.some(player => {
-                        if (!player.dg_id) return false;
-                        const playerStat = playerStatsMap[String(player.dg_id)];
-                        return playerStat && (playerStat.position || playerStat.today !== null || playerStat.total !== null);
+                      ].sort((a, b) => {
+                        // Sort by odds (lowest first, since that's the favorite)
+                        const aOdds = Number(a.odds) || Infinity;
+                        const bOdds = Number(b.odds) || Infinity;
+                        return aOdds - bOdds;
                       });
 
-                      // Check for matchup-level conflicts (multiple picks from same group)
-                      const playersInThisMatchup = sortedPlayers.filter(player => {
-                        return isPlayerInAnyParlay(formatPlayerName(player.name));
-                      });
-                      
-                      const hasMultiplePicksInGroup = playersInThisMatchup.length > 1;
-                      const hasConflictInGroup = playersInThisMatchup.some(player => {
-                        const playerStatus = getPlayerStatus(formatPlayerName(player.name));
-                        return playerStatus.status === 'used'; // Has picks in submitted parlays
-                      });
+                      return players.map((player, idx) => {
+                        const playerName = formatPlayerName(player.name);
+                        const playerStatus = getPlayerStatus(playerName);
+                        const positionData = formatPlayerPosition(String(player.dg_id), player.teetime);
+                        const { localTime } = formatTeeTime(player.teetime);
 
-                      return (
-                        <TableRow 
-                          key={`2ball-${m2.uuid}`}
-                          className={`
-                            ${hasMultiplePicksInGroup ? 'bg-yellow-50/5 border-yellow-200/10' : ''}
-                            ${hasConflictInGroup ? 'bg-yellow-50/5 border-yellow-200/10' : ''}
-                          `}
-                        >
-                          <TableCell>
-                            {hasMultiplePicksInGroup && (
-                              <div className="mb-2 p-2 bg-yellow-50/5 border border-yellow-200/20 rounded text-xs text-yellow-500/80 flex items-center gap-1">
-                                <AlertTriangle size={12} />
-                                Multiple picks in this group
+                        return (
+                          <TableRow 
+                            key={`${matchup.uuid}-${player.id}`}
+                            className={`
+                              ${idx === 0 ? 'border-t-2 border-t-gray-800' : ''}
+                              ${playerStatus.status === 'used' ? 'bg-yellow-50/5' : ''}
+                              ${playerStatus.status === 'current' ? 'bg-primary/5' : ''}
+                            `}
+                          >
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                {playerSearchTerm && highlightText ? 
+                                  highlightText(playerName) : 
+                                  playerName
+                                }
+                                {playerStatus.status !== 'available' && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Info 
+                                        className={playerStatus.status === 'current' ? 
+                                          'text-blue-400/70' : 
+                                          'text-yellow-400/70'
+                                        } 
+                                        size={14} 
+                                      />
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      {playerStatus.label}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                )}
                               </div>
-                            )}
-                            {sortedPlayers.map((player, idx) => {
-                              const playerStatus = getPlayerStatus(formatPlayerName(player.name));
-                              
-                              return (
-                                <div 
-                                  key={`player-${idx}`} 
-                                  className={`
-                                    py-1 h-8 flex items-center rounded px-1 transition-colors
-                                    ${playerStatus.status === 'used' ? 'bg-yellow-50/10 border border-yellow-200/20' : ''}
-                                    ${playerStatus.status === 'current' ? 'bg-primary/5 border border-primary/20' : ''}
-                                  `}
+                            </TableCell>
+                            <TableCell className="text-center">{localTime}</TableCell>
+                            <TableCell className="text-center">
+                              <div>{positionData.position}</div>
+                              <div className="text-xs text-muted-foreground">{positionData.score}</div>
+                            </TableCell>
+                            <TableCell className="text-center">{formatOdds(player.odds ?? null)}</TableCell>
+                            <TableCell className="text-center">{formatOdds(player.dgOdds ?? null)}</TableCell>
+                            <TableCell>
+                              {playerStatus.status === 'current' ? (
+                                <Button 
+                                  size="icon" 
+                                  variant="secondary" 
+                                  className="h-6 w-6 p-0" 
+                                  onClick={() => {
+                                    if (typeof player.dg_id !== 'number') return;
+                                    removeSelection(`${player.dg_id}-${matchup.uuid}`);
+                                  }}
                                 >
-                                  <span className="mr-2 flex items-center gap-1">
-                                    {playerStatus.status === 'current' ? (
-                                      <Button 
-                                        size="icon" 
-                                        variant="secondary" 
-                                        className="h-6 w-6 p-0" 
-                                        onClick={() => {
-                                          if (typeof player.dg_id !== 'number' || isNaN(player.dg_id)) return;
-                                          // Remove from current parlay
-                                          removeSelection(`${player.dg_id}-${m2.uuid}`);
-                                        }}
-                                      >
-                                        <CheckCircle className="text-green-400" size={16} />
-                                      </Button>
-                                    ) : playerStatus.status === 'used' ? (
-                                      <Button size="icon" variant="secondary" disabled className="h-6 w-6 p-0">
-                                        <CheckCircle className="text-yellow-400/70" size={16} />
-                                      </Button>
-                                    ) : (
-                                      <Button 
-                                        size="icon" 
-                                        variant="outline" 
-                                        className="h-6 w-6 p-0 transition-all duration-200 hover:scale-105 active:scale-95" 
-                                        onClick={(e) => {
-                                          if (typeof player.dg_id !== 'number' || isNaN(player.dg_id)) return;
-                                          
-                                          // Prevent double clicks
-                                          const button = e.currentTarget;
-                                          button.disabled = true;
-                                          setTimeout(() => {
-                                            if (button) {
-                                              button.disabled = false;
-                                            }
-                                          }, 1000);
-                                          
-                                          // Check if user is already picking someone else from this group
-                                          const otherPlayersInGroup = sortedPlayers.filter(p => 
-                                            p.dg_id !== player.dg_id && isPlayerInAnyParlay(formatPlayerName(p.name))
-                                          );
-                                          
-                                          if (otherPlayersInGroup.length > 0) {
-                                            const otherPlayerNames = otherPlayersInGroup.map(p => formatPlayerName(p.name)).join(', ');
-                                            toast({
-                                              title: "Warning: Conflicting Pick",
-                                              description: `You already have ${otherPlayerNames} from this group in your parlays. Adding ${formatPlayerName(player.name)} means you're betting against yourself.`,
-                                              duration: 5000,
-                                              variant: "destructive"
-                                            });
-                                          }
-                                          
-                                          addSelection({
-                                            id: `${player.dg_id}-${m2.uuid}`,
-                                            matchupType,
-                                            group: `Event ${eventId || 'Unknown'}`,
-                                            player: formatPlayerName(player.name),
-                                            odds: Number(player.odds) || 0,
-                                            matchupId: m2.uuid,
-                                            eventName: m2.event_name || '',
-                                            roundNum: m2.round_num || 0,
-                                            valueRating: 7.5,
-                                            confidenceScore: 75
-                                          });
-                                        }}
-                                      >
-                                        <PlusCircle className="text-primary" size={16} />
-                                      </Button>
-                                    )}
-                                    {playerStatus.status !== 'available' && (
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <Info className={playerStatus.status === 'current' ? 'text-blue-400/70' : 'text-yellow-400/70'} size={14} />
-                                        </TooltipTrigger>
-                                        <TooltipContent>
-                                          {playerStatus.label}
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    )}
-                                  </span>
-                                  <span className={`
-                                    ${playerStatus.status === 'used' ? 'text-yellow-600/70 font-medium' : ''}
-                                    ${playerStatus.status === 'current' ? 'text-blue-600/70 font-medium' : ''}
-                                  `}>
-                                    {playerSearchTerm && highlightText ? highlightText(player.name) : formatPlayerName(player.name)}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </TableCell>
-                          
-                          {/* Tee Time column for 2-ball */}
-                          <TableCell className="text-center">
-                            {(() => {
-                              // Show individual player tee times if available, otherwise show matchup tee time
-                              if (m2.player1_teetime && m2.player2_teetime) {
-                                const { localTime: player1Time, easternDiff: player1Diff } = formatTeeTime(m2.player1_teetime);
-                                const { localTime: player2Time, easternDiff: player2Diff } = formatTeeTime(m2.player2_teetime);
-                                
-                                // If both players have the same tee time, show just one
-                                if (m2.player1_teetime === m2.player2_teetime) {
-                                  return (
-                                    <div className="text-center">
-                                      <div className="text-xs font-medium">{player1Time}</div>
-                                      {player1Diff && <div className="text-xs text-muted-foreground">{player1Diff}</div>}
-                                    </div>
-                                  );
-                                } else {
-                                  // Different tee times - show both
-                                  return (
-                                    <div className="text-center space-y-1">
-                                      <div className="border-b border-border/30 pb-1">
-                                        <div className="text-xs font-medium">{player1Time}</div>
-                                        {player1Diff && <div className="text-xs text-muted-foreground">{player1Diff}</div>}
-                                      </div>
-                                      <div>
-                                        <div className="text-xs font-medium">{player2Time}</div>
-                                        {player2Diff && <div className="text-xs text-muted-foreground">{player2Diff}</div>}
-                                      </div>
-                                    </div>
-                                  );
-                                }
-                              } else {
-                                // Fallback to matchup tee time
-                                const { localTime: teeTimeLocal, easternDiff: teeTimeDiff } = formatTeeTime(m2.teetime ?? null);
-                                return (
-                                  <div className="text-center">
-                                    <div className="text-xs font-medium">{teeTimeLocal}</div>
-                                    {teeTimeDiff && <div className="text-xs text-muted-foreground">{teeTimeDiff}</div>}
-                                  </div>
-                                );
-                              }
-                            })()}
-                          </TableCell>
-                          
-                          {/* Position column for 2-ball */}
-                          <TableCell className="text-center">
-                            {sortedPlayers.map((player, idx) => {
-                              let playerId = '';
+                                  <CheckCircle className="text-green-400" size={16} />
+                                </Button>
+                              ) : playerStatus.status === 'used' ? (
+                                <Button size="icon" variant="secondary" disabled className="h-6 w-6 p-0">
+                                  <CheckCircle className="text-yellow-400/70" size={16} />
+                                </Button>
+                              ) : (
+                                <Button 
+                                  size="icon" 
+                                  variant="outline" 
+                                  className="h-6 w-6 p-0" 
+                                  onClick={() => {
+                                    if (typeof player.dg_id !== 'number') return;
+                                    addSelection({
+                                      id: `${player.dg_id}-${matchup.uuid}`,
+                                      matchupType,
+                                      group: `Event ${eventId || 'Unknown'}`,
+                                      player: playerName,
+                                      odds: Number(player.odds) || 0,
+                                      matchupId: matchup.uuid,
+                                      eventName: matchup.event_name || '',
+                                      roundNum: matchup.round_num || 0,
+                                      valueRating: 7.5,
+                                      confidenceScore: 75
+                                    });
+                                  }}
+                                >
+                                  <PlusCircle className="text-primary" size={16} />
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      });
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
 
-                              if (isSupabaseMatchupRow2Ball(matchup)) {
-                                if (player.id === 'p1') {
-                                  playerId = String((matchup as SupabaseMatchupRow2Ball).player1_dg_id);
-                                } else if (player.id === 'p2') {
-                                  playerId = String((matchup as SupabaseMatchupRow2Ball).player2_dg_id);
-                                }
-                              }
-                              
-                              const positionData = formatPlayerPosition(String(playerId), m2.teetime);
-                              
-                              return (
-                                <div key={`position-${idx}`} className="py-1 h-8 flex items-center justify-center">
-                                  <div className="text-center">
-                                    <div className="text-xs font-medium">{positionData.position}</div>
-                                    <div className="text-xs text-muted-foreground">{positionData.score}</div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </TableCell>
-                          
-                          <TableCell className="text-center">
-                            {(sortedPlayers.filter((player: typeof sortedPlayers[number]) => player.odds && player.odds > 1) as typeof sortedPlayers).map((player: typeof sortedPlayers[number], idx: number) => (
-                              <div key={`odds-${idx}`} className={`py-1 h-8 flex items-center justify-center ${player.hasGap ? "font-bold text-green-400" : ""}`}>
-                                {formatOdds(player.odds ?? 0)}
-                              </div>
-                            ))}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {(sortedPlayers.filter((player: typeof sortedPlayers[number]) => player.dgOdds && player.dgOdds > 1) as typeof sortedPlayers).map((player: typeof sortedPlayers[number], idx: number) => (
-                              <div key={`dg-odds-${idx}`} className={`py-1 h-8 flex items-center justify-center ${player.hasDGGap ? "font-bold text-green-400" : ""}`}>
-                                {formatOdds(player.dgOdds ?? 0)}
-                              </div>
-                            ))}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    } else {
-                      return null;
+              {/* Mobile Card View */}
+              <div className="md:hidden space-y-4">
+                {filteredMatchups.map((matchup) => {
+                  if (!matchup.uuid) return null;
+
+                  const players = isSupabaseMatchupRow(matchup) ? [
+                    {
+                      id: 'p1',
+                      dg_id: matchup.player1_dg_id,
+                      name: matchup.player1_name || '',
+                      odds: matchup.odds1,
+                      dgOdds: matchup.dg_odds1,
+                      teetime: matchup.teetime || null
+                    },
+                    {
+                      id: 'p2',
+                      dg_id: matchup.player2_dg_id,
+                      name: matchup.player2_name || '',
+                      odds: matchup.odds2,
+                      dgOdds: matchup.dg_odds2,
+                      teetime: matchup.teetime || null
+                    },
+                    {
+                      id: 'p3',
+                      dg_id: matchup.player3_dg_id,
+                      name: matchup.player3_name || '',
+                      odds: matchup.odds3,
+                      dgOdds: matchup.dg_odds3,
+                      teetime: matchup.teetime || null
                     }
-                  })}
-                </TableBody>
-              </Table>
-            </div>
+                  ].filter(p => p.dg_id !== null && p.name).sort((a, b) => {
+                    // Sort by odds (lowest first, since that's the favorite)
+                    const aOdds = Number(a.odds) || Infinity;
+                    const bOdds = Number(b.odds) || Infinity;
+                    return aOdds - bOdds;
+                  }) : [
+                    {
+                      id: 'p1',
+                      dg_id: matchup.player1_dg_id,
+                      name: matchup.player1_name || '',
+                      odds: matchup.odds1,
+                      dgOdds: matchup.dg_odds1,
+                      teetime: isSupabaseMatchupRow2Ball(matchup) ? matchup.player1_teetime || matchup.teetime || null : matchup.teetime || null
+                    },
+                    {
+                      id: 'p2',
+                      dg_id: matchup.player2_dg_id,
+                      name: matchup.player2_name || '',
+                      odds: matchup.odds2,
+                      dgOdds: matchup.dg_odds2,
+                      teetime: isSupabaseMatchupRow2Ball(matchup) ? matchup.player2_teetime || matchup.teetime || null : matchup.teetime || null
+                    }
+                  ].sort((a, b) => {
+                    // Sort by odds (lowest first, since that's the favorite)
+                    const aOdds = Number(a.odds) || Infinity;
+                    const bOdds = Number(b.odds) || Infinity;
+                    return aOdds - bOdds;
+                  });
+
+                  // Get the group tee time (for 3-ball) or earliest tee time (for 2-ball)
+                  const groupTeeTime = isSupabaseMatchupRow(matchup) 
+                    ? formatTeeTime(matchup.teetime || null).localTime
+                    : formatTeeTime(
+                        players.reduce((earliest, p) => {
+                          const teetime = p.teetime || null;
+                          if (!earliest) return teetime;
+                          if (!teetime) return earliest;
+                          return new Date(teetime) < new Date(earliest) ? teetime : earliest;
+                        }, null as string | null)
+                      ).localTime;
+
+                  return (
+                    <Card key={matchup.uuid} className="overflow-hidden">
+                      {/* Add tee time header */}
+                      <div className="bg-[#1e1e23] px-4 py-2 flex justify-between items-center">
+                        <span className="text-xs text-muted-foreground">
+                          {matchupType === "3ball" ? "Group" : "First"} Tee Time
+                        </span>
+                        <span className="text-sm font-medium">{groupTeeTime}</span>
+                      </div>
+                      <CardContent className="p-0">
+                        {players.map((player, idx) => {
+                          const playerName = formatPlayerName(player.name);
+                          const playerStatus = getPlayerStatus(playerName);
+                          const positionData = formatPlayerPosition(String(player.dg_id), player.teetime);
+                              
+                          return (
+                            <div 
+                              key={`${matchup.uuid}-${player.id}`}
+                              className={`
+                                p-4 border-b last:border-b-0 border-gray-800
+                                ${playerStatus.status === 'used' ? 'bg-yellow-50/5' : ''}
+                                ${playerStatus.status === 'current' ? 'bg-primary/5' : ''}
+                              `}
+                            >
+                              {/* Player Name and Status */}
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium">
+                                    {playerSearchTerm && highlightText ? 
+                                      highlightText(playerName) : 
+                                      playerName
+                                    }
+                                  </span>
+                                  {playerStatus.status !== 'available' && (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Info 
+                                          className={playerStatus.status === 'current' ? 
+                                            'text-blue-400/70' : 
+                                            'text-yellow-400/70'
+                                          } 
+                                          size={14} 
+                                        />
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        {playerStatus.label}
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  )}
+                                </div>
+                                {playerStatus.status === 'current' ? (
+                                  <Button 
+                                    size="icon" 
+                                    variant="secondary" 
+                                    className="h-8 w-8" 
+                                    onClick={() => {
+                                      if (typeof player.dg_id !== 'number') return;
+                                      removeSelection(`${player.dg_id}-${matchup.uuid}`);
+                                    }}
+                                  >
+                                    <CheckCircle className="text-green-400" size={16} />
+                                  </Button>
+                                ) : playerStatus.status === 'used' ? (
+                                  <Button size="icon" variant="secondary" disabled className="h-8 w-8">
+                                    <CheckCircle className="text-yellow-400/70" size={16} />
+                                  </Button>
+                                ) : (
+                                  <Button 
+                                    size="icon" 
+                                    variant="outline" 
+                                    className="h-8 w-8" 
+                                    onClick={() => {
+                                      if (typeof player.dg_id !== 'number') return;
+                                      addSelection({
+                                        id: `${player.dg_id}-${matchup.uuid}`,
+                                        matchupType,
+                                        group: `Event ${eventId || 'Unknown'}`,
+                                        player: playerName,
+                                        odds: Number(player.odds) || 0,
+                                        matchupId: matchup.uuid,
+                                        eventName: matchup.event_name || '',
+                                        roundNum: matchup.round_num || 0,
+                                        valueRating: 7.5,
+                                        confidenceScore: 75
+                                      });
+                                    }}
+                                  >
+                                    <PlusCircle className="text-primary" size={16} />
+                                  </Button>
+                                )}
+                              </div>
+
+                              {/* Stats Grid - now 2 columns instead of 3 */}
+                              <div className="grid grid-cols-2 gap-4 text-sm">
+                                <div>
+                                  <div className="text-muted-foreground text-xs mb-1">Position</div>
+                                  <div className="font-medium">{positionData.position}</div>
+                                  <div className="text-xs text-muted-foreground">{positionData.score}</div>
+                                </div>
+                                <div>
+                                  <div className="text-muted-foreground text-xs mb-1">Odds</div>
+                                  <div className="font-medium">{formatOdds(player.odds ?? null)}</div>
+                                  <div className="text-xs text-muted-foreground">DG: {formatOdds(player.dgOdds ?? null)}</div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            </>
           ) : (
             <div className="p-8 text-center">
               <p className="text-gray-400">No {matchupType === "3ball" ? "3-ball" : "2-ball"} matchups found for the selected event.</p>
