@@ -187,7 +187,7 @@ export async function GET(req: NextRequest) {
 
     }
 
-    // Query season stats from player_season_stats
+    // Query season stats from player_season_stats (PGA Tour data)
     const { data: seasonStats, error: seasonStatsError } = await supabase
       .from('player_season_stats')
       .select(`
@@ -204,10 +204,32 @@ export async function GET(req: NextRequest) {
       return Response.json({ success: false, error: seasonStatsError.message }, { status: 500 });
     }
 
+    // Query DataGolf season stats from player_skill_ratings
+    const { data: dgSeasonStats, error: dgSeasonStatsError } = await supabase
+      .from('player_skill_ratings')
+      .select(`
+        dg_id,
+        player_name,
+        sg_total,
+        sg_ott,
+        sg_app,
+        sg_arg,
+        sg_putt
+      `)
+      .in('dg_id', playerIdArr);
+    if (dgSeasonStatsError) {
+      console.warn('Failed to fetch DataGolf season stats:', dgSeasonStatsError.message);
+    }
+
     // Merge event and season stats by dg_id
     const seasonStatsMap = new Map();
     (seasonStats ?? []).forEach(row => {
       if (row.dg_id != null) seasonStatsMap.set(row.dg_id, row);
+    });
+
+    const dgSeasonStatsMap = new Map();
+    (dgSeasonStats ?? []).forEach(row => {
+      if (row.dg_id != null) dgSeasonStatsMap.set(row.dg_id, row);
     });
 
     // For each player, find the row with the highest round_num <= requested roundNum
@@ -224,6 +246,7 @@ export async function GET(req: NextRequest) {
       const playerStats = (allEventStats ?? []).filter(r => r.dg_id === dg_id);
       const eventRow = getLastCompletedRoundStat(playerStats, roundNum);
       const seasonRow = seasonStatsMap.get(dg_id) || null;
+      const dgSeasonRow = dgSeasonStatsMap.get(dg_id) || null;
       const liveData = liveDataMap.get(dg_id) || null;
       
       // Use DataGolf live data when available, fallback to tournament-specific Supabase data
@@ -256,17 +279,24 @@ export async function GET(req: NextRequest) {
         // Add round-specific data
         current_round: currentRound,
         round_scores: roundScores,
+        // Tournament SG data
         sg_total: eventRow?.sg_total ?? null,
         sg_ott: eventRow?.sg_ott ?? null,
         sg_app: eventRow?.sg_app ?? null,
         sg_arg: eventRow?.sg_arg ?? null,
         sg_putt: eventRow?.sg_putt ?? null,
-        // Season stats (always included, mapped to season_*)
-        season_sg_total: seasonRow?.sg_total ?? null,
+        // Season stats (PGA Tour)
+        season_sg_total: seasonRow?.sg_total ?? null,  // PGA Tour season data
         season_sg_ott: seasonRow?.sg_ott ?? null,
         season_sg_app: seasonRow?.sg_app ?? null,
         season_sg_arg: seasonRow?.sg_arg ?? null,
         season_sg_putt: seasonRow?.sg_putt ?? null,
+        // DataGolf season stats
+        dgSeasonSgTotal: dgSeasonRow?.sg_total ?? null,  // DataGolf season data
+        dgSeasonSgOtt: dgSeasonRow?.sg_ott ?? null,
+        dgSeasonSgApp: dgSeasonRow?.sg_app ?? null,
+        dgSeasonSgArg: dgSeasonRow?.sg_arg ?? null,
+        dgSeasonSgPutt: dgSeasonRow?.sg_putt ?? null,
       };
     });
 
