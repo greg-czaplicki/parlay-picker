@@ -75,7 +75,7 @@ export function useFilteredPlayers(
           if (!playerSgData) {
             return { 
               sgTotal: 0, 
-              seasonSgTotal: null,
+              season_sg_total: null,
               sgPutt: null,
               sgApp: null,
               sgArg: null,
@@ -97,7 +97,7 @@ export function useFilteredPlayers(
             sgOtt: playerSgData.sgOtt ?? null,
             
             // Season SG data
-            seasonSgTotal: playerSgData.seasonSgTotal ?? null,
+            season_sg_total: playerSgData.seasonSgTotal ?? null,  // Fix field name mapping
             season_sg_putt: playerSgData.seasonSgPutt ?? null,
             season_sg_app: playerSgData.seasonSgApp ?? null,
             season_sg_arg: playerSgData.seasonSgArg ?? null,
@@ -125,7 +125,7 @@ export function useFilteredPlayers(
               name: matchup.player1_name,
               odds: matchup.odds1,
               sgTotal: player1SG.sgTotal || 0,
-              seasonSgTotal: player1SG.seasonSgTotal,
+              season_sg_total: player1SG.season_sg_total,  // Fix field name mapping
               // Add all SG category data for filtering
               sgPutt: player1SG.sgPutt,
               sgApp: player1SG.sgApp,
@@ -147,7 +147,7 @@ export function useFilteredPlayers(
               name: matchup.player2_name,
               odds: matchup.odds2,
               sgTotal: player2SG.sgTotal || 0,
-              seasonSgTotal: player2SG.seasonSgTotal,
+              season_sg_total: player2SG.season_sg_total,  // Fix field name mapping
               // Add all SG category data for filtering
               sgPutt: player2SG.sgPutt,
               sgApp: player2SG.sgApp,
@@ -169,7 +169,7 @@ export function useFilteredPlayers(
               name: matchup.player3_name,
               odds: matchup.odds3,
               sgTotal: player3SG.sgTotal || 0,
-              seasonSgTotal: player3SG.seasonSgTotal,
+              season_sg_total: player3SG.season_sg_total,  // Fix field name mapping
               // Add all SG category data for filtering
               sgPutt: player3SG.sgPutt,
               sgApp: player3SG.sgApp,
@@ -206,7 +206,7 @@ export function useFilteredPlayers(
               name: matchup.player1_name,
               odds: matchup.odds1,
               sgTotal: player1SG.sgTotal,
-              seasonSgTotal: player1SG.seasonSgTotal,
+              season_sg_total: player1SG.season_sg_total,  // Fix field name mapping
               // Add all SG category data for filtering
               sgPutt: player1SG.sgPutt,
               sgApp: player1SG.sgApp,
@@ -228,7 +228,7 @@ export function useFilteredPlayers(
               name: matchup.player2_name,
               odds: matchup.odds2,
               sgTotal: player2SG.sgTotal,
-              seasonSgTotal: player2SG.seasonSgTotal,
+              season_sg_total: player2SG.season_sg_total,  // Fix field name mapping
               // Add all SG category data for filtering
               sgPutt: player2SG.sgPutt,
               sgApp: player2SG.sgApp,

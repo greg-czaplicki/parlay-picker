@@ -13,7 +13,7 @@ export interface Player {
   name: string;
   odds: number;
   sgTotal: number;
-  seasonSgTotal?: number | null;
+  season_sg_total?: number | null;  // Fix field name to match API and filter expectations
   
   // Individual SG category data (tournament)
   sgPutt?: number | null;
@@ -181,7 +181,7 @@ export function useRecommendedPicksQuery(
       if (!statsMap[key]) statsMap[key] = {};
       statsMap[key].sgTotal = stat.sg_total;
       // Add season SG Total
-      statsMap[key].seasonSgTotal = stat.season_sg_total;
+      statsMap[key].season_sg_total = stat.season_sg_total;
       // Copy other fields as before
       statsMap[key].position = stat.position;
       statsMap[key].total = stat.total;
@@ -194,7 +194,7 @@ export function useRecommendedPicksQuery(
               return {
           ...player,
           sgTotal: stat.sgTotal ?? player.sgTotal,
-          seasonSgTotal: stat.seasonSgTotal ?? null,
+          season_sg_total: stat.season_sg_total ?? null,
           position: stat.position ?? player.position,
           total: stat.total ?? player.total,
           today: stat.today ?? player.today,
