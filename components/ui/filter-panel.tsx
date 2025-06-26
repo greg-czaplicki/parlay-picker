@@ -195,27 +195,7 @@ export function FilterPanel({
 
   return (
     <Card className="glass-card">
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <FilterIcon className="h-5 w-5" />
-            Filter & Search
-          </CardTitle>
-          <div className="flex items-center gap-2">
-            {selectedFilters.length > 0 && (
-              <Badge variant="secondary">
-                {selectedFilters.length} active
-              </Badge>
-            )}
-            {showResultCount && resultCount !== undefined && (
-              <Badge variant="outline">
-                {isLoading ? "Loading..." : `${resultCount} results`}
-              </Badge>
-            )}
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 pt-4">
         {/* Active Filters */}
         {selectedFilters.length > 0 && (
           <div className="space-y-2">
@@ -251,7 +231,7 @@ export function FilterPanel({
 
         {/* Filter Selector */}
         <div className="space-y-2">
-          <Label className="text-sm font-medium">Available Filters</Label>
+          <Label className="text-sm font-medium sr-only">Available Filters</Label>
           <FilterSelector
             selectedFilters={selectedFilters}
             onFilterToggle={handleFilterToggle}

@@ -4,19 +4,15 @@ import { useState, useEffect, useMemo } from 'react';
 import { ParlayCardProps, ParlayPickDisplay, ParlayPlayerDisplay } from '@/components/parlay-card/parlay-card';
 import { toast } from '@/components/ui/use-toast';
 import { useParlaysQuery } from '@/hooks/use-parlays-query';
-import { Loader2 } from 'lucide-react';
-import { useQueryClient } from '@tanstack/react-query';
-import { queryKeys } from '@/lib/query-keys';
 
 
-export default function ParlaysClient({ currentRound }: { currentRound: number | null }) {
+export default function ParlaysClient() {
   // Use the seeded test user until real auth is implemented
   const userId = '00000000-0000-0000-0000-000000000001';
 
   // Persistent data via React Query
-  const { data, isLoading, isError, error, refetch } = useParlaysQuery(userId);
+  const { data, isError, error } = useParlaysQuery(userId);
   const parlays = Array.isArray(data) ? data : [];
-  const queryClient = useQueryClient();
 
   // Error toast for loading
   useEffect(() => {
@@ -25,19 +21,9 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
     }
   }, [isError, error]);
 
-  const [autoProcessing, setAutoProcessing] = useState(false);
   const [showSettled, setShowSettled] = useState(false);
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
-
-  // Last sync timestamp state
-  const [lastSync, setLastSync] = useState<Date | null>(null);
-
-  // Load last sync from localStorage on mount
-  useEffect(() => {
-    const t = typeof window !== 'undefined' ? localStorage.getItem('lastSync') : null;
-    if (t) setLastSync(new Date(t));
-  }, []);
 
   // Helper to organize and filter parlays
   const organizedParlays = useMemo(() => {
@@ -206,87 +192,6 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
   const canPrevPage = currentPage > 1;
   const canNextPage = currentPage < totalPages;
 
-  // Auto-sync and settle on page load
-  // DISABLED: Client-side auto-sync removed to prevent overwriting GitHub Actions data
-  // GitHub Actions will handle data sync every 30 minutes
-  // useEffect(() => {
-  //   const autoSyncAndSettle = async () => {
-  //     if (autoProcessing) return; // Prevent multiple simultaneous runs
-  //     
-  //     setAutoProcessing(true);
-  //     try {
-  //       // Add cache-busting timestamp to bypass Vercel edge cache
-  //       const timestamp = Date.now()
-  //       
-  //       // First sync the latest stats with cache busting
-  //       const syncRes = await fetch(`/api/live-stats/sync?_t=${timestamp}`, { 
-  //           method: 'GET',
-  //           headers: {
-  //             // Force bypass cache with these headers
-  //             'Cache-Control': 'no-cache, no-store, must-revalidate',
-  //             'Pragma': 'no-cache'
-  //           }
-  //         });
-  //         if (!syncRes.ok) throw new Error('Failed to sync live stats');
-  //         
-  //         // Invalidate all parlay and related queries to force refetch
-  //         await Promise.all([
-  //           // Invalidate all parlay queries
-  //           queryClient.invalidateQueries({ queryKey: queryKeys.parlays.all() }),
-  //           // Invalidate player data that might be used in parlays
-  //           queryClient.invalidateQueries({ queryKey: queryKeys.playerData.live(0, 'any') }),
-  //           // Invalidate any odds data
-  //           queryClient.invalidateQueries({ queryKey: queryKeys.oddsFreshness() }),
-  //         ]);
-
-  //         // Force refetch with cache bypass for current data
-  //         await queryClient.refetchQueries({ 
-  //           queryKey: queryKeys.parlays.all(),
-  //           type: 'active' // Only refetch active queries
-  //         });
-  //         
-  //         // DISABLED: Settlement is now handled by dedicated background process
-  //         // to avoid duplicate settlement logic and ensure consistent behavior
-  //         // const settleRes = await fetch('/api/settle', { 
-  //         //   method: 'POST',
-  //         //   headers: { 'Content-Type': 'application/json' },
-  //         //   body: JSON.stringify({ autoDetect: true })
-  //         // });
-  //         // 
-  //         // if (!settleRes.ok) throw new Error('Failed to settle parlays');
-  //         // 
-  //         // const settleData = await settleRes.json();
-  //         
-  //         // Update last sync timestamp
-  //         const now = new Date();
-  //         setLastSync(now);
-  //         if (typeof window !== 'undefined') {
-  //           localStorage.setItem('lastSync', now.toISOString());
-  //         }
-  //         
-  //         // Show success message for sync only
-  //         toast({ 
-  //           title: 'Live Stats Synced', 
-  //           description: 'Latest player data has been updated',
-  //           variant: 'default' 
-  //         });
-  //         
-  //         // Refresh parlay data (this should now use the invalidated cache)
-  //         await refetch();
-  //     } catch (err: any) {
-  //       toast({ 
-  //         title: 'Auto-Sync Failed', 
-  //         description: err.message || 'Could not sync live stats',
-  //         variant: 'destructive' 
-  //       });
-  //     } finally {
-  //       setAutoProcessing(false);
-  //     }
-  //   };
-
-  //   // Run auto-sync on mount (settlement disabled)
-  //   autoSyncAndSettle();
-  // }, []); // Empty dependency array means this runs once on mount
 
   // Helper to map API parlay to ParlayCardProps
   function mapParlayToCardProps(parlay: any): ParlayCardProps | null {
@@ -406,17 +311,6 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
               </button>
             )}
           </div>
-        </div>
-        <div className="flex flex-col items-start sm:items-end gap-2">
-          {autoProcessing && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="animate-spin w-4 h-4" />
-              Syncing live stats...
-            </div>
-          )}
-          <span className="text-xs text-muted-foreground">
-            {lastSync ? `Last sync: ${lastSync.toLocaleTimeString()}` : 'Not yet synced'}
-          </span>
         </div>
       </div>
 

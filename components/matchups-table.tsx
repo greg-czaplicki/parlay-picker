@@ -780,7 +780,7 @@ export default function MatchupsTable({
                                     <Button 
                                       size="icon" 
                                       variant="outline" 
-                                      className="h-6 w-6 p-0" 
+                                      className="h-6 w-6 p-0 group group-hover:text-white" 
                                       onClick={() => {
                                         if (typeof player.dg_id !== 'number') return;
                                         addSelection({
@@ -797,7 +797,7 @@ export default function MatchupsTable({
                                         });
                                       }}
                                     >
-                                      <PlusCircle className="text-primary" size={16} />
+                                      <PlusCircle className="text-primary group-hover:text-white" size={16} />
                                     </Button>
                                   )}
                                 </TableCell>
@@ -962,7 +962,7 @@ export default function MatchupsTable({
                                     <Button 
                                       size="icon" 
                                       variant="outline" 
-                                      className="h-8 w-8" 
+                                      className="h-8 w-8 group group-hover:text-white" 
                                       onClick={() => {
                                         if (typeof player.dg_id !== 'number') return;
                                         addSelection({
@@ -979,7 +979,7 @@ export default function MatchupsTable({
                                         });
                                       }}
                                     >
-                                      <PlusCircle className="text-primary" size={16} />
+                                      <PlusCircle className="text-primary group-hover:text-white" size={16} />
                                     </Button>
                                   )}
                                 </div>

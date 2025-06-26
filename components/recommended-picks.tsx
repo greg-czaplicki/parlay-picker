@@ -73,15 +73,15 @@ const convertToAmericanOdds = (decimalOdds: number | null | undefined): number =
   }
 };
 
-// Helper to color code SG values
+// Helper to color code SG values for dark theme
 function getSGColorClass(sg: number | null | undefined) {
-  if (sg == null || isNaN(sg)) return "text-gray-400";
-  if (sg >= 2) return "text-green-700 font-bold";
-  if (sg >= 1) return "text-green-500 font-semibold";
-  if (sg >= 0) return "text-green-300";
-  if (sg >= -1) return "text-red-400";
-  if (sg >= -2) return "text-red-600 font-semibold";
-  return "text-red-800 font-bold";
+  if (sg == null || isNaN(sg)) return "text-neutral-400";
+  if (sg >= 2) return "text-green-400 font-bold";
+  if (sg >= 1) return "text-green-300 font-semibold";
+  if (sg >= 0) return "text-green-200";
+  if (sg >= -1) return "text-red-300";
+  if (sg >= -2) return "text-red-400 font-semibold";
+  return "text-red-500 font-bold";
 }
 
 // Create a wrapper component for the slide-out panel
@@ -104,13 +104,6 @@ export function RecommendedPicksPanel(props: RecommendedPicksProps) {
             </Button>
           </SheetTrigger>
           <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto p-0">
-            <div className="p-6 border-b">
-              <SheetHeader>
-                <SheetDescription className="text-lg font-semibold">
-                  Our top picks based on odds value and player performance
-                </SheetDescription>
-              </SheetHeader>
-            </div>
             <div className="p-6">
               <RecommendedPicksContent {...props} />
             </div>
@@ -319,9 +312,9 @@ export function RecommendedPicksContent({
     return (
       <div className="space-y-4">
         {showFilters && !shouldUseExternalData && (
-          <Card className="glass-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+          <Card className="bg-gray-950/30 border-gray-800">
+            <CardHeader className="bg-[#1e1e23]">
+              <CardTitle className="flex items-center gap-2 text-white">
                 <FilterIcon className="h-5 w-5" />
                 Recommendation Filters
               </CardTitle>
@@ -331,11 +324,11 @@ export function RecommendedPicksContent({
             </CardContent>
           </Card>
         )}
-        <Card className="glass-card">
+        <Card className="bg-gray-950/30 border-gray-800">
           <CardContent className="p-4">
             <div className="space-y-4">
               {Array.from({ length: 5 }).map((_, index) => (
-                <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
+                <div key={index} className="flex items-center justify-between p-4 border border-gray-800 rounded-lg bg-gray-900/60">
                   <div className="space-y-2">
                     <Skeleton className="h-4 w-32" />
                     <Skeleton className="h-3 w-24" />
@@ -352,7 +345,7 @@ export function RecommendedPicksContent({
 
   if (isError) {
     return (
-      <Alert variant="destructive" className="glass-card">
+      <Alert variant="destructive" className="bg-gray-950/30 border-red-500/50">
         <AlertCircle className="h-4 w-4" />
         <AlertTitle>Error Loading Recommendations</AlertTitle>
         <AlertDescription>
@@ -382,7 +375,7 @@ export function RecommendedPicksContent({
             compact={compactFilters}
           />
         )}
-        <Alert className="glass-card">
+        <Alert className="bg-gray-950/30 border-gray-800">
           <Info className="h-4 w-4" />
           <AlertTitle>No Recommendations Available</AlertTitle>
           <AlertDescription>
@@ -451,15 +444,8 @@ export function RecommendedPicksContent({
 
         {/* Recommendations */}
         <Card className="glass-card">
-          <CardHeader className="pb-4">
-            <CardTitle className="text-xl">
-              Recommended Picks
-            </CardTitle>
-            {matchupType === "2ball" && (
-              <p className="text-sm text-muted-foreground mt-2">
-                2-ball matchups are head-to-head betting markets between any two players.
-              </p>
-            )}
+          <CardHeader>
+            <CardTitle className="text-xl text-white">Recommended Picks</CardTitle>
           </CardHeader>
           <CardContent className="p-6">
             <div className="space-y-4">
@@ -479,215 +465,179 @@ export function RecommendedPicksContent({
                   <div
                     key={`${player.dg_id}-${player.matchupId}-${index}`}
                     className={`
-                      p-6 border rounded-lg transition-colors
-                      ${inParlay ? 'bg-primary/5 border-primary' : 'bg-card border-border'}
-                      ${isInOtherParlay && !inParlay && !hasMatchupConflict ? '!bg-blue-50/5 !border-blue-400' : ''}
-                      ${hasMatchupConflict ? 'bg-amber-50/5 border-amber-400 border-2' : ''}
+                      p-4 border rounded-lg transition-colors
+                      ${inParlay ? 'bg-primary/10 border-primary' : 'glass-card'}
+                      ${isInOtherParlay && !inParlay && !hasMatchupConflict ? ' !border-blue-300' : ''}
+                      ${hasMatchupConflict ?  '!border-yellow-200 border-1' : ''}
                     `}
                   >
-                    {/* Player Header */}
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="font-semibold text-lg text-foreground">
-                        {playerSearchTerm && highlightText ? highlightText(player.name) : formatPlayerName(player.name)}
-                      </h3>
-                      <div className="flex items-center gap-2">
-                        {hasMatchupConflict && (
-                          <Tooltip>
-                            <TooltipTrigger>
-                              <AlertCircle className="h-5 w-5 text-amber-600" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Betting against yourself! You already have {conflictingOpponents.map(o => formatPlayerName(o.name)).join(', ')} in active parlays</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        )}
-                        {isInOtherParlay && !inParlay && !hasMatchupConflict && (
-                          <Tooltip>
-                            <TooltipTrigger>
-                              <Info className="h-5 w-5 text-blue-500" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Player is in another parlay</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Opponents */}
-                    {opponents.length > 0 && (
-                      <div className="mb-4">
-                        <div className="text-sm text-muted-foreground">
-                          vs.{' '}
-                          {opponents
-                            .sort((a, b) => (a.odds || Infinity) - (b.odds || Infinity)) // Sort by best odds first (lowest decimal)
-                            .map((opponent, index) => {
-                              const isConflicting = conflictingOpponents.some(conflicted => conflicted.dg_id === opponent.dg_id);
-                              const opponentText = `${formatPlayerName(opponent.name)} (${formatOdds(opponent.odds)})`;
-                              const highlightedName = playerSearchTerm && highlightText ? highlightText(opponent.name) : formatPlayerName(opponent.name);
-                              
-                              return (
-                                <span key={opponent.dg_id}>
-                                  {index > 0 && ', '}
-                                  <span className={isConflicting ? 'text-amber-800 font-semibold' : ''}>
-                                    {isConflicting && '⚠️ '}
-                                    {highlightedName} ({formatOdds(opponent.odds)})
-                                  </span>
-                                </span>
-                              );
-                            })}
+                    <div className="flex flex-col h-full">
+                      {/* Player Header */}
+                      <div className="flex items-center mb-2">
+                        <h3 className="font-semibold text-lg text-white">
+                          {playerSearchTerm && highlightText ? highlightText(player.name) : formatPlayerName(player.name)}
+                        </h3>
+                        <div className="flex items-center gap-2 ml-2">
+                          {hasMatchupConflict && (
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <AlertCircle className="h-5 w-5 text-yellow-200" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-foreground">Betting against yourself! You already have {conflictingOpponents.map(o => formatPlayerName(o.name)).join(', ')} in active parlays</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                          {isInOtherParlay && !inParlay && !hasMatchupConflict && (
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <Info className="h-5 w-5 text-blue-300" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-foreground">Player is in another parlay</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
                         </div>
                       </div>
-                    )}
 
-                    {/* Stats Grid - More Spacious */}
-                    <div className="grid grid-cols-4 gap-6 mb-6">
-                      {/* Odds */}
-                      <div className="text-center">
-                        <div className="text-xl font-bold text-foreground">{formatOdds(player.odds)}</div>
-                        <div className="text-sm text-muted-foreground mt-1">Odds</div>
-                      </div>
-                      
-                      {/* Gap (if exists) */}
-                      {(player as any).oddsGapToNext ? (
-                        <div className="text-center">
-                          <div className="text-xl font-bold text-green-600">
-                            +{(() => {
-                              const favoriteAmericanOdds = convertToAmericanOdds(player.odds);
-                              const nextBestAmericanOdds = convertToAmericanOdds((player as any).nextBestOdds);
-                              
-                              // Calculate gap based on odds signs
-                              let americanGap;
-                              
-                              if (favoriteAmericanOdds < 0 && nextBestAmericanOdds > 0) {
-                                // Crossing even odds line: total distance from both even odds lines
-                                // Favorite distance from -100, next best distance from +100
-                                const favoriteDistance = Math.abs(favoriteAmericanOdds - (-100));
-                                const nextBestDistance = Math.abs(nextBestAmericanOdds - 100);
-                                americanGap = favoriteDistance + nextBestDistance;
-                              } else if (favoriteAmericanOdds > 0 && nextBestAmericanOdds > 0) {
-                                // Both positive: simple difference
-                                americanGap = nextBestAmericanOdds - favoriteAmericanOdds;
-                              } else if (favoriteAmericanOdds < 0 && nextBestAmericanOdds < 0) {
-                                // Both negative: difference of absolute values  
-                                americanGap = Math.abs(nextBestAmericanOdds) - Math.abs(favoriteAmericanOdds);
-                              } else {
-                                // Fallback to simple absolute difference
-                                americanGap = Math.abs(nextBestAmericanOdds - favoriteAmericanOdds);
-                              }
-                              
-                              return Math.round(americanGap);
-                            })()}
+                      {/* Opponents */}
+                      {opponents.length > 0 && (
+                        <div className="mb-3 text-sm text-muted-foreground">
+                          <span>vs.</span>
+                          <div className="pl-2">
+                            {opponents
+                              .sort((a, b) => (a.odds || Infinity) - (b.odds || Infinity)) // Sort by best odds first (lowest decimal)
+                              .map((opponent) => {
+                                const isConflicting = conflictingOpponents.some(conflicted => conflicted.dg_id === opponent.dg_id);
+                                const highlightedName = playerSearchTerm && highlightText ? highlightText(opponent.name) : formatPlayerName(opponent.name);
+                                
+                                return (
+                                  <div key={opponent.dg_id} className="mt-1">
+                                    <span className={isConflicting ? 'text-yellow-200' : ''}>
+                                      {highlightedName} ({formatOdds(opponent.odds)}){isConflicting && ' ⚠️'}
+                                    </span>
+                                  </div>
+                                );
+                              })}
                           </div>
-                          <div className="text-sm text-muted-foreground mt-1">Edge</div>
-                        </div>
-                      ) : (
-                        <div className="text-center">
-                          <div className={`text-xl font-bold ${getSGColorClass(player.sgTotal)}`}>
-                            {player.sgTotal?.toFixed(2) ?? 'N/A'}
-                          </div>
-                          <div className="text-sm text-muted-foreground mt-1">SG Total</div>
                         </div>
                       )}
-                      
-                      {/* Value Score (when composite score exists) */}
-                      {(player as any).compositeScore ? (
-                        <div className="text-center">
-                          <div className="text-xl font-bold text-blue-600">
-                            {((player as any).compositeScore * 9 + 1).toFixed(1)}
+
+                      {/* Stats Row */}
+                      <div className="flex-grow flex items-center mb-4">
+                        <div className="w-full grid grid-cols-3 sm:grid-cols-4 gap-2 text-center">
+                          {/* Odds */}
+                          <div className="flex flex-col justify-center">
+                            <div className="text-lg font-bold text-white">{formatOdds(player.odds)}</div>
+                            <div className="text-xs text-muted-foreground mt-1">Odds</div>
                           </div>
-                          <div className="text-sm text-muted-foreground mt-1">Value</div>
-                        </div>
-                      ) : (
-                        /* SG Total (when gap exists but no composite score) */
-                        (player as any).oddsGapToNext && (
-                          <div className="text-center">
-                            <div className={`text-lg font-semibold ${getSGColorClass(player.sgTotal)}`}>
+
+                          {/* SG Total */}
+                          <div className="flex flex-col justify-center">
+                            <div className={`text-lg font-bold ${getSGColorClass(player.sgTotal)}`}>
                               {player.sgTotal?.toFixed(2) ?? 'N/A'}
                             </div>
-                            <div className="text-sm text-muted-foreground mt-1">SG Total</div>
+                            <div className="text-xs text-muted-foreground mt-1">SG Total</div>
                           </div>
-                        )
-                      )}
-                      
-                      {/* Season SG */}
-                      {player.seasonSgTotal ? (
-                        <div className="text-center">
-                          <div className="text-lg font-semibold text-blue-600">
-                            {player.seasonSgTotal.toFixed(2)}
-                          </div>
-                          <div className="text-sm text-muted-foreground mt-1">Season SG</div>
-                        </div>
-                      ) : (
-                        <div className="text-center">
-                          <div className="text-lg font-semibold text-muted-foreground">
-                            -
-                          </div>
-                          <div className="text-sm text-muted-foreground mt-1">Season SG</div>
-                        </div>
-                      )}
-                    </div>
 
-                    {/* Action Button */}
-                    <div className="flex justify-center">
-                      {inParlay ? (
-                        <Button
-                          variant="outline"
-                          size="lg"
-                          onClick={() => selectionId && removeFromParlay(selectionId, playerId, player.name)}
-                          className="text-destructive hover:text-destructive w-full py-3"
-                        >
-                          Remove from Parlay
-                        </Button>
-                      ) : (
-                        <Button
-                          variant={hasMatchupConflict ? "outline" : "default"}
-                          size="lg"
-                          onClick={(e) => {
-                                                  // Prevent double clicks
-                      const button = e.currentTarget;
-                      button.disabled = true;
-                      setTimeout(() => {
-                        if (button) {
-                          button.disabled = false;
-                        }
-                      }, 1000);
-                            
-                            if (hasMatchupConflict) {
-                              // Show warning toast for betting against yourself
-                              const conflictNames = conflictingOpponents.map(o => formatPlayerName(o.name)).join(', ');
-                              toast({
-                                title: "Betting Against Yourself!",
-                                description: `You already have ${conflictNames} in active parlays. Adding ${formatPlayerName(player.name)} means you're betting against yourself in the same matchup.`,
-                                duration: 5000,
-                                variant: "destructive"
-                              });
-                            }
-                            
-                            const selection: ParlaySelection = {
-                              id: `${player.dg_id}-${player.matchupId}`,
-                              matchupType: matchupType,
-                              group: `Event ${eventId || 'Unknown'}`,
-                              player: player.name,
-                              odds: player.odds,
-                              matchupId: String(player.matchupId),
-                              eventName: player.eventName || '',
-                              roundNum: player.roundNum || roundNum || 1,
-                              valueRating: player.valueRating || 7.5,
-                              confidenceScore: player.confidenceScore || 75
-                            }
-                            addToParlay(selection, playerId)
-                          }}
-                          className={`w-full py-3 transition-all duration-200 hover:scale-[1.02] active:scale-95 ${hasMatchupConflict ? 'border-amber-400 text-amber-700 hover:bg-amber-500' : ''}`}
-                        >
-                          <Plus className="h-5 w-5 mr-2" />
-                          {hasMatchupConflict 
-                            ? "Add Anyway (Conflict)" 
-                            : isInOtherParlay 
-                              ? "Add Anyway (In Parlay)" 
-                              : "Add to Parlay"}
-                        </Button>
-                      )}
+                          {/* Season SG */}
+                          <div className="flex flex-col justify-center">
+                            <div className={`text-lg font-bold ${getSGColorClass(player.seasonSgTotal)}`}>
+                              {player.seasonSgTotal?.toFixed(2) ?? 'N/A'}
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-1">Season SG</div>
+                          </div>
+
+                          {/* Edge (Conditional) */}
+                          {(player as any).oddsGapToNext ? (
+                            <div className="hidden sm:flex flex-col justify-center">
+                              <div className="text-lg font-bold text-green-500">
+                                +{(() => {
+                                  const favoriteAmericanOdds = convertToAmericanOdds(player.odds);
+                                  const nextBestAmericanOdds = convertToAmericanOdds((player as any).nextBestOdds);
+                                  let americanGap;
+                                  if (favoriteAmericanOdds < 0 && nextBestAmericanOdds > 0) {
+                                    const favoriteDistance = Math.abs(favoriteAmericanOdds - (-100));
+                                    const nextBestDistance = Math.abs(nextBestAmericanOdds - 100);
+                                    americanGap = favoriteDistance + nextBestDistance;
+                                  } else if (favoriteAmericanOdds > 0 && nextBestAmericanOdds > 0) {
+                                    americanGap = nextBestAmericanOdds - favoriteAmericanOdds;
+                                  } else if (favoriteAmericanOdds < 0 && nextBestAmericanOdds < 0) {
+                                    americanGap = Math.abs(nextBestAmericanOdds) - Math.abs(favoriteAmericanOdds);
+                                  } else {
+                                    americanGap = Math.abs(nextBestAmericanOdds - favoriteAmericanOdds);
+                                  }
+                                  return Math.round(americanGap);
+                                })()}
+                              </div>
+                              <div className="text-xs text-muted-foreground mt-1">Edge</div>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      {/* Action Button */}
+                      <div className="flex justify-center mt-auto">
+                        {inParlay ? (
+                          <Button
+                            variant="outline"
+                            size="lg"
+                            onClick={() => selectionId && removeFromParlay(selectionId, playerId, player.name)}
+                            className="text-red-400 hover:text-red-300 border-red-500/50 hover:border-red-400 w-full py-3"
+                          >
+                            Remove from Parlay
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="secondary"
+                            size="lg"
+                            onClick={(e) => {
+                              // Prevent double clicks
+                              const button = e.currentTarget;
+                              button.disabled = true;
+                              setTimeout(() => {
+                                if (button) {
+                                  button.disabled = false;
+                                }
+                              }, 1000);
+                              
+                              if (hasMatchupConflict) {
+                                // Show warning toast for betting against yourself
+                                const conflictNames = conflictingOpponents.map(o => formatPlayerName(o.name)).join(', ');
+                                toast({
+                                  title: "Betting Against Yourself!",
+                                  description: `You already have ${conflictNames} in active parlays. Adding ${formatPlayerName(player.name)} means you're betting against yourself in the same matchup.`,
+                                  duration: 5000,
+                                  variant: "destructive"
+                                });
+                              }
+                              
+                              const selection: ParlaySelection = {
+                                id: `${player.dg_id}-${player.matchupId}`,
+                                matchupType: matchupType,
+                                group: `Event ${eventId || 'Unknown'}`,
+                                player: player.name,
+                                odds: player.odds,
+                                matchupId: String(player.matchupId),
+                                eventName: player.eventName || '',
+                                roundNum: player.roundNum || roundNum || 1,
+                                valueRating: player.valueRating || 7.5,
+                                confidenceScore: player.confidenceScore || 75
+                              }
+                              addToParlay(selection, playerId)
+                            }}
+                            className={`w-full py-3 transition-all duration-200 hover:scale-[1.02] active:scale-95 ${hasMatchupConflict ? 'border-yellow-500/50 text-yellow-200 hover:bg-yellow-500/20 hover:border-yellow-400' : ''} ${isInOtherParlay ? 'border-blue-500/50 text-blue-200 hover:bg-blue-500/20 hover:border-blue-400' : ''}`}
+                          >
+                            <Plus className="h-5 w-5 mr-2" />
+                            {hasMatchupConflict 
+                              ? "Add Anyway" 
+                              : isInOtherParlay 
+                                ? "Add Anyway" 
+                                : "Add to Parlay"}
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )
@@ -698,12 +648,11 @@ export function RecommendedPicksContent({
             {finalRecommendations.length > displayLimit && (
               <div className="mt-4 flex justify-center">
                 <Button
-                  variant="outline"
+                  variant="default"
                   onClick={() => setDisplayLimit(prev => prev + 10)}
-                  className="gap-2"
                 >
                   Load More
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-xs">
                     ({displayLimit} of {finalRecommendations.length})
                   </span>
                 </Button>
