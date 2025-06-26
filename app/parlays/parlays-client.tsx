@@ -216,61 +216,78 @@ export default function ParlaysClient({ currentRound }: { currentRound: number |
         // Add cache-busting timestamp to bypass Vercel edge cache
         const timestamp = Date.now()
         
-        // First sync the latest stats with cache busting
-        const syncRes = await fetch(`/api/live-stats/sync?_t=${timestamp}`, { 
-          method: 'GET',
-          headers: {
-            // Force bypass cache with these headers
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache'
+        // 🔥 EURO TOUR FIX: Check if we have recent Euro tour data before syncing
+        // The GitHub Actions workflow handles Euro tour syncing properly with API keys
+        // Client-side sync fails for Euro tour, so we skip it if recent data exists
+        const checkEuroDataRes = await fetch(`/api/live-stats/sync-status?_t=${timestamp}`);
+        let skipSync = false;
+        if (checkEuroDataRes.ok) {
+          const euroStatus = await checkEuroDataRes.json();
+          // Skip sync if we have Euro tour data updated within last 45 minutes
+          // This prevents overwriting good GitHub Actions data with client-side failures
+          if (euroStatus.hasRecentEuroData) {
+            console.log('🌍 Skipping auto-sync: Recent Euro tour data found (GitHub Actions handles this)');
+            skipSync = true;
           }
-        });
-        if (!syncRes.ok) throw new Error('Failed to sync live stats');
-        
-        // Invalidate all parlay and related queries to force refetch
-        await Promise.all([
-          // Invalidate all parlay queries
-          queryClient.invalidateQueries({ queryKey: queryKeys.parlays.all() }),
-          // Invalidate player data that might be used in parlays
-          queryClient.invalidateQueries({ queryKey: queryKeys.playerData.live(0, 'any') }),
-          // Invalidate any odds data
-          queryClient.invalidateQueries({ queryKey: queryKeys.oddsFreshness() }),
-        ]);
-
-        // Force refetch with cache bypass for current data
-        await queryClient.refetchQueries({ 
-          queryKey: queryKeys.parlays.all(),
-          type: 'active' // Only refetch active queries
-        });
-        
-        // DISABLED: Settlement is now handled by dedicated background process
-        // to avoid duplicate settlement logic and ensure consistent behavior
-        // const settleRes = await fetch('/api/settle', { 
-        //   method: 'POST',
-        //   headers: { 'Content-Type': 'application/json' },
-        //   body: JSON.stringify({ autoDetect: true })
-        // });
-        // 
-        // if (!settleRes.ok) throw new Error('Failed to settle parlays');
-        // 
-        // const settleData = await settleRes.json();
-        
-        // Update last sync timestamp
-        const now = new Date();
-        setLastSync(now);
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('lastSync', now.toISOString());
         }
         
-        // Show success message for sync only
-        toast({ 
-          title: 'Live Stats Synced', 
-          description: 'Latest player data has been updated',
-          variant: 'default' 
-        });
-        
-        // Refresh parlay data (this should now use the invalidated cache)
-        await refetch();
+        if (!skipSync) {
+          // First sync the latest stats with cache busting (PGA tour only when Euro data is recent)
+          const syncRes = await fetch(`/api/live-stats/sync?_t=${timestamp}`, { 
+            method: 'GET',
+            headers: {
+              // Force bypass cache with these headers
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache'
+            }
+          });
+          if (!syncRes.ok) throw new Error('Failed to sync live stats');
+          
+          // Invalidate all parlay and related queries to force refetch
+          await Promise.all([
+            // Invalidate all parlay queries
+            queryClient.invalidateQueries({ queryKey: queryKeys.parlays.all() }),
+            // Invalidate player data that might be used in parlays
+            queryClient.invalidateQueries({ queryKey: queryKeys.playerData.live(0, 'any') }),
+            // Invalidate any odds data
+            queryClient.invalidateQueries({ queryKey: queryKeys.oddsFreshness() }),
+          ]);
+
+          // Force refetch with cache bypass for current data
+          await queryClient.refetchQueries({ 
+            queryKey: queryKeys.parlays.all(),
+            type: 'active' // Only refetch active queries
+          });
+          
+          // DISABLED: Settlement is now handled by dedicated background process
+          // to avoid duplicate settlement logic and ensure consistent behavior
+          // const settleRes = await fetch('/api/settle', { 
+          //   method: 'POST',
+          //   headers: { 'Content-Type': 'application/json' },
+          //   body: JSON.stringify({ autoDetect: true })
+          // });
+          // 
+          // if (!settleRes.ok) throw new Error('Failed to settle parlays');
+          // 
+          // const settleData = await settleRes.json();
+          
+          // Update last sync timestamp
+          const now = new Date();
+          setLastSync(now);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('lastSync', now.toISOString());
+          }
+          
+          // Show success message for sync only
+          toast({ 
+            title: 'Live Stats Synced', 
+            description: 'Latest player data has been updated',
+            variant: 'default' 
+          });
+          
+          // Refresh parlay data (this should now use the invalidated cache)
+          await refetch();
+        }
       } catch (err: any) {
         toast({ 
           title: 'Auto-Sync Failed', 

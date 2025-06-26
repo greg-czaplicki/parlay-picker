@@ -1,9 +1,11 @@
 import { logger } from '@/lib/logger'
 import { createSupabaseClient, handleApiError, jsonSuccess } from '@/lib/api-utils'
+import { NextRequest, NextResponse } from 'next/server'
+import { createServerClient } from '@/lib/supabase'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const supabase = createSupabaseClient()
+    const supabase = createServerClient()
     
     // Get active tournaments
     const today = new Date().toISOString().split('T')[0]
@@ -68,6 +70,23 @@ export async function GET() {
                         : syncStatus.some(s => s.health === 'stale') ? 'degraded'
                         : 'warning'
     
+    // Check if we have Euro tour data updated within the last 45 minutes
+    // This prevents client-side sync from overwriting good GitHub Actions data
+    const { data: euroData, error } = await supabase
+      .from('live_tournament_stats')
+      .select('data_golf_updated_at')
+      .not('event_name', 'ilike', '%Rocket Classic%') // Exclude PGA tour events
+      .not('event_name', 'ilike', '%PGA%') 
+      .gte('data_golf_updated_at', new Date(Date.now() - 45 * 60 * 1000).toISOString()) // Last 45 minutes
+      .limit(1);
+
+    if (error) {
+      console.error('Error checking Euro tour data status:', error);
+      return NextResponse.json({ hasRecentEuroData: false });
+    }
+
+    const hasRecentEuroData = euroData && euroData.length > 0;
+
     return jsonSuccess({
       status: 'active_tournaments',
       activeTournaments: activeTournaments.map(t => ({ 
@@ -80,7 +99,12 @@ export async function GET() {
       timestamp: now.toISOString(),
       recommendations: syncStatus
         .filter(s => s.health !== 'fresh')
-        .map(s => `${s.tournament}: ${s.health} (${s.minutesSinceSync} minutes old)`)
+        .map(s => `${s.tournament}: ${s.health} (${s.minutesSinceSync} minutes old)`),
+      hasRecentEuroData,
+      lastEuroUpdate: hasRecentEuroData ? euroData[0].data_golf_updated_at : null,
+      message: hasRecentEuroData 
+        ? 'Recent Euro tour data found - skipping client sync'
+        : 'No recent Euro tour data - client sync can proceed'
     }, `Sync status: ${overallHealth}`)
     
   } catch (error) {
