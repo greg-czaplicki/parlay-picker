@@ -102,6 +102,16 @@ function mapInPlayDataToInsert(players: any[], tournament: string, timestamp: st
   const uniqueKeys = new Set<string>(); // Track unique combinations to avoid duplicates
 
   for (const player of players) {
+    // 🔍 VALIDATION: Check if player has valid dg_id
+    if (!player.dg_id || typeof player.dg_id !== 'number') {
+      logger.warn(`⚠️ Skipping player with invalid dg_id:`, {
+        player_name: player.player_name,
+        dg_id: player.dg_id,
+        tournament
+      });
+      continue;
+    }
+    
     // Add historical round data first (R1, R2, R3, R4)
     ['R1', 'R2', 'R3', 'R4'].forEach((roundKey, index) => {
       const roundScore = player[roundKey];
@@ -257,6 +267,12 @@ export async function GET(req?: NextRequest) {
         const statsToInsert = mapInPlayDataToInsert(players, eventName, last_updated, eventId);
         
         logger.info(`Upserting ${statsToInsert.length} records for ${tour.toUpperCase()} tour (${eventName})`);
+        
+        // 🔍 DEBUG: Log sample data for Euro tour to see what's being generated
+        if (tour === 'euro' && statsToInsert.length > 0) {
+          logger.info(`🔍 EURO DEBUG - Sample record for ${eventName}:`, JSON.stringify(statsToInsert[0], null, 2));
+          logger.info(`🔍 EURO DEBUG - Total players: ${players.length}, Generated records: ${statsToInsert.length}`);
+        }
 
         // Upsert on (dg_id, round_num, event_name)
         const { error } = await supabase
@@ -266,9 +282,27 @@ export async function GET(req?: NextRequest) {
         if (error) {
           errors.push(`${tour.toUpperCase()} upsert failed: ${error.message}`);
           logger.error(`${tour.toUpperCase()} upsert failed: ${error.message}`);
+          // 🔍 DEBUG: Log the error details for Euro tour
+          if (tour === 'euro') {
+            logger.error(`🔍 EURO DEBUG - Upsert error details:`, error);
+          }
         } else {
           totalInsertedCount += statsToInsert.length;
           logger.info(`${tour.toUpperCase()} upsert completed successfully`);
+          
+          // 🔍 DEBUG: Verify records were actually saved for Euro tour
+          if (tour === 'euro') {
+            const { data: verifyData, error: verifyError } = await supabase
+              .from("live_tournament_stats")
+              .select("count(*)")
+              .eq("event_name", eventName);
+            
+            if (verifyError) {
+              logger.error(`🔍 EURO DEBUG - Verification query failed:`, verifyError);
+            } else {
+              logger.info(`🔍 EURO DEBUG - Records in DB for ${eventName}:`, verifyData);
+            }
+          }
 
           // 🎯 NEW: Check for snapshot triggers after successful sync
           try {

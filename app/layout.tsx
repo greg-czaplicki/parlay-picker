@@ -26,10 +26,12 @@ export default function RootLayout({
       </head>
       <body className={inter.className}>
         <Providers>
-          <div className="flex h-screen">
+          <div className="flex h-screen bg-gradient-to-br from-[#0f0f15] via-[#1a1a24] to-[#252538]">
             <Sidebar />
             <main className="flex-1 overflow-y-auto pl-16">
-              {children}
+              <div className="min-h-full p-6 lg:p-8">
+                {children}
+              </div>
             </main>
           </div>
           <Toaster />

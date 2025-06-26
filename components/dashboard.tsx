@@ -30,6 +30,8 @@ import { ManualIngestButton } from "@/components/manual-ingest-button"
 import { useMatchupsQuery } from "@/hooks/use-matchups-query"
 import { PlayerSearchWithCount, usePlayerSearch } from "@/components/ui/player-search"
 import { formatPlayerName } from "@/lib/utils"
+import { cn } from "@/lib/utils"
+import { FormField, FormItem, FormLabel } from "@/components/ui/form"
 
 // Register filters once at module load
 registerCoreFilters()
@@ -49,6 +51,13 @@ export default function Dashboard({
   defaultTab = "matchups"
 }: DashboardProps) {
   const [activeTab, setActiveTab] = useState(defaultTab)
+  const [isMounted, setIsMounted] = useState(false)
+  
+  // Track mount state to prevent hydration mismatch
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
+  
   const { data: currentEvents, isLoading: isLoadingEvents } = useCurrentWeekEventsQuery()
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null)
   const [matchupType, setMatchupType] = useState<"2ball" | "3ball">("3ball")
@@ -251,199 +260,221 @@ export default function Dashboard({
       <div className="w-full">
         <div className="mt-6 mb-8 flex items-center justify-between">
           <div className="flex flex-col gap-2">
-            <h1 className="text-3xl font-bold">Golf Parlay Picker</h1>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">Golf Parlay Picker</h1>
             <div className="flex items-center gap-3">
               <OddsFreshnessIndicator />
               <ManualIngestButton />
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <Avatar>
+            <Avatar className="h-10 w-10 ring-2 ring-primary/20 ring-offset-2 ring-offset-background">
               <AvatarImage src="/placeholder.svg" />
-              <AvatarFallback>JD</AvatarFallback>
+              <AvatarFallback className="bg-gradient-to-br from-primary to-primary-dark text-white font-semibold">JD</AvatarFallback>
             </Avatar>
           </div>
         </div>
 
-      <div className="mb-6">
-        <div className="flex space-x-2">
-          <button
-            className={`tab-button ${activeTab === "matchups" ? "tab-button-active" : ""}`}
-            onClick={() => setActiveTab("matchups")}
-          >
-            Matchups
-          </button>
-          <button
-            className={`tab-button ${activeTab === "parlay" ? "tab-button-active" : ""}`}
-            onClick={() => setActiveTab("parlay")}
-          >
-            Parlay Builder
-          </button>
+        {/* Professional Tab Navigation */}
+        <div className="mb-8">
+          <div className="card-clean">
+            <div className="flex items-center gap-2 p-1 bg-glass rounded-xl border border-border/20 backdrop-blur-md">
+              <button
+                className={`relative px-6 py-3 rounded-lg font-medium transition-all duration-300 ${
+                  isMounted && activeTab === "matchups" 
+                    ? "bg-gradient-to-r from-primary to-primary-dark text-white shadow-lg shadow-primary/25" 
+                    : "text-muted-foreground hover:text-foreground hover:bg-white/10"
+                }`}
+                onClick={() => setActiveTab("matchups")}
+              >
+                Matchups
+                {isMounted && activeTab === "matchups" && (
+                  <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-primary/20 to-primary-dark/20 animate-pulse-glow" />
+                )}
+              </button>
+              <button
+                className={`relative px-6 py-3 rounded-lg font-medium transition-all duration-300 ${
+                  isMounted && activeTab === "parlay" 
+                    ? "bg-gradient-to-r from-primary to-primary-dark text-white shadow-lg shadow-primary/25" 
+                    : "text-muted-foreground hover:text-foreground hover:bg-white/10"
+                }`}
+                onClick={() => setActiveTab("parlay")}
+              >
+                Parlay Builder
+                {isMounted && activeTab === "parlay" && (
+                  <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-primary/20 to-primary-dark/20 animate-pulse-glow" />
+                )}
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
 
-      {activeTab === "matchups" && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Row 1: Event Selection and Recommendation Filters */}
-          <div className="md:col-span-3">
-            <Card className="glass-card">
-              <CardContent className="p-6">
-                <div className="flex flex-col gap-4">
-                  {/* Event and Matchup Type Selectors */}
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <h2 className="text-xl font-bold">Event Selection</h2>
-                    {currentEvents && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-400">Event:</span>
-                        <Select value={selectedEventId ? String(selectedEventId) : undefined} onValueChange={handleEventChange}>
-                          <SelectTrigger className="w-[220px] bg-[#1e1e23] border-none">
-                            <SelectValue placeholder="Select Event" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {currentEvents
-                              .sort((a: TournamentEvent, b: TournamentEvent) => {
-                                const aDate = a.start_date ?? '';
-                                const bDate = b.start_date ?? '';
-                                return aDate.localeCompare(bDate);
-                              })
-                              .map(ev => (
-                                <SelectItem key={ev.event_id} value={String(ev.event_id)}>
-                                  {ev.event_name}
-                                </SelectItem>
-                              ))}
-                          </SelectContent>
-                        </Select>
-                        <span className="text-sm text-gray-400 ml-4">Matchup Type:</span>
-                        <div className="flex items-center gap-2">
-                          <Select value={matchupType} onValueChange={handleMatchupTypeChange}>
-                            <SelectTrigger className="w-[120px] bg-[#1e1e23] border-none">
-                              <SelectValue placeholder="Type" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="3ball">3-Ball</SelectItem>
-                              <SelectItem value="2ball">2-Ball</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          {isWeatherThreeBalls && (
-                            <Badge variant="secondary" className="flex items-center gap-1 text-xs">
-                              <CloudRain className="h-3 w-3" />
-                              Weather 3-Ball
+        {activeTab === "matchups" && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {/* Row 1: Event Selection and Recommendation Filters */}
+            <div className="md:col-span-3">
+              <Card className="card-clean shadow-card-lg border-border/10">
+                <CardContent className="p-8">
+                  <div className="flex flex-col gap-6">
+                    {/* Event and Matchup Type Selectors */}
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+                      <h2 className="text-display-sm text-gradient">Event Selection</h2>
+                      {currentEvents && (
+                        <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-3">
+                            <span className="text-label">Event:</span>
+                            <Select value={selectedEventId ? String(selectedEventId) : undefined} onValueChange={handleEventChange}>
+                              <SelectTrigger className="w-[240px] card-clean border border-border/20 bg-white/8 hover:bg-white/12 transition-all">
+                                <SelectValue placeholder="Select Event" />
+                              </SelectTrigger>
+                              <SelectContent className="card-clean border-border/20 backdrop-blur-md shadow-dropdown">
+                                {currentEvents
+                                  .sort((a: TournamentEvent, b: TournamentEvent) => {
+                                    const aDate = a.start_date ?? '';
+                                    const bDate = b.start_date ?? '';
+                                    return aDate.localeCompare(bDate);
+                                  })
+                                  .map(ev => (
+                                    <SelectItem key={ev.event_id} value={String(ev.event_id)} className="hover:bg-white/10 text-body">
+                                      {ev.event_name}
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <span className="text-label">Type:</span>
+                            <Select value={matchupType} onValueChange={handleMatchupTypeChange}>
+                              <SelectTrigger className="w-[130px] card-clean border border-border/20 bg-white/8 hover:bg-white/12 transition-all">
+                                <SelectValue placeholder="Type" />
+                              </SelectTrigger>
+                              <SelectContent className="card-clean border-border/20 backdrop-blur-md shadow-dropdown">
+                                <SelectItem value="3ball" className="hover:bg-white/10 text-body">3-Ball</SelectItem>
+                                <SelectItem value="2ball" className="hover:bg-white/10 text-body">2-Ball</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            {isWeatherThreeBalls && (
+                              <Badge variant="secondary" className="flex items-center gap-1 text-xs bg-accent-yellow/20 text-accent-yellow border-accent-yellow/20">
+                                <CloudRain className="h-3 w-3" />
+                                Weather 3-Ball
+                              </Badge>
+                            )}
+                          </div>
+                          {isLoadingRound && <span className="text-xs text-muted-foreground animate-pulse">Loading round...</span>}
+                          {!isLoadingRound && latestRound && (
+                            <Badge variant="outline" className="text-xs bg-accent-green/20 text-accent-green border-accent-green/20">
+                              Round {latestRound}
                             </Badge>
                           )}
                         </div>
-                        {isLoadingRound && <span className="ml-4 text-xs text-gray-400">Loading round...</span>}
-                        {!isLoadingRound && latestRound && (
-                          <span className="ml-4 text-xs text-green-400">Current Round: {latestRound}</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                      )}
+                    </div>
 
-                  {/* Filter Panel for Recommendations */}
-                  <div className="border-t pt-4">
-                    <FilterPanel
-                      selectedFilters={filterManager.selectedFilters}
-                      onFiltersChange={(filterIds) => {
-                        // Clear existing filters and add new ones
-                        filterManager.clearAllFilters()
-                        filterIds.forEach(id => filterManager.addFilter(id))
-                      }}
-                      filterOptions={filterManager.filterOptions}
-                      onFilterOptionsChange={filterManager.updateFilterOptions}
-                      multiSelect={true}
-                      showResultCount={false}
-                      isLoading={isLoadingRecommendations}
-                      compact={false}
-                    />
-                  </div>
+                    {/* Filter Panel for Recommendations */}
+                    <div className="border-t border-border/20 pt-6">
+                      <FilterPanel
+                        selectedFilters={filterManager.selectedFilters}
+                        onFiltersChange={(filterIds) => {
+                          // Clear existing filters and add new ones
+                          filterManager.clearAllFilters()
+                          filterIds.forEach(id => filterManager.addFilter(id))
+                        }}
+                        filterOptions={filterManager.filterOptions}
+                        onFilterOptionsChange={filterManager.updateFilterOptions}
+                        multiSelect={true}
+                        showResultCount={false}
+                        isLoading={isLoadingRecommendations}
+                        compact={false}
+                      />
+                    </div>
 
-                  {/* Results Summary */}
-                  {filterManager.hasFilters && (
-                    <div className="border-t pt-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <Badge variant="outline" className="text-sm">
-                            Recommendations: {filteredRecommendationsCount} of {originalRecommendationsCount}
-                          </Badge>
-                          {appliedRecommendationFilters.length > 0 && (
-                            <FilterChipList
-                              filterIds={appliedRecommendationFilters}
-                              onRemove={filterManager.removeFilter}
-                              onClearAll={filterManager.clearAllFilters}
-                              size="sm"
-                              maxVisible={3}
-                            />
+                    {/* Results Summary */}
+                    {filterManager.hasFilters && (
+                      <div className="border-t border-border/20 pt-6">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <Badge variant="outline" className="text-sm bg-primary/10 text-primary border-primary/20">
+                              Recommendations: {filteredRecommendationsCount} of {originalRecommendationsCount}
+                            </Badge>
+                            {appliedRecommendationFilters.length > 0 && (
+                              <FilterChipList
+                                filterIds={appliedRecommendationFilters}
+                                onRemove={filterManager.removeFilter}
+                                onClearAll={filterManager.clearAllFilters}
+                                size="sm"
+                                maxVisible={3}
+                              />
+                            )}
+                          </div>
+                          {recommendationsPerformance.filterTime > 0 && (
+                            <Badge variant="secondary" className="text-xs bg-muted/50 text-muted-foreground">
+                              {Math.round(recommendationsPerformance.filterTime)}ms
+                            </Badge>
                           )}
                         </div>
-                        {recommendationsPerformance.filterTime > 0 && (
-                          <Badge variant="secondary" className="text-xs">
-                            {Math.round(recommendationsPerformance.filterTime)}ms
-                          </Badge>
-                        )}
+                      </div>
+                    )}
+
+                    {/* Player Search - Positioned above content for better UX */}
+                    <div className="md:col-span-3">
+                      <div className="flex justify-center">
+                        <PlayerSearchWithCount
+                          players={allPlayersFromMatchups}
+                          placeholder="Search players across matchups & picks..."
+                          className="w-full card-clean border border-border/10 bg-white/6 hover:bg-white/10 transition-all rounded-2xl"
+                          caseSensitive={false}
+                          value={playerSearchTerm}
+                          onSearchChange={setPlayerSearchTerm}
+                        />
                       </div>
                     </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
 
-          {/* Player Search - Positioned above content for better UX */}
-          <div className="md:col-span-3">
-            <div className="flex justify-center">
-              <PlayerSearchWithCount
-                players={allPlayersFromMatchups}
-                placeholder="Search players across matchups & picks..."
-                className="w-full bg-[#1e1e23] border-none rounded-xl"
-                caseSensitive={false}
-                value={playerSearchTerm}
-                onSearchChange={setPlayerSearchTerm}
+            {/* Row 2: Main Matchups Table (Left) - Larger allocation */}
+            <div className="md:col-span-2">
+              <MatchupsTable 
+                eventId={selectedEventId} 
+                matchupType={matchupType} 
+                roundNum={currentRound}
+                showFilters={true}
+                compactFilters={false}
+                // Pass search-filtered shared data to prevent duplicate API calls
+                sharedMatchupsData={searchFilteredMatchups}
+                isLoading={isLoadingMatchups}
+                isError={isErrorMatchups}
+                error={errorMatchups}
+                // Pass search props for highlighting
+                playerSearchTerm={playerSearchTerm}
+                highlightText={highlightText}
+              />
+            </div>
+
+            {/* Row 2: Recommended Picks (Right) - Better space utilization */}
+            <div className="md:col-span-1">
+              <RecommendedPicks 
+                eventId={selectedEventId}
+                matchupType={matchupType} 
+                limit={10} 
+                oddsGapPercentage={40}
+                bookmaker="fanduel"
+                roundNum={currentRound}
+                showFilters={false}
+                filteredData={filteredRecommendations}
+                isLoading={isLoadingRecommendations}
+                isError={isErrorRecommendations}
+                error={errorRecommendations}
+                // Pass search props for highlighting
+                playerSearchTerm={playerSearchTerm}
+                highlightText={highlightText}
               />
             </div>
           </div>
+        )}
 
-          {/* Row 2: Main Matchups Table (Left) - Larger allocation */}
-          <div className="md:col-span-2">
-            <MatchupsTable 
-              eventId={selectedEventId} 
-              matchupType={matchupType} 
-              roundNum={currentRound}
-              showFilters={true}
-              compactFilters={false}
-              // Pass search-filtered shared data to prevent duplicate API calls
-              sharedMatchupsData={searchFilteredMatchups}
-              isLoading={isLoadingMatchups}
-              isError={isErrorMatchups}
-              error={errorMatchups}
-              // Pass search props for highlighting
-              playerSearchTerm={playerSearchTerm}
-              highlightText={highlightText}
-            />
-          </div>
-
-          {/* Row 2: Recommended Picks (Right) - Better space utilization */}
-          <div className="md:col-span-1">
-            <RecommendedPicks 
-              eventId={selectedEventId}
-              matchupType={matchupType} 
-              limit={10} 
-              oddsGapPercentage={40}
-              bookmaker="fanduel"
-              roundNum={currentRound}
-              showFilters={false}
-              filteredData={filteredRecommendations}
-              isLoading={isLoadingRecommendations}
-              isError={isErrorRecommendations}
-              error={errorRecommendations}
-              // Pass search props for highlighting
-              playerSearchTerm={playerSearchTerm}
-              highlightText={highlightText}
-            />
-          </div>
-        </div>
-      )}
-
-      {activeTab === "parlay" && <ParlayBuilder matchupType={matchupType} roundNum={currentRound} />}
+        {activeTab === "parlay" && <ParlayBuilder matchupType={matchupType} roundNum={currentRound} />}
       </div>
     </ParlayProvider>
   )

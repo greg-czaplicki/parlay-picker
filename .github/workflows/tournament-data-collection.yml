@@ -74,7 +74,7 @@ jobs:
           echo "🌍 Syncing European Tour data..."
           
           response=$(curl -s -L -w "HTTPSTATUS:%{http_code}" \
-            -X GET "${{ env.APP_URL }}/api/live-stats/sync-tour?tour=euro" \
+            -X GET "${{ env.APP_URL }}/api/live-stats/sync" \
             -H "User-Agent: GitHub-Actions-Tournament-Sync/1.0")
           
           http_code=$(echo $response | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
@@ -89,10 +89,10 @@ jobs:
             echo "⚠️ Continuing despite Euro sync failure (tour might be inactive)"
           else
             processed_count=$(echo $content | jq -r '.processedCount // 0')
-            event_name=$(echo $content | jq -r '.eventName // "Unknown"')
+            event_names=$(echo $content | jq -r '.eventNames | join(", ") // "Unknown"')
             errors=$(echo $content | jq -r '.errors | length')
             
-            echo "✅ Euro Sync completed: $processed_count records processed for $event_name"
+            echo "✅ Euro Sync completed: $processed_count records processed for $event_names"
             if [ $errors -gt 0 ]; then
               echo "⚠️ Euro Sync had $errors errors"
             fi

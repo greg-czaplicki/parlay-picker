@@ -13,7 +13,7 @@ export default function PlayersLayout({
   children: React.ReactNode
 }) {
   return (
-    <div className="min-h-screen bg-[#121212] text-white">
+    <div className="min-h-screen text-white">
       <Sidebar />
       <div className="ml-16 p-4">
         <TopNavigation />

@@ -1,0 +1,45 @@
+{
+	"meta": {
+		"generatedAt": "2025-06-26T11:39:29.548Z",
+		"tasksAnalyzed": 4,
+		"totalTasks": 42,
+		"analysisCount": 4,
+		"thresholdScore": 5,
+		"projectName": "Taskmaster",
+		"usedResearch": false
+	},
+	"complexityAnalysis": [
+		{
+			"taskId": 8,
+			"taskTitle": "Implement Tailwind CSS Design System",
+			"complexityScore": 7,
+			"recommendedSubtasks": 6,
+			"expansionPrompt": "Break down the implementation of a Tailwind CSS design system into detailed subtasks covering color system, typography, spacing, component patterns, animations, and documentation. Include specific technical requirements and deliverables for each subtask.",
+			"reasoning": "This task requires creating a comprehensive design system with multiple interconnected components. It involves technical configuration of Tailwind, creating custom themes, defining design tokens, implementing component patterns, and ensuring consistency across the application. The existing 5 subtasks cover the main areas but could benefit from additional detail on animations/transitions and production optimization."
+		},
+		{
+			"taskId": 9,
+			"taskTitle": "Implement Shadcn UI Components",
+			"complexityScore": 8,
+			"recommendedSubtasks": 7,
+			"expansionPrompt": "Break down the implementation of Shadcn UI components into detailed subtasks covering initial setup, component customization, theming, accessibility improvements, testing, documentation, and integration with existing components. Include specific technical requirements and deliverables for each subtask.",
+			"reasoning": "This task involves integrating and customizing a third-party component library with specific accessibility requirements. It requires technical knowledge of Shadcn UI, Radix primitives, component composition, theming systems, and WCAG standards. The task has dependencies on the Tailwind design system and requires careful coordination to maintain consistency. The current 6 subtasks are well-structured but could benefit from an additional subtask focused on testing and documentation."
+		},
+		{
+			"taskId": 10,
+			"taskTitle": "Reorganize Component Hierarchy",
+			"complexityScore": 9,
+			"recommendedSubtasks": 8,
+			"expansionPrompt": "Break down the component hierarchy reorganization into detailed subtasks covering component analysis, atomic design implementation, custom hook extraction, business logic separation, migration planning, testing strategy, documentation, and developer training. Include specific technical requirements and deliverables for each subtask.",
+			"reasoning": "This is a high-complexity architectural task that impacts the entire codebase. It requires deep understanding of component design patterns, code organization principles, and refactoring techniques. The task involves significant restructuring that could potentially break existing functionality if not carefully planned and executed. The current 7 subtasks cover most aspects but would benefit from an additional subtask focused on developer training and knowledge transfer to ensure team adoption."
+		},
+		{
+			"taskId": 26,
+			"taskTitle": "Refactor Matchups Page for Mobile Responsiveness",
+			"complexityScore": 6,
+			"recommendedSubtasks": 5,
+			"expansionPrompt": "Break down the mobile responsiveness refactoring of the Matchups page into detailed subtasks covering analysis, layout adjustments, component adaptations, touch optimizations, and performance improvements. Include specific technical requirements and deliverables for each subtask.",
+			"reasoning": "This task focuses on optimizing a specific page for mobile devices, requiring responsive design implementation, touch interaction improvements, and performance optimizations. While technically involved, it has a narrower scope than the other tasks, focusing on a single page rather than system-wide changes. The current 5 subtasks appropriately cover the necessary work from analysis through implementation and testing."
+		}
+	]
+}
