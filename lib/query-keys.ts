@@ -50,6 +50,14 @@ export const queryKeys = {
   matchupType: (eventId: number | null) => ["matchupType", eventId] as const,
   // Odds freshness
   oddsFreshness: () => ["odds", "freshness"] as const,
+  // SG Momentum queries
+  sgMomentum: {
+    all: () => ["sgMomentum"] as const,
+    tournament: (eventName?: string, dgId?: number, batch?: boolean, limit?: number) => 
+      ["sgMomentum", "tournament", eventName, dgId, batch, limit] as const,
+    player: (dgId: number, eventName: string) => ["sgMomentum", "player", dgId, eventName] as const,
+    batch: (limit?: number) => ["sgMomentum", "batch", limit] as const,
+  },
 }
 
 // Helper type for inferring query key types
@@ -80,6 +88,10 @@ type QueryKey =
   | ReturnType<typeof queryKeys.currentWeekEvents>
   | ReturnType<typeof queryKeys.matchupType>
   | ReturnType<typeof queryKeys.oddsFreshness>
+  | ReturnType<typeof queryKeys.sgMomentum.all>
+  | ReturnType<typeof queryKeys.sgMomentum.tournament>
+  | ReturnType<typeof queryKeys.sgMomentum.player>
+  | ReturnType<typeof queryKeys.sgMomentum.batch>
 
 export type { QueryKey }
 
