@@ -108,9 +108,11 @@ export function createSGHeavyFilter(): Filter<Player> {
       // Calculate weighted SG for each player
       const playersWithWeightedSG = playersWithSG.map(player => {
         const sgTotalWeighted = calculateWeightedSGFromPlayer(player, false, tournamentWeight, options);
+        const calculatedSeasonSG = calculateSeasonSGForDisplay(player, options);
         return {
           ...player,
           sgTotalWeighted,
+          season_sg_total_calculated: calculatedSeasonSG, // Store the calculated season value for display
           sgCalculationMethod: getSGCalculationMethodFromPlayer(player, false, options),
           sgDebugInfo: {}
         };
@@ -151,8 +153,8 @@ export function createSGHeavyFilter(): Filter<Player> {
           });
         });
 
-        // Apply SG-based filtering
-        const qualifiedPlayers = validOddsGroup.filter(p => p.sgTotalWeighted >= minSgThreshold);
+        // Apply SG-based filtering (exclude players with -999 score indicating missing required data)
+        const qualifiedPlayers = validOddsGroup.filter(p => p.sgTotalWeighted >= minSgThreshold && p.sgTotalWeighted > -900);
 
         if (qualifiedPlayers.length === 0) {
           return;
@@ -259,13 +261,23 @@ function calculateWeightedSGFromPlayer(
   });
   
   // Special cases for 0% and 100% tournament weight
-  if (tournamentWeight === 0 && seasonSgTotal !== null && seasonSgTotal !== undefined) {
-    console.log(`[SG Heavy Debug] Using 100% season data for ${player.name}: ${seasonSgTotal}`);
-    return seasonSgTotal;
+  if (tournamentWeight === 0) {
+    if (seasonSgTotal !== null && seasonSgTotal !== undefined) {
+      console.log(`[SG Heavy Debug] Using 100% season data for ${player.name}: ${seasonSgTotal}`);
+      return seasonSgTotal;
+    } else {
+      console.log(`[SG Heavy Debug] No season data available for ${player.name}, excluding from results`);
+      return -999; // Return very low score to exclude player
+    }
   }
-  if (tournamentWeight === 1 && tournamentSgTotal !== null && tournamentSgTotal !== undefined) {
-    console.log(`[SG Heavy Debug] Using 100% tournament data for ${player.name}: ${tournamentSgTotal}`);
-    return tournamentSgTotal;
+  if (tournamentWeight === 1) {
+    if (tournamentSgTotal !== null && tournamentSgTotal !== undefined) {
+      console.log(`[SG Heavy Debug] Using 100% tournament data for ${player.name}: ${tournamentSgTotal}`);
+      return tournamentSgTotal;
+    } else {
+      console.log(`[SG Heavy Debug] No tournament data available for ${player.name}, excluding from results`);
+      return -999; // Return very low score to exclude player
+    }
   }
 
   // If we have both tournament and season data, use weighted average
@@ -276,7 +288,18 @@ function calculateWeightedSGFromPlayer(
     return weightedSG;
   }
 
-  // If we only have one type of data, use that
+  // If we only have one type of data, check if it's the required type based on data source
+  if (dataSource === 'pga' && (seasonSgTotal === null || seasonSgTotal === undefined)) {
+    console.log(`[SG Heavy Debug] PGA data source selected but no PGA season data for ${player.name}, excluding`);
+    return -999; // Exclude player when PGA data source is required but missing
+  }
+  
+  if (dataSource === 'datagolf' && (seasonSgTotal === null || seasonSgTotal === undefined)) {
+    console.log(`[SG Heavy Debug] DataGolf data source selected but no DataGolf season data for ${player.name}, excluding`);
+    return -999; // Exclude player when DataGolf data source is required but missing
+  }
+
+  // If we only have one type of data and it's allowed, use that
   if (tournamentSgTotal !== null && tournamentSgTotal !== undefined) {
     console.log(`[SG Heavy Debug] Only tournament data available for ${player.name}: ${tournamentSgTotal}`);
     return tournamentSgTotal;
@@ -287,8 +310,36 @@ function calculateWeightedSGFromPlayer(
   }
 
   // No valid data
-  console.log(`[SG Heavy Debug] No valid SG data for ${player.name}`);
-  return 0;
+  console.log(`[SG Heavy Debug] No valid SG data for ${player.name}, excluding`);
+  return -999;
+}
+
+/**
+ * Calculate the season SG value that should be displayed based on data source
+ */
+function calculateSeasonSGForDisplay(
+  player: Player,
+  options?: SGHeavyOptions
+): number | null {
+  const dataSource = options?.seasonDataSource || 'pga';
+  
+  switch (dataSource) {
+    case 'pga':
+      return player.season_sg_total ?? null;
+    case 'datagolf':
+      return player.dgSeasonSgTotal ?? null;
+    case 'aggregate':
+      // If both sources available, use average
+      if (player.season_sg_total !== null && player.season_sg_total !== undefined &&
+          player.dgSeasonSgTotal !== null && player.dgSeasonSgTotal !== undefined) {
+        return (player.season_sg_total + player.dgSeasonSgTotal) / 2;
+      } else {
+        // Otherwise use whichever is available
+        return player.season_sg_total ?? player.dgSeasonSgTotal ?? null;
+      }
+    default:
+      return player.season_sg_total ?? null;
+  }
 }
 
 /**

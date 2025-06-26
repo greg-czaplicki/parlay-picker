@@ -25,7 +25,7 @@ interface FilterManagerState {
 export function useFilterManager(options: UseFilterManagerOptions = {}) {
   const {
     autoSave = true,
-    debounceMs = 500,
+    debounceMs = 150,
     enablePerformanceTracking = false
   } = options
 

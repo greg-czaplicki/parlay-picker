@@ -39,7 +39,7 @@ export function useFilteredPlayers(
   const {
     filterIds = [],
     filterOptions = {},
-    debounceMs = 300,
+    debounceMs = 150,
     enableCaching = true,
     bookmaker = "fanduel",
     oddsGapPercentage = 40,
@@ -136,7 +136,7 @@ export function useFilteredPlayers(
               name: matchup.player1_name,
               odds: matchup.odds1,
               sgTotal: player1SG.sgTotal || 0,
-              season_sg_total: player1SG.season_sg_total,  // Fix field name mapping
+              season_sg_total: player1SG.season_sg_total,  // PGA Tour season data
               // Add all SG category data for filtering
               sgPutt: player1SG.sgPutt,
               sgApp: player1SG.sgApp,
@@ -146,6 +146,12 @@ export function useFilteredPlayers(
               season_sg_app: player1SG.season_sg_app,
               season_sg_arg: player1SG.season_sg_arg,
               season_sg_ott: player1SG.season_sg_ott,
+              // DataGolf season data
+              dgSeasonSgTotal: player1SG.dgSeasonSgTotal,
+              dgSeasonSgPutt: player1SG.dgSeasonSgPutt,
+              dgSeasonSgApp: player1SG.dgSeasonSgApp,
+              dgSeasonSgArg: player1SG.dgSeasonSgArg,
+              dgSeasonSgOtt: player1SG.dgSeasonSgOtt,
               valueRating: 0,
               confidenceScore: 0,
               isRecommended: false,
@@ -158,7 +164,7 @@ export function useFilteredPlayers(
               name: matchup.player2_name,
               odds: matchup.odds2,
               sgTotal: player2SG.sgTotal || 0,
-              season_sg_total: player2SG.season_sg_total,  // Fix field name mapping
+              season_sg_total: player2SG.season_sg_total,  // PGA Tour season data
               // Add all SG category data for filtering
               sgPutt: player2SG.sgPutt,
               sgApp: player2SG.sgApp,
@@ -168,6 +174,12 @@ export function useFilteredPlayers(
               season_sg_app: player2SG.season_sg_app,
               season_sg_arg: player2SG.season_sg_arg,
               season_sg_ott: player2SG.season_sg_ott,
+              // DataGolf season data
+              dgSeasonSgTotal: player2SG.dgSeasonSgTotal,
+              dgSeasonSgPutt: player2SG.dgSeasonSgPutt,
+              dgSeasonSgApp: player2SG.dgSeasonSgApp,
+              dgSeasonSgArg: player2SG.dgSeasonSgArg,
+              dgSeasonSgOtt: player2SG.dgSeasonSgOtt,
               valueRating: 0,
               confidenceScore: 0,
               isRecommended: false,
@@ -180,7 +192,7 @@ export function useFilteredPlayers(
               name: matchup.player3_name,
               odds: matchup.odds3,
               sgTotal: player3SG.sgTotal || 0,
-              season_sg_total: player3SG.season_sg_total,  // Fix field name mapping
+              season_sg_total: player3SG.season_sg_total,  // PGA Tour season data
               // Add all SG category data for filtering
               sgPutt: player3SG.sgPutt,
               sgApp: player3SG.sgApp,
@@ -190,6 +202,12 @@ export function useFilteredPlayers(
               season_sg_app: player3SG.season_sg_app,
               season_sg_arg: player3SG.season_sg_arg,
               season_sg_ott: player3SG.season_sg_ott,
+              // DataGolf season data
+              dgSeasonSgTotal: player3SG.dgSeasonSgTotal,
+              dgSeasonSgPutt: player3SG.dgSeasonSgPutt,
+              dgSeasonSgApp: player3SG.dgSeasonSgApp,
+              dgSeasonSgArg: player3SG.dgSeasonSgArg,
+              dgSeasonSgOtt: player3SG.dgSeasonSgOtt,
               valueRating: 0,
               confidenceScore: 0,
               isRecommended: false,
@@ -217,7 +235,7 @@ export function useFilteredPlayers(
               name: matchup.player1_name,
               odds: matchup.odds1,
               sgTotal: player1SG.sgTotal,
-              season_sg_total: player1SG.season_sg_total,  // Fix field name mapping
+              season_sg_total: player1SG.season_sg_total,  // PGA Tour season data
               // Add all SG category data for filtering
               sgPutt: player1SG.sgPutt,
               sgApp: player1SG.sgApp,
@@ -227,6 +245,12 @@ export function useFilteredPlayers(
               season_sg_app: player1SG.season_sg_app,
               season_sg_arg: player1SG.season_sg_arg,
               season_sg_ott: player1SG.season_sg_ott,
+              // DataGolf season data
+              dgSeasonSgTotal: player1SG.dgSeasonSgTotal,
+              dgSeasonSgPutt: player1SG.dgSeasonSgPutt,
+              dgSeasonSgApp: player1SG.dgSeasonSgApp,
+              dgSeasonSgArg: player1SG.dgSeasonSgArg,
+              dgSeasonSgOtt: player1SG.dgSeasonSgOtt,
               valueRating: 0,
               confidenceScore: 0,
               isRecommended: false,
@@ -239,7 +263,7 @@ export function useFilteredPlayers(
               name: matchup.player2_name,
               odds: matchup.odds2,
               sgTotal: player2SG.sgTotal,
-              season_sg_total: player2SG.season_sg_total,  // Fix field name mapping
+              season_sg_total: player2SG.season_sg_total,  // PGA Tour season data
               // Add all SG category data for filtering
               sgPutt: player2SG.sgPutt,
               sgApp: player2SG.sgApp,
@@ -249,6 +273,12 @@ export function useFilteredPlayers(
               season_sg_app: player2SG.season_sg_app,
               season_sg_arg: player2SG.season_sg_arg,
               season_sg_ott: player2SG.season_sg_ott,
+              // DataGolf season data
+              dgSeasonSgTotal: player2SG.dgSeasonSgTotal,
+              dgSeasonSgPutt: player2SG.dgSeasonSgPutt,
+              dgSeasonSgApp: player2SG.dgSeasonSgApp,
+              dgSeasonSgArg: player2SG.dgSeasonSgArg,
+              dgSeasonSgOtt: player2SG.dgSeasonSgOtt,
               valueRating: 0,
               confidenceScore: 0,
               isRecommended: false,

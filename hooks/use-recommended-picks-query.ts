@@ -13,7 +13,7 @@ export interface Player {
   name: string;
   odds: number;
   sgTotal: number;
-  season_sg_total?: number | null;  // Fix field name to match API and filter expectations
+  season_sg_total?: number | null;  // PGA Tour season data
   
   // Individual SG category data (tournament)
   sgPutt?: number | null;
@@ -21,11 +21,18 @@ export interface Player {
   sgArg?: number | null;
   sgOtt?: number | null;
   
-  // Individual SG category data (season)
+  // Individual SG category data (season - PGA Tour)
   season_sg_putt?: number | null;
   season_sg_app?: number | null;
   season_sg_arg?: number | null;
   season_sg_ott?: number | null;
+  
+  // DataGolf season data
+  dgSeasonSgTotal?: number | null;
+  dgSeasonSgPutt?: number | null;
+  dgSeasonSgApp?: number | null;
+  dgSeasonSgArg?: number | null;
+  dgSeasonSgOtt?: number | null;
   
   valueRating: number;
   confidenceScore: number;

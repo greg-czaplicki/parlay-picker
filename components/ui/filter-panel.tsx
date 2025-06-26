@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
@@ -286,24 +286,17 @@ type AllFilterOptions = SGHeavyOptions | GenericFilterOptions;
 function FilterOptionsEditor({ filterId, options, onChange }: FilterOptionsEditorProps) {
   const filterService = FilterService.getInstance()
   const filter = filterService.getFilterById(filterId)
-  const [localValues, setLocalValues] = useState<Partial<Record<keyof AllFilterOptions, number>>>({})
 
-  // Add debounced handlers for all sliders with a longer delay
+  // Simple debounced handlers - reduced from 300ms to 100ms for faster response
   const debouncedOptionChange = useCallback(
     debounce((key: keyof AllFilterOptions, value: number) => {
       onChange({ ...options, [key]: value } as FilterOptions)
-      setLocalValues(prev => {
-        const newValues = { ...prev }
-        delete newValues[key]
-        return newValues
-      })
-    }, 300), // Increased debounce timeout
+    }, 100), // Much faster debounce for responsiveness
     [options, onChange]
   )
 
-  // Handle immediate visual feedback
+  // Handle slider changes with immediate visual feedback (no local state needed)
   const handleSliderChange = (key: keyof AllFilterOptions, value: number) => {
-    setLocalValues(prev => ({ ...prev, [key]: value }))
     debouncedOptionChange(key, value)
   }
 
