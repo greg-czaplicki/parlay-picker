@@ -35,6 +35,7 @@ import { usePlayerStatsQuery, PlayerStat } from "@/hooks/use-player-stats-query"
 import { useParlayContext } from "@/context/ParlayContext"
 import { useParlaysQuery } from '@/hooks/use-parlays-query'
 import { PlayerSearchWithCount, usePlayerSearch } from "@/components/ui/player-search"
+import React from 'react'
 
 // Only 3-ball matchups
 interface SupabaseMatchupRow {
@@ -129,6 +130,15 @@ interface MatchupsTableProps {
   // Player search props for highlighting
   playerSearchTerm?: string;
   highlightText?: (text: string) => React.ReactNode;
+}
+
+interface Player {
+  id: string;
+  dg_id: number | null | undefined;
+  name: string;
+  odds: number | null | undefined;
+  dgOdds: number | null | undefined;
+  teetime: string | null;
 }
 
 export default function MatchupsTable({ 
@@ -628,7 +638,7 @@ export default function MatchupsTable({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredMatchups.map((matchup) => {
+                    {filteredMatchups.map((matchup, matchupIndex) => {
                       if (!matchup.uuid) return null;
 
                       const players = isSupabaseMatchupRow(matchup) ? [
@@ -685,105 +695,125 @@ export default function MatchupsTable({
                         return aOdds - bOdds;
                       });
 
-                      return players.map((player, idx) => {
-                        const playerName = formatPlayerName(player.name);
-                        const playerStatus = getPlayerStatus(playerName);
-                        const positionData = formatPlayerPosition(String(player.dg_id), player.teetime);
-                        const { localTime } = formatTeeTime(player.teetime);
+                      const { localTime: groupTeeTime } = formatTeeTime(matchup.teetime || null);
 
-                        return (
-                          <TableRow 
-                            key={`${matchup.uuid}-${player.id}`}
-                            className={`
-                              ${idx === 0 ? 'border-t-2 border-t-gray-800' : ''}
-                              ${playerStatus.status === 'used' ? 'bg-yellow-50/5' : ''}
-                              ${playerStatus.status === 'current' ? 'bg-primary/5' : ''}
-                            `}
-                          >
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                {playerSearchTerm && highlightText ? 
-                                  highlightText(playerName) : 
-                                  playerName
-                                }
-                                {playerStatus.status !== 'available' && (
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Info 
-                                        className={playerStatus.status === 'current' ? 
-                                          'text-blue-400/70' : 
-                                          'text-yellow-400/70'
-                                        } 
-                                        size={14} 
-                                      />
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      {playerStatus.label}
-                                    </TooltipContent>
-                                  </Tooltip>
-                                )}
+                      return (
+                        <React.Fragment key={matchup.uuid}>
+                          {/* Add a group header row */}
+                          <TableRow className="bg-gray-900/60">
+                            <TableCell colSpan={6} className="py-2">
+                              <div className="flex items-center gap-3">
+                                <span className="text-sm font-medium text-primary/80">
+                                  {matchupType === "3ball" ? "3-Ball Group" : "2-Ball Match"} {matchupIndex + 1}
+                                </span>
+                                <span className="text-xs px-2 py-0.5 rounded bg-gray-800">
+                                  Tee Time: {groupTeeTime}
+                                </span>
                               </div>
                             </TableCell>
-                            <TableCell className="text-center">{localTime}</TableCell>
-                            <TableCell className="text-center">
-                              <div>{positionData.position}</div>
-                              <div className="text-xs text-muted-foreground">{positionData.score}</div>
-                            </TableCell>
-                            <TableCell className="text-center">{formatOdds(player.odds ?? null)}</TableCell>
-                            <TableCell className="text-center">{formatOdds(player.dgOdds ?? null)}</TableCell>
-                            <TableCell>
-                              {playerStatus.status === 'current' ? (
-                                <Button 
-                                  size="icon" 
-                                  variant="secondary" 
-                                  className="h-6 w-6 p-0" 
-                                  onClick={() => {
-                                    if (typeof player.dg_id !== 'number') return;
-                                    removeSelection(`${player.dg_id}-${matchup.uuid}`);
-                                  }}
-                                >
-                                  <CheckCircle className="text-green-400" size={16} />
-                                </Button>
-                              ) : playerStatus.status === 'used' ? (
-                                <Button size="icon" variant="secondary" disabled className="h-6 w-6 p-0">
-                                  <CheckCircle className="text-yellow-400/70" size={16} />
-                                </Button>
-                              ) : (
-                                <Button 
-                                  size="icon" 
-                                  variant="outline" 
-                                  className="h-6 w-6 p-0" 
-                                  onClick={() => {
-                                    if (typeof player.dg_id !== 'number') return;
-                                    addSelection({
-                                      id: `${player.dg_id}-${matchup.uuid}`,
-                                      matchupType,
-                                      group: `Event ${eventId || 'Unknown'}`,
-                                      player: playerName,
-                                      odds: Number(player.odds) || 0,
-                                      matchupId: matchup.uuid,
-                                      eventName: matchup.event_name || '',
-                                      roundNum: matchup.round_num || 0,
-                                      valueRating: 7.5,
-                                      confidenceScore: 75
-                                    });
-                                  }}
-                                >
-                                  <PlusCircle className="text-primary" size={16} />
-                                </Button>
-                              )}
-                            </TableCell>
                           </TableRow>
-                        );
-                      });
+                          {players.map((player: Player, idx: number) => {
+                            const playerName = formatPlayerName(player.name);
+                            const playerStatus = getPlayerStatus(playerName);
+                            const positionData = formatPlayerPosition(String(player.dg_id), player.teetime);
+                            const { localTime: playerTeeTime } = formatTeeTime(player.teetime);
+
+                            return (
+                              <TableRow 
+                                key={`${matchup.uuid}-${player.id}`}
+                                className={`
+                                  ${idx === players.length - 1 ? 'border-b-8 border-b-gray-900' : 'border-b border-b-gray-800'}
+                                  ${playerStatus.status === 'used' ? 'bg-yellow-50/5' : ''}
+                                  ${playerStatus.status === 'current' ? 'bg-primary/5' : ''}
+                                  bg-gray-950/30
+                                `}
+                              >
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    {playerSearchTerm && highlightText ? 
+                                      highlightText(playerName) : 
+                                      playerName
+                                    }
+                                    {playerStatus.status !== 'available' && (
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Info 
+                                            className={playerStatus.status === 'current' ? 
+                                              'text-blue-400/70' : 
+                                              'text-yellow-400/70'
+                                            } 
+                                            size={14} 
+                                          />
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          {playerStatus.label}
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-center">{playerTeeTime}</TableCell>
+                                <TableCell className="text-center">
+                                  <div>{positionData.position}</div>
+                                  <div className="text-xs text-muted-foreground">{positionData.score}</div>
+                                </TableCell>
+                                <TableCell className="text-center">{formatOdds(player.odds ?? null)}</TableCell>
+                                <TableCell className="text-center">{formatOdds(player.dgOdds ?? null)}</TableCell>
+                                <TableCell>
+                                  {playerStatus.status === 'current' ? (
+                                    <Button 
+                                      size="icon" 
+                                      variant="secondary" 
+                                      className="h-6 w-6 p-0" 
+                                      onClick={() => {
+                                        if (typeof player.dg_id !== 'number') return;
+                                        removeSelection(`${player.dg_id}-${matchup.uuid}`);
+                                      }}
+                                    >
+                                      <CheckCircle className="text-green-400" size={16} />
+                                    </Button>
+                                  ) : playerStatus.status === 'used' ? (
+                                    <Button size="icon" variant="secondary" disabled className="h-6 w-6 p-0">
+                                      <CheckCircle className="text-yellow-400/70" size={16} />
+                                    </Button>
+                                  ) : (
+                                    <Button 
+                                      size="icon" 
+                                      variant="outline" 
+                                      className="h-6 w-6 p-0" 
+                                      onClick={() => {
+                                        if (typeof player.dg_id !== 'number') return;
+                                        addSelection({
+                                          id: `${player.dg_id}-${matchup.uuid}`,
+                                          matchupType,
+                                          group: `Event ${eventId || 'Unknown'}`,
+                                          player: playerName,
+                                          odds: Number(player.odds) || 0,
+                                          matchupId: matchup.uuid,
+                                          eventName: matchup.event_name || '',
+                                          roundNum: matchup.round_num || 0,
+                                          valueRating: 7.5,
+                                          confidenceScore: 75
+                                        });
+                                      }}
+                                    >
+                                      <PlusCircle className="text-primary" size={16} />
+                                    </Button>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </React.Fragment>
+                      );
                     })}
                   </TableBody>
                 </Table>
               </div>
 
               {/* Mobile Card View */}
-              <div className="md:hidden space-y-4">
-                {filteredMatchups.map((matchup) => {
+              <div className="md:hidden space-y-8">
+                {filteredMatchups.map((matchup, matchupIndex) => {
                   if (!matchup.uuid) return null;
 
                   const players = isSupabaseMatchupRow(matchup) ? [
@@ -853,115 +883,126 @@ export default function MatchupsTable({
                       ).localTime;
 
                   return (
-                    <Card key={matchup.uuid} className="overflow-hidden">
-                      {/* Add tee time header */}
-                      <div className="bg-[#1e1e23] px-4 py-2 flex justify-between items-center">
-                        <span className="text-xs text-muted-foreground">
-                          {matchupType === "3ball" ? "Group" : "First"} Tee Time
+                    <div key={matchup.uuid} className="space-y-2">
+                      <div className="px-2">
+                        <span className="text-sm font-medium text-primary/80">
+                          {matchupType === "3ball" ? "3-Ball Group" : "2-Ball Match"} {matchupIndex + 1}
                         </span>
-                        <span className="text-sm font-medium">{groupTeeTime}</span>
                       </div>
-                      <CardContent className="p-0">
-                        {players.map((player, idx) => {
-                          const playerName = formatPlayerName(player.name);
-                          const playerStatus = getPlayerStatus(playerName);
-                          const positionData = formatPlayerPosition(String(player.dg_id), player.teetime);
-                              
-                          return (
-                            <div 
-                              key={`${matchup.uuid}-${player.id}`}
-                              className={`
-                                p-4 border-b last:border-b-0 border-gray-800
-                                ${playerStatus.status === 'used' ? 'bg-yellow-50/5' : ''}
-                                ${playerStatus.status === 'current' ? 'bg-primary/5' : ''}
-                              `}
-                            >
-                              {/* Player Name and Status */}
-                              <div className="flex items-center justify-between mb-3">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-medium">
-                                    {playerSearchTerm && highlightText ? 
-                                      highlightText(playerName) : 
-                                      playerName
-                                    }
-                                  </span>
-                                  {playerStatus.status !== 'available' && (
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Info 
-                                          className={playerStatus.status === 'current' ? 
-                                            'text-blue-400/70' : 
-                                            'text-yellow-400/70'
-                                          } 
-                                          size={14} 
-                                        />
-                                      </TooltipTrigger>
-                                      <TooltipContent>
-                                        {playerStatus.label}
-                                      </TooltipContent>
-                                    </Tooltip>
+                      <Card className="overflow-hidden border-2 border-gray-800 bg-gray-950/30">
+                        {/* Add tee time header */}
+                        <div className="bg-[#1e1e23] px-4 py-3 flex justify-between items-center border-b-2 border-b-gray-800">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">Tee Time</span>
+                            <span className="text-sm px-2 py-0.5 rounded bg-gray-800/80 text-primary/80">
+                              {groupTeeTime}
+                            </span>
+                          </div>
+                        </div>
+                        <CardContent className="p-0 divide-y-2 divide-gray-800/50">
+                          {players.map((player: Player, idx: number) => {
+                            const playerName = formatPlayerName(player.name);
+                            const playerStatus = getPlayerStatus(playerName);
+                            const positionData = formatPlayerPosition(String(player.dg_id), player.teetime);
+                            const { localTime: playerTeeTime } = formatTeeTime(player.teetime);
+
+                            return (
+                              <div 
+                                key={`${matchup.uuid}-${player.id}`}
+                                className={`
+                                  ${idx === players.length - 1 ? 'border-b-8 border-b-gray-900' : 'border-b border-b-gray-800'}
+                                  ${playerStatus.status === 'used' ? 'bg-yellow-50/5' : ''}
+                                  ${playerStatus.status === 'current' ? 'bg-primary/5' : ''}
+                                  bg-gray-950/30 p-4
+                                `}
+                              >
+                                {/* Player Name and Status */}
+                                <div className="flex items-center justify-between mb-4">
+                                  <div className="flex items-center gap-2 px-2">
+                                    <span className="font-medium">
+                                      {playerSearchTerm && highlightText ? 
+                                        highlightText(playerName) : 
+                                        playerName
+                                      }
+                                    </span>
+                                    {playerStatus.status !== 'available' && (
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Info 
+                                            className={playerStatus.status === 'current' ? 
+                                              'text-blue-400/70' : 
+                                              'text-yellow-400/70'
+                                            } 
+                                            size={14} 
+                                          />
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          {playerStatus.label}
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    )}
+                                  </div>
+                                  {playerStatus.status === 'current' ? (
+                                    <Button 
+                                      size="icon" 
+                                      variant="secondary" 
+                                      className="h-8 w-8" 
+                                      onClick={() => {
+                                        if (typeof player.dg_id !== 'number') return;
+                                        removeSelection(`${player.dg_id}-${matchup.uuid}`);
+                                      }}
+                                    >
+                                      <CheckCircle className="text-green-400" size={16} />
+                                    </Button>
+                                  ) : playerStatus.status === 'used' ? (
+                                    <Button size="icon" variant="secondary" disabled className="h-8 w-8">
+                                      <CheckCircle className="text-yellow-400/70" size={16} />
+                                    </Button>
+                                  ) : (
+                                    <Button 
+                                      size="icon" 
+                                      variant="outline" 
+                                      className="h-8 w-8" 
+                                      onClick={() => {
+                                        if (typeof player.dg_id !== 'number') return;
+                                        addSelection({
+                                          id: `${player.dg_id}-${matchup.uuid}`,
+                                          matchupType,
+                                          group: `Event ${eventId || 'Unknown'}`,
+                                          player: playerName,
+                                          odds: Number(player.odds) || 0,
+                                          matchupId: matchup.uuid,
+                                          eventName: matchup.event_name || '',
+                                          roundNum: matchup.round_num || 0,
+                                          valueRating: 7.5,
+                                          confidenceScore: 75
+                                        });
+                                      }}
+                                    >
+                                      <PlusCircle className="text-primary" size={16} />
+                                    </Button>
                                   )}
                                 </div>
-                                {playerStatus.status === 'current' ? (
-                                  <Button 
-                                    size="icon" 
-                                    variant="secondary" 
-                                    className="h-8 w-8" 
-                                    onClick={() => {
-                                      if (typeof player.dg_id !== 'number') return;
-                                      removeSelection(`${player.dg_id}-${matchup.uuid}`);
-                                    }}
-                                  >
-                                    <CheckCircle className="text-green-400" size={16} />
-                                  </Button>
-                                ) : playerStatus.status === 'used' ? (
-                                  <Button size="icon" variant="secondary" disabled className="h-8 w-8">
-                                    <CheckCircle className="text-yellow-400/70" size={16} />
-                                  </Button>
-                                ) : (
-                                  <Button 
-                                    size="icon" 
-                                    variant="outline" 
-                                    className="h-8 w-8" 
-                                    onClick={() => {
-                                      if (typeof player.dg_id !== 'number') return;
-                                      addSelection({
-                                        id: `${player.dg_id}-${matchup.uuid}`,
-                                        matchupType,
-                                        group: `Event ${eventId || 'Unknown'}`,
-                                        player: playerName,
-                                        odds: Number(player.odds) || 0,
-                                        matchupId: matchup.uuid,
-                                        eventName: matchup.event_name || '',
-                                        roundNum: matchup.round_num || 0,
-                                        valueRating: 7.5,
-                                        confidenceScore: 75
-                                      });
-                                    }}
-                                  >
-                                    <PlusCircle className="text-primary" size={16} />
-                                  </Button>
-                                )}
-                              </div>
 
-                              {/* Stats Grid - now 2 columns instead of 3 */}
-                              <div className="grid grid-cols-2 gap-4 text-sm">
-                                <div>
-                                  <div className="text-muted-foreground text-xs mb-1">Position</div>
-                                  <div className="font-medium">{positionData.position}</div>
-                                  <div className="text-xs text-muted-foreground">{positionData.score}</div>
-                                </div>
-                                <div>
-                                  <div className="text-muted-foreground text-xs mb-1">Odds</div>
-                                  <div className="font-medium">{formatOdds(player.odds ?? null)}</div>
-                                  <div className="text-xs text-muted-foreground">DG: {formatOdds(player.dgOdds ?? null)}</div>
+                                {/* Stats Grid */}
+                                <div className="grid grid-cols-2 gap-4 text-sm px-2">
+                                  <div>
+                                    <div className="text-muted-foreground text-xs mb-1">Position</div>
+                                    <div className="font-medium">{positionData.position}</div>
+                                    <div className="text-xs text-muted-foreground">{positionData.score}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-muted-foreground text-xs mb-1">Odds</div>
+                                    <div className="font-medium">{formatOdds(player.odds ?? null)}</div>
+                                    <div className="text-xs text-muted-foreground">DG: {formatOdds(player.dgOdds ?? null)}</div>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          );
-                        })}
-                      </CardContent>
-                    </Card>
+                            );
+                          })}
+                        </CardContent>
+                      </Card>
+                    </div>
                   );
                 })}
               </div>

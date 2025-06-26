@@ -97,20 +97,21 @@ export function RecommendedPicksPanel(props: RecommendedPicksProps) {
             <Button 
               variant="default" 
               size="sm" 
-              className="fixed h-auto right-0 top-1/2 -translate-y-1/2 z-50 shadow-lg py-8 flex flex-col items-center gap-2 rounded-tr-none rounded-br-none"
+              className="fixed h-auto right-0 top-1/2 -translate-y-1/2 z-50 shadow-lg py-8 flex flex-col items-center gap-2 rounded-tr-none rounded-br-none border-r-0"
             >
               <Star className="h-4 w-4" />
               <span className="[writing-mode:vertical-rl] rotate-180 text-xs">Recommended Picks</span>
             </Button>
           </SheetTrigger>
-          <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto bg-background border-l">
-            <SheetHeader>
-              <SheetTitle>Recommended Picks</SheetTitle>
-              <SheetDescription>
-                Our top picks based on odds value and player performance
-              </SheetDescription>
-            </SheetHeader>
-            <div className="mt-4">
+          <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto p-0">
+            <div className="p-6 border-b">
+              <SheetHeader>
+                <SheetDescription className="text-lg font-semibold">
+                  Our top picks based on odds value and player performance
+                </SheetDescription>
+              </SheetHeader>
+            </div>
+            <div className="p-6">
               <RecommendedPicksContent {...props} />
             </div>
           </SheetContent>
@@ -119,14 +120,11 @@ export function RecommendedPicksPanel(props: RecommendedPicksProps) {
 
       {/* Show content directly on desktop */}
       <div className="hidden md:block">
-        <Card>
-          <CardHeader>
-            <CardTitle>Recommended Picks</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <div>
+          <div>
             <RecommendedPicksContent {...props} />
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     </>
   )
