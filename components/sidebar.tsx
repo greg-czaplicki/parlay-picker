@@ -3,7 +3,7 @@
 import type React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Home, Users, BarChart2, Settings, TrendingUp, HelpCircle, DollarSign, Flag } from "lucide-react"
+import { Home, Users, BarChart2, Settings, TrendingUp, HelpCircle, DollarSign, Flag, Activity } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { GolfBall } from "./icons/golf-ball"
 import { cn } from "@/lib/utils"
@@ -72,6 +72,7 @@ export default function Sidebar() {
     { href: "/matchups", icon: <Flag size={20} />, text: "Matchups" },
     { href: "/players/in-tournament", icon: <Users size={20} />, text: "In-Tournament" },
     { href: "/players/season", icon: <BarChart2 size={20} />, text: "Season Stats" },
+    { href: "/trends", icon: <Activity size={20} />, text: "Trends" },
     { href: "/parlays", icon: <TrendingUp size={20} />, text: "Parlays" },
   ]
 

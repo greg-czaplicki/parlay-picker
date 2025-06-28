@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Trash2, Plus, Calculator } from "lucide-react"
@@ -39,8 +38,7 @@ export default function ParlayBuilder({ matchupType, roundNum }: { matchupType: 
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <Card className="glass-card md:col-span-2">
-        <CardContent className="p-6">
+      <div className="glass-card md:col-span-2 p-6">
           <h2 className="text-xl font-bold mb-4">Build Your Parlay</h2>
           <div className="space-y-4">
             {selections.map((selection, index) => (
@@ -105,8 +103,7 @@ export default function ParlayBuilder({ matchupType, roundNum }: { matchupType: 
               </div>
             ))}
           </div>
-        </CardContent>
-      </Card>
+      </div>
 
       <ParlaySummary selections={selections} />
     </div>

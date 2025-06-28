@@ -257,63 +257,64 @@ export default function Dashboard({
 
   return (
     <ParlayProvider>
-      <div className="w-full">
-        <div className="mt-6 mb-8 flex items-center justify-between">
-          <div className="flex flex-col gap-2">
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">Golf Parlay Picker</h1>
-            <div className="flex items-center gap-3">
-              <OddsFreshnessIndicator />
-              <ManualIngestButton />
+      <div className="min-h-screen bg-dashboard">
+        <div className="container mx-auto px-4 py-8">
+          <div className="mb-8 flex items-center justify-between">
+            <div className="flex flex-col gap-2">
+              <h1 className="text-display-lg">Golf Parlay Picker</h1>
+              <div className="flex items-center gap-3">
+                <OddsFreshnessIndicator />
+                <ManualIngestButton />
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <Avatar className="h-10 w-10 ring-2 ring-primary/20 ring-offset-2 ring-offset-background">
+                <AvatarImage src="/placeholder.svg" />
+                <AvatarFallback className="bg-gradient-to-br from-primary to-primary-dark text-white font-semibold">JD</AvatarFallback>
+              </Avatar>
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <Avatar className="h-10 w-10 ring-2 ring-primary/20 ring-offset-2 ring-offset-background">
-              <AvatarImage src="/placeholder.svg" />
-              <AvatarFallback className="bg-gradient-to-br from-primary to-primary-dark text-white font-semibold">JD</AvatarFallback>
-            </Avatar>
-          </div>
-        </div>
 
-        {/* Professional Tab Navigation */}
-        <div className="mb-8">
-          <div className="card-clean">
-            <div className="flex flex-wrap items-center gap-2 p-1 bg-glass rounded-xl border border-border/20 backdrop-blur-md">
-              <button
-                className={`relative px-6 py-3 rounded-lg font-medium transition-all duration-300 ${
-                  isMounted && activeTab === "matchups" 
-                    ? "bg-gradient-to-r from-primary to-primary-dark text-white shadow-lg shadow-primary/25" 
-                    : "text-muted-foreground hover:text-foreground hover:bg-white/10"
-                }`}
-                onClick={() => setActiveTab("matchups")}
-              >
-                Matchups
-                {isMounted && activeTab === "matchups" && (
-                  <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-primary/20 to-primary-dark/20 animate-pulse-glow" />
-                )}
-              </button>
-              <button
-                className={`relative px-6 py-3 rounded-lg font-medium transition-all duration-300 ${
-                  isMounted && activeTab === "parlay" 
-                    ? "bg-gradient-to-r from-primary to-primary-dark text-white shadow-lg shadow-primary/25" 
-                    : "text-muted-foreground hover:text-foreground hover:bg-white/10"
-                }`}
-                onClick={() => setActiveTab("parlay")}
-              >
-                Parlay Builder
-                {isMounted && activeTab === "parlay" && (
-                  <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-primary/20 to-primary-dark/20 animate-pulse-glow" />
-                )}
-              </button>
+          {/* Professional Tab Navigation */}
+          <div className="mb-8">
+            <div className="glass-card p-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  className={`relative px-6 py-3 rounded-lg font-medium transition-all duration-300 ${
+                    isMounted && activeTab === "matchups" 
+                      ? "bg-gradient-to-r from-primary to-primary-dark text-white shadow-lg shadow-primary/25" 
+                      : "text-muted-foreground hover:text-foreground hover:bg-white/10"
+                  }`}
+                  onClick={() => setActiveTab("matchups")}
+                >
+                  Matchups
+                  {isMounted && activeTab === "matchups" && (
+                    <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-primary/20 to-primary-dark/20 animate-pulse-glow" />
+                  )}
+                </button>
+                <button
+                  className={`relative px-6 py-3 rounded-lg font-medium transition-all duration-300 ${
+                    isMounted && activeTab === "parlay" 
+                      ? "bg-gradient-to-r from-primary to-primary-dark text-white shadow-lg shadow-primary/25" 
+                      : "text-muted-foreground hover:text-foreground hover:bg-white/10"
+                  }`}
+                  onClick={() => setActiveTab("parlay")}
+                >
+                  Parlay Builder
+                  {isMounted && activeTab === "parlay" && (
+                    <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-primary/20 to-primary-dark/20 animate-pulse-glow" />
+                  )}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
 
         {activeTab === "matchups" && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Row 1: Event Selection and Recommendation Filters */}
             <div className="md:col-span-3">
-              <Card className="card-clean shadow-card-lg border-border/10">
-                <CardContent>
+              <div className="glass-card">
+                <div className="p-6">
                   <div className="flex flex-col gap-4">
                     {/* Event and Matchup Type Selectors */}
                     <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pt-6">
@@ -428,8 +429,8 @@ export default function Dashboard({
                       </div>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             </div>
 
             {/* Row 2: Main Matchups Table (Left) - Larger allocation */}
@@ -473,7 +474,8 @@ export default function Dashboard({
           </div>
         )}
 
-        {activeTab === "parlay" && <ParlayBuilder matchupType={matchupType} roundNum={currentRound} />}
+          {activeTab === "parlay" && <ParlayBuilder matchupType={matchupType} roundNum={currentRound} />}
+        </div>
       </div>
     </ParlayProvider>
   )

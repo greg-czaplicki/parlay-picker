@@ -2,13 +2,14 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Home, Users, BarChart2, TrendingUp, Flag } from "lucide-react"
+import { Home, Users, BarChart2, TrendingUp, Flag, Activity } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const navigation = [
   { href: "/", icon: <Home size={24} />, text: "Dashboard" },
   { href: "/matchups", icon: <Flag size={24} />, text: "Matchups" },
   { href: "/players/in-tournament", icon: <Users size={24} />, text: "Players" },
+  { href: "/trends", icon: <Activity size={24} />, text: "Trends" },
   { href: "/parlays", icon: <TrendingUp size={24} />, text: "Parlays" },
 ]
 
@@ -17,7 +18,7 @@ export default function BottomNavBar() {
 
   return (
     <div className="md:hidden fixed bottom-0 left-0 z-50 w-full h-16 bg-background/80 backdrop-blur-xl border-t border-border/20">
-      <nav className="grid h-full max-w-lg grid-cols-4 mx-auto">
+      <nav className="grid h-full max-w-lg grid-cols-5 mx-auto">
         {navigation.map((item) => (
           <Link
             key={item.href}

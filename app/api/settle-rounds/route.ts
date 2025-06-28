@@ -1,6 +1,7 @@
 import { logger } from '@/lib/logger'
 import { createSupabaseClient, handleApiError, jsonSuccess } from '@/lib/api-utils'
 import { SettlementService, SettlementMethod } from '@/lib/services/settlement-service'
+import { TourDataService } from '@/lib/services/tour-data-service'
 import { NextRequest, NextResponse } from 'next/server'
 
 interface CompletedRound {

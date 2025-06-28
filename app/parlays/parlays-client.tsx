@@ -143,18 +143,18 @@ export default function ParlaysClient() {
   // Helper to determine overall parlay outcome
   const getParlayOutcome = (parlay: any): { status: string; color: string } => {
     if (!parlay.picks || parlay.picks.length === 0) {
-      return { status: 'Pending', color: 'bg-gray-100 text-gray-700' };
+      return { status: 'Pending', color: 'bg-gray-500/20 text-gray-400 border border-gray-500/30' };
     }
 
     const outcomes = parlay.picks.map((pick: any) => pick.pick_outcome).filter(Boolean);
     
     if (outcomes.length === 0) {
-      return { status: 'Pending', color: 'bg-gray-100 text-gray-700' };
+      return { status: 'Pending', color: 'bg-gray-500/20 text-gray-400 border border-gray-500/30' };
     }
 
     // Check if any pick was a loss
     if (outcomes.includes('loss')) {
-      return { status: 'Lost', color: 'bg-red-100 text-red-700' };
+      return { status: 'Lost', color: 'bg-red-500/20 text-red-400 border border-red-500/30' };
     }
 
     // Check if any pick is void
@@ -162,11 +162,11 @@ export default function ParlaysClient() {
       // If all non-void picks are wins, treat as void (refund)
       const nonVoidOutcomes = outcomes.filter((o: string) => o !== 'void');
       if (nonVoidOutcomes.length === 0 || nonVoidOutcomes.every((o: string) => o === 'win')) {
-        return { status: 'Void', color: 'bg-gray-100 text-gray-700' };
+        return { status: 'Void', color: 'bg-gray-500/20 text-gray-400 border border-gray-500/30' };
       }
       // If there are losses among non-void picks, it's still a loss
       if (nonVoidOutcomes.includes('loss')) {
-        return { status: 'Lost', color: 'bg-red-100 text-red-700' };
+        return { status: 'Lost', color: 'bg-red-500/20 text-red-400 border border-red-500/30' };
       }
     }
 
@@ -174,17 +174,17 @@ export default function ParlaysClient() {
     if (outcomes.includes('push')) {
       // If all picks are wins or pushes, it's a push
       if (outcomes.every((o: string) => o === 'win' || o === 'push')) {
-        return { status: 'Push', color: 'bg-yellow-100 text-yellow-700' };
+        return { status: 'Push', color: 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' };
       }
     }
 
     // If all picks are wins, parlay wins
     if (outcomes.every((o: string) => o === 'win')) {
-      return { status: 'Won', color: 'bg-green-100 text-green-700' };
+      return { status: 'Won', color: 'bg-green-500/20 text-green-400 border border-green-500/30' };
     }
 
     // Default to pending if we can't determine
-    return { status: 'Pending', color: 'bg-gray-100 text-gray-700' };
+    return { status: 'Pending', color: 'bg-gray-500/20 text-gray-400 border border-gray-500/30' };
   };
 
   // Pagination helpers
@@ -294,10 +294,11 @@ export default function ParlaysClient() {
   }
 
   return (
-    <div className="mx-auto px-3 sm:px-6 space-y-4 sm:space-y-6 max-w-6xl">
-      <div className="flex flex-col space-y-3 sm:space-y-0 sm:flex-row sm:justify-between sm:items-center">
-        <div className="flex flex-col gap-2">
-          <h1 className="text-2xl sm:text-3xl font-bold">My Parlays</h1>
+    <div className="min-h-screen bg-dashboard">
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex flex-col space-y-3 sm:space-y-0 sm:flex-row sm:justify-between sm:items-center mb-8">
+          <div className="flex flex-col gap-2">
+            <h1 className="text-display-lg">My Parlays</h1>
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
             <span className="text-sm text-muted-foreground">
               {organizedParlays.activeTotal} active • {organizedParlays.settledTotal} settled
@@ -316,7 +317,7 @@ export default function ParlaysClient() {
 
       {/* Mobile-Optimized Pagination Controls */}
       {organizedParlays.activeTotal > pageSize && (
-        <div className="space-y-4 py-4 border-b border-border">
+        <div className="glass-card p-4 mb-6">
           {/* Page Info */}
           <div className="text-center">
             <div className="text-sm text-muted-foreground">
@@ -335,7 +336,7 @@ export default function ParlaysClient() {
                   setPageSize(Number(e.target.value));
                   setCurrentPage(1);
                 }}
-                className="text-sm border border-border rounded-md px-3 py-2 bg-background min-w-[120px]"
+                className="text-sm glass-card px-3 py-2 min-w-[120px] bg-transparent"
               >
                 <option value={5}>5 per page</option>
                 <option value={10}>10 per page</option>
@@ -349,28 +350,28 @@ export default function ParlaysClient() {
               <button
                 onClick={() => setCurrentPage(1)}
                 disabled={!canPrevPage}
-                className="px-4 py-2 text-sm border border-border rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent touch-manipulation"
+                className="btn-glass px-4 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
               >
                 First
               </button>
               <button
                 onClick={() => setCurrentPage(currentPage - 1)}
                 disabled={!canPrevPage}
-                className="px-4 py-2 text-sm border border-border rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent touch-manipulation"
+                className="btn-glass px-4 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
               >
                 Prev
               </button>
               <button
                 onClick={() => setCurrentPage(currentPage + 1)}
                 disabled={!canNextPage}
-                className="px-4 py-2 text-sm border border-border rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent touch-manipulation"
+                className="btn-glass px-4 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
               >
                 Next
               </button>
               <button
                 onClick={() => setCurrentPage(totalPages)}
                 disabled={!canNextPage}
-                className="px-4 py-2 text-sm border border-border rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent touch-manipulation"
+                className="btn-glass px-4 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
               >
                 Last
               </button>
@@ -391,7 +392,7 @@ export default function ParlaysClient() {
                 return (
                   <div
                     key={parlay.uuid}
-                    className="relative rounded-lg shadow-md border bg-neutral-900 border-border"
+                    className="glass-card hover:glass-hover transition-all duration-300"
                   >
                     {/* Mobile-Optimized Header */}
                     <div className="px-4 sm:px-6 pt-4 pb-3 space-y-3 sm:space-y-0">
@@ -502,10 +503,10 @@ export default function ParlaysClient() {
                               </div>
                               {finalStatus && (
                                 <span className={`px-2 py-1 rounded text-xs font-semibold
-                                  ${finalStatus === 'won' ? 'bg-green-100 text-green-700' : ''}
-                                  ${finalStatus === 'lost' ? 'bg-red-100 text-red-700' : ''}
-                                  ${finalStatus === 'tied' ? 'bg-yellow-100 text-yellow-700' : ''}
-                                  ${finalStatus === 'void' ? 'bg-gray-100 text-gray-700' : ''}
+                                  ${finalStatus === 'won' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : ''}
+                                  ${finalStatus === 'lost' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : ''}
+                                  ${finalStatus === 'tied' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' : ''}
+                                  ${finalStatus === 'void' ? 'bg-gray-500/20 text-gray-400 border border-gray-500/30' : ''}
                                 `}>
                                   {finalStatus.toUpperCase()}
                                 </span>
@@ -631,7 +632,7 @@ export default function ParlaysClient() {
                 return (
                   <div
                     key={parlay.uuid}
-                    className="relative rounded-lg shadow-md border bg-neutral-900/50 border-border/50 opacity-75"
+                    className="glass-card opacity-75 transition-all duration-300"
                   >
                     {/* Mobile-Optimized Header */}
                     <div className="px-4 sm:px-6 pt-4 pb-3 space-y-3 sm:space-y-0">
@@ -738,10 +739,10 @@ export default function ParlaysClient() {
                               </div>
                               {finalStatus && (
                                 <span className={`px-2 py-1 rounded text-xs font-semibold
-                                  ${finalStatus === 'won' ? 'bg-green-100 text-green-700' : ''}
-                                  ${finalStatus === 'lost' ? 'bg-red-100 text-red-700' : ''}
-                                  ${finalStatus === 'tied' ? 'bg-yellow-100 text-yellow-700' : ''}
-                                  ${finalStatus === 'void' ? 'bg-gray-100 text-gray-700' : ''}
+                                  ${finalStatus === 'won' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : ''}
+                                  ${finalStatus === 'lost' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : ''}
+                                  ${finalStatus === 'tied' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' : ''}
+                                  ${finalStatus === 'void' ? 'bg-gray-500/20 text-gray-400 border border-gray-500/30' : ''}
                                 `}>
                                   {finalStatus.toUpperCase()}
                                 </span>
@@ -857,11 +858,12 @@ export default function ParlaysClient() {
           )}
         </div>
       ) : (
-        <div className="text-center py-12 sm:py-16 border border-dashed border-border/50 rounded-lg">
+        <div className="glass-card text-center py-12 sm:py-16">
           <p className="text-muted-foreground text-lg">No active parlays found.</p>
           <p className="text-muted-foreground text-sm mt-2">Create your first parlay from the Dashboard!</p>
         </div>
       )}
+      </div>
     </div>
   );
 }

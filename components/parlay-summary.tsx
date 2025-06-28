@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { toast } from "@/components/ui/use-toast"
@@ -136,8 +135,7 @@ export default function ParlaySummary({ selections, userId = '00000000-0000-0000
   }, [selections, stake])
   
   return (
-    <Card className="glass-card highlight-card">
-      <CardContent className="p-6">
+    <div className="glass-card highlight-card p-6">
         <h2 className="text-xl font-bold mb-4">Parlay Summary</h2>
         <div className="space-y-6">
           <div>
@@ -200,7 +198,6 @@ export default function ParlaySummary({ selections, userId = '00000000-0000-0000
             )}
           </Button>
         </div>
-      </CardContent>
-    </Card>
+    </div>
   )
 }

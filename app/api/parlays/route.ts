@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
         potential_payout: calculatedPayout,
         actual_payout: 0.00,
         round_num: firstRound,
-        outcome: 'push',
+        outcome: null, // Parlay outcome is null until all picks are settled
         payout_amount: '0.00',
       },
     ])
@@ -262,8 +262,38 @@ export async function GET(req: NextRequest) {
     )
   }
 
+  // Helper to get historical stats from tournament_round_snapshots for settled parlays
+  async function getHistoricalStats(playerName: string, roundNum: number, eventName: string) {
+    try {
+      const { data: snapshot } = await supabase
+        .from('tournament_round_snapshots')
+        .select('*')
+        .eq('player_name', playerName)
+        .eq('event_name', eventName)
+        .eq('round_num', String(roundNum))
+        .order('snapshot_timestamp', { ascending: false })
+        .limit(1)
+        .single()
+
+      if (snapshot) {
+        return {
+          player_name: snapshot.player_name,
+          round_num: String(roundNum),
+          position: snapshot.position,
+          thru: snapshot.thru || 18,
+          today: snapshot.round_score,
+          total: snapshot.total_score,
+          event_name: snapshot.event_name
+        }
+      }
+      return null
+    } catch (error) {
+      return null
+    }
+  }
+
   // Build parlays with picks using stored data + live stats overlay
-  const parlaysWithDetails = parlays.map((parlay: any) => {
+  const parlaysWithDetails = await Promise.all(parlays.map(async (parlay: any) => {
     const parlayPicks = picks.filter((pick: any) => pick.parlay_id === parlay.uuid)
     
     // Get tournament name from the first matchup's event_id
@@ -276,14 +306,35 @@ export async function GET(req: NextRequest) {
       }
     }
     
-    const picksWithDetails = parlayPicks.map((pick: any) => {
+    const picksWithDetails = await Promise.all(parlayPicks.map(async (pick: any) => {
       const matchup = matchups.find((m: any) => String(m.uuid) === String(pick.matchup_id))
       
-      // Build player array for the matchup with live stats overlay
+      // Use the parlay's round number for historical data, not the matchup's current round
+      const displayRound = parlay.round_num || matchup?.round_num || 1
+      
+      // Check if this pick is settled to determine data source
+      const isPickSettled = pick.settlement_status === 'settled' || 
+                           (pick.pick_outcome && ['win', 'loss', 'push', 'void'].includes(pick.pick_outcome))
+      
+      // Build player array for the matchup
       let playersInMatchup: any[] = []
       if (matchup) {
+        const eventName = tournamentsByEventId[matchup.event_id]
+        
+        // Helper to get player stats with fallback logic
+        const getPlayerStats = async (playerName: string) => {
+          // For settled picks, prefer historical data from snapshots
+          if (isPickSettled && eventName) {
+            const historicalStats = await getHistoricalStats(playerName, displayRound, eventName)
+            if (historicalStats) return historicalStats
+          }
+          
+          // Fallback to live stats (for active parlays or when historical data unavailable)
+          return getStats(playerName, displayRound, matchup.event_id) || {}
+        }
+        
         if (matchup.player1_dg_id && matchup.player1_name) {
-          const stats = getStats(matchup.player1_name, matchup.round_num, matchup.event_id) || {}
+          const stats = await getPlayerStats(matchup.player1_name)
           playersInMatchup.push({
             id: matchup.player1_dg_id,
             name: matchup.player1_name,
@@ -291,12 +342,12 @@ export async function GET(req: NextRequest) {
             currentPosition: typeof stats.position === 'string' ? stats.position : '-',
             totalScore: typeof stats.total === 'number' ? stats.total : Number(stats.total) || 0,
             roundScore: typeof stats.today === 'number' ? stats.today : Number(stats.today) || 0,
-            holesPlayed: typeof stats.thru === 'number' ? stats.thru : 0,
+            holesPlayed: typeof stats.thru === 'number' ? stats.thru : (isPickSettled ? 18 : 0),
             totalHoles: 18,
           })
         }
         if (matchup.player2_dg_id && matchup.player2_name) {
-          const stats = getStats(matchup.player2_name, matchup.round_num, matchup.event_id) || {}
+          const stats = await getPlayerStats(matchup.player2_name)
           playersInMatchup.push({
             id: matchup.player2_dg_id,
             name: matchup.player2_name,
@@ -304,12 +355,12 @@ export async function GET(req: NextRequest) {
             currentPosition: typeof stats.position === 'string' ? stats.position : '-',
             totalScore: typeof stats.total === 'number' ? stats.total : Number(stats.total) || 0,
             roundScore: typeof stats.today === 'number' ? stats.today : Number(stats.today) || 0,
-            holesPlayed: typeof stats.thru === 'number' ? stats.thru : 0,
+            holesPlayed: typeof stats.thru === 'number' ? stats.thru : (isPickSettled ? 18 : 0),
             totalHoles: 18,
           })
         }
         if (matchup.type === '3ball' && matchup.player3_dg_id && matchup.player3_name) {
-          const stats = getStats(matchup.player3_name, matchup.round_num, matchup.event_id) || {}
+          const stats = await getPlayerStats(matchup.player3_name)
           playersInMatchup.push({
             id: matchup.player3_dg_id,
             name: matchup.player3_name,
@@ -317,7 +368,7 @@ export async function GET(req: NextRequest) {
             currentPosition: typeof stats.position === 'string' ? stats.position : '-',
             totalScore: typeof stats.total === 'number' ? stats.total : Number(stats.total) || 0,
             roundScore: typeof stats.today === 'number' ? stats.today : Number(stats.today) || 0,
-            holesPlayed: typeof stats.thru === 'number' ? stats.thru : 0,
+            holesPlayed: typeof stats.thru === 'number' ? stats.thru : (isPickSettled ? 18 : 0),
             totalHoles: 18,
           })
         }
@@ -330,7 +381,7 @@ export async function GET(req: NextRequest) {
         players: playersInMatchup,
         tee_time: matchup?.tee_time || null, // Include tee time for sorting
       }
-    })
+    }))
     
     // Return parlay with stored calculated values (no more calculations needed!)
     return {
@@ -340,7 +391,7 @@ export async function GET(req: NextRequest) {
       tournament_name: tournamentName, // Add tournament name for display
       picks: Array.isArray(picksWithDetails) ? picksWithDetails : [],
     }
-  })
+  }))
   
   const response = NextResponse.json({ parlays: parlaysWithDetails })
 

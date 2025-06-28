@@ -39,16 +39,20 @@ export function InTournamentPlayerTableContainer() {
   if (eventOptions.length > 0 && selectedEventId) {
     return (
       <Suspense fallback={<PlayerTableSkeleton rows={10} columns={8} />}>
-        <div>
-          <PlayerTableFilters
-            dataView="tournament"
-            roundFilter={roundFilter}
-            setRoundFilter={setRoundFilter}
-            eventOptions={eventOptions}
-            selectedEventId={selectedEventId}
-            setSelectedEventId={setSelectedEventId}
-          />
-          <LiveStatsTable eventId={selectedEventId} roundFilter={roundFilter} eventOptions={eventOptions} />
+        <div className="space-y-6">
+          <div className="glass-card p-6">
+            <PlayerTableFilters
+              dataView="tournament"
+              roundFilter={roundFilter}
+              setRoundFilter={setRoundFilter}
+              eventOptions={eventOptions}
+              selectedEventId={selectedEventId}
+              setSelectedEventId={setSelectedEventId}
+            />
+          </div>
+          <div className="glass-card">
+            <LiveStatsTable eventId={selectedEventId} roundFilter={roundFilter} eventOptions={eventOptions} />
+          </div>
         </div>
       </Suspense>
     )
@@ -58,11 +62,15 @@ export function InTournamentPlayerTableContainer() {
   if (lastEvent) {
     return (
       <Suspense fallback={<PlayerTableSkeleton rows={10} columns={8} />}>
-        <div>
-          <div className="mb-4 p-2 bg-muted text-muted-foreground rounded">
-            No live event. Showing results from <b>{lastEvent.event_name}</b> (ended {lastEvent.end_date}).
+        <div className="space-y-6">
+          <div className="glass-card p-4">
+            <div className="text-muted-foreground">
+              No live event. Showing results from <span className="text-foreground font-semibold">{lastEvent.event_name}</span> (ended {lastEvent.end_date}).
+            </div>
           </div>
-          <LastEventStatsTable eventId={lastEvent.event_id} eventName={lastEvent.event_name} />
+          <div className="glass-card">
+            <LastEventStatsTable eventId={lastEvent.event_id} eventName={lastEvent.event_name} />
+          </div>
         </div>
       </Suspense>
     )

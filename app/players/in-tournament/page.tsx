@@ -5,9 +5,11 @@ export const dynamic = 'force-dynamic'
 
 export default function InTournamentPlayersPage() {
   return (
-    <main className="p-4 w-full">
-      <h1 className="text-2xl font-bold mb-4">In-Tournament Player Stats</h1>
-      <InTournamentPlayerTableContainer />
-    </main>
+    <div className="min-h-screen bg-dashboard">
+      <div className="container mx-auto px-4 py-8">
+        <h1 className="text-display-lg mb-8">In-Tournament Player Stats</h1>
+        <InTournamentPlayerTableContainer />
+      </div>
+    </div>
   )
 } 

@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
     findPlayerMatchup,
     PlayerMatchupData,
@@ -92,10 +91,10 @@ export default function ParlayCard({
   };
 
   return (
-    <Card className="bg-background/90 backdrop-blur-sm border border-border/40 shadow-lg flex flex-col h-full">
-      <CardHeader className="flex-row justify-between items-center pb-3">
+    <div className="glass-card flex flex-col h-full">
+      <div className="flex flex-row justify-between items-center p-6 pb-3">
         <div>
-          <CardTitle className="text-lg font-semibold">{parlayName || `Parlay #${parlayId}`}</CardTitle>
+          <h3 className="text-lg font-semibold text-foreground">{parlayName || `Parlay #${parlayId}`}</h3>
           {lastRefreshed && (
             <p className="text-xs text-muted-foreground mt-1">Last updated: {formatRefreshTime()}</p>
           )}
@@ -128,8 +127,8 @@ export default function ParlayCard({
             {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 size={16} />}
           </Button>
         </div>
-      </CardHeader>
-      <CardContent className="flex-grow overflow-y-auto p-4 space-y-4">
+      </div>
+      <div className="flex-grow overflow-y-auto p-4 space-y-4">
         {/* Players List */}
         <div>
           {players.length > 0 ? (
@@ -148,7 +147,7 @@ export default function ParlayCard({
           )}
         </div>
         {/* TODO: Add AddPlayerForm and modularize further */}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

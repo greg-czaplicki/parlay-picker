@@ -93,40 +93,46 @@ function SeasonPlayerTableContainerComponent() {
 
   return (
     <Suspense fallback={<PlayerTableSkeleton rows={10} columns={8} />}>
-      <div>
-        <PlayerTableFilters
-          dataView="season"
-          dataSource={dataSource}
-          setDataSource={handleDataSourceChange}
-        />
+      <div className="space-y-6">
+        <div className="glass-card p-6">
+          <PlayerTableFilters
+            dataView="season"
+            dataSource={dataSource}
+            setDataSource={handleDataSourceChange}
+          />
+        </div>
         
         {/* Pagination Controls */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="text-sm text-gray-400">
-            Showing {currentRange} players
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={handlePrevPage}
-              disabled={!canGoPrev}
-              className="px-3 py-1 bg-gray-700 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600 transition-colors"
-            >
-              Previous
-            </button>
-            <span className="px-3 py-1 text-gray-300">
-              Page {currentPageNumber}
-            </span>
-            <button
-              onClick={handleNextPage}
-              disabled={!canGoNext}
-              className="px-3 py-1 bg-gray-700 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600 transition-colors"
-            >
-              Next
-            </button>
+        <div className="glass-card p-4">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-muted-foreground">
+              Showing {currentRange} players
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handlePrevPage}
+                disabled={!canGoPrev}
+                className="btn-glass px-3 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              <span className="px-3 py-1 text-foreground text-sm">
+                Page {currentPageNumber}
+              </span>
+              <button
+                onClick={handleNextPage}
+                disabled={!canGoNext}
+                className="btn-glass px-3 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
           </div>
         </div>
 
-        <PlayerTablePresentation table={table} />
+        <div className="glass-card">
+          <PlayerTablePresentation table={table} />
+        </div>
       </div>
     </Suspense>
   )

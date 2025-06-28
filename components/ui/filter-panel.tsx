@@ -2,7 +2,6 @@
 
 import { useState, useCallback, useRef } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
@@ -93,8 +92,7 @@ export function FilterPanel({
 
   if (compact) {
     return (
-      <Card className="glass-card">
-        <CardContent className="p-4">
+      <div className="glass-card p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <FilterIcon className="h-4 w-4" />
@@ -189,14 +187,12 @@ export function FilterPanel({
               )}
             </CollapsibleContent>
           </Collapsible>
-        </CardContent>
-      </Card>
+      </div>
     )
   }
 
   return (
-    <Card className="glass-card">
-      <CardContent className="space-y-4 pt-4">
+    <div className="glass-card p-4 space-y-4">
         {/* Active Filters */}
         {selectedFilters.length > 0 && (
           <div className="space-y-2">
@@ -257,8 +253,7 @@ export function FilterPanel({
             ))}
           </div>
         )}
-      </CardContent>
-    </Card>
+    </div>
   )
 }
 

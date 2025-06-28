@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { Card, CardContent } from "@/components/ui/card"
 import {
   Table,
   TableBody,
@@ -398,27 +397,23 @@ export default function MatchupsTable({
 
   if (finalIsLoading) {
     return (
-      <Card className="glass-card">
-        <CardContent className="p-6 text-center">
+      <div className="glass-card p-6 text-center">
           <div className="flex flex-col items-center justify-center py-8">
             <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
             <div>Loading matchups...</div>
           </div>
-        </CardContent>
-      </Card>
+      </div>
     );
   }
 
   if (finalIsError) {
     return (
-      <Card className="glass-card">
-        <CardContent className="p-6 text-center">
+      <div className="glass-card p-6 text-center">
           <div className="text-red-500">Error: {finalError?.message}</div>
           <Button onClick={() => {
             // Implement retry logic here
           }} className="mt-4">Try Again</Button>
-        </CardContent>
-      </Card>
+      </div>
     );
   }
 
@@ -479,8 +474,7 @@ export default function MatchupsTable({
     
   return (
     <TooltipProvider>
-      <Card className="glass-card">
-        <CardContent className="p-6 sm:p-4">
+      <div className="glass-card p-6 sm:p-4">
           <div className="flex flex-col gap-4 mb-4">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
               <div>
@@ -976,7 +970,7 @@ export default function MatchupsTable({
                           {matchupType === "3ball" ? "3-Ball Group" : "2-Ball Match"} {matchupIndex + 1}
                         </span>
                       </div>
-                      <Card className="overflow-hidden border-2 border-gray-800 bg-gray-950/30">
+                      <div className="glass-card overflow-hidden">
                         {/* Add tee time header */}
                         <div className="bg-[#1e1e23] px-4 py-3 flex justify-between items-center border-b-2 border-b-gray-800">
                           <div className="flex items-center gap-2">
@@ -986,7 +980,7 @@ export default function MatchupsTable({
                             </span>
                           </div>
                         </div>
-                        <CardContent className="p-0 divide-y-2 divide-gray-800/50">
+                        <div className="p-0 divide-y-2 divide-gray-800/50">
                           {players.map((player: Player, idx: number) => {
                             const playerName = formatPlayerName(player.name);
                             const playerStatus = getPlayerStatus(playerName);
@@ -1174,8 +1168,8 @@ export default function MatchupsTable({
                               </div>
                             );
                           })}
-                        </CardContent>
-                      </Card>
+                        </div>
+                      </div>
                     </div>
                   );
                 })}
@@ -1186,8 +1180,7 @@ export default function MatchupsTable({
               <p className="text-gray-400">No {matchupType === "3ball" ? "3-ball" : "2-ball"} matchups found for the selected event.</p>
             </div>
           )}
-        </CardContent>
-      </Card>
+      </div>
     </TooltipProvider>
   );
 }

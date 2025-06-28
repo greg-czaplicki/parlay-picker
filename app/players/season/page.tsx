@@ -5,9 +5,11 @@ export const dynamic = 'force-dynamic'
 
 export default function SeasonPlayersPage() {
   return (
-    <main className="p-4">
-      <h1 className="text-2xl font-bold mb-4">Season Player Stats</h1>
-      <SeasonPlayerTableContainer />
-    </main>
+    <div className="min-h-screen bg-dashboard">
+      <div className="container mx-auto px-4 py-8">
+        <h1 className="text-display-lg mb-8">Season Player Stats</h1>
+        <SeasonPlayerTableContainer />
+      </div>
+    </div>
   )
 } 

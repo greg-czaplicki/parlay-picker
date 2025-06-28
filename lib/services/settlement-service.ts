@@ -232,23 +232,18 @@ export class SettlementService {
 
     logger.info(`Settling matchup ${matchupId} for round ${roundNum}`)
 
-    // Filter player stats by round if available (PGA Tour has round-specific data)
-    const roundPlayerStats = playerStats.filter(p => 
-      !p.round_num || p.round_num === roundNum
-    )
-
-    // Find player stats for this matchup
-    const player1Stats = roundPlayerStats.find(p => p.dg_id === matchup.player1_dg_id)
-    const player2Stats = roundPlayerStats.find(p => p.dg_id === matchup.player2_dg_id)
-    const player3Stats = matchup.player3_dg_id ? 
-      roundPlayerStats.find(p => p.dg_id === matchup.player3_dg_id) : undefined
+    // For historical rounds, try to get stored data first
+    const player1Stats = await this.getPlayerStatsForRound(matchup.player1_name, matchup.event_id, roundNum, playerStats)
+    const player2Stats = await this.getPlayerStatsForRound(matchup.player2_name, matchup.event_id, roundNum, playerStats)
+    const player3Stats = matchup.player3_name ? 
+      await this.getPlayerStatsForRound(matchup.player3_name, matchup.event_id, roundNum, playerStats) : undefined
 
     if (!player1Stats || !player2Stats) {
-      throw new Error(`Missing player stats for matchup ${matchupId}, round ${roundNum}. Available players: ${roundPlayerStats.map(p => `${p.player_name}(${p.dg_id})`).join(', ')}`)
+      throw new Error(`Missing player stats for matchup ${matchupId}, round ${roundNum}. Missing: ${!player1Stats ? matchup.player1_name : ''} ${!player2Stats ? matchup.player2_name : ''}`)
     }
 
-    if (matchup.player3_dg_id && !player3Stats) {
-      throw new Error(`Missing player 3 stats for 3-ball matchup ${matchupId}, round ${roundNum}`)
+    if (matchup.player3_name && !player3Stats) {
+      throw new Error(`Missing player 3 stats for 3-ball matchup ${matchupId}, round ${roundNum}: ${matchup.player3_name}`)
     }
 
     // Determine matchup result based on type
@@ -281,6 +276,73 @@ export class SettlementService {
     }
 
     return settledPicks
+  }
+
+  /**
+   * Get player stats for a specific round, preferring stored data over API data
+   */
+  private async getPlayerStatsForRound(
+    playerName: string, 
+    eventId: number, 
+    roundNum: number, 
+    apiPlayerStats: PlayerStats[]
+  ): Promise<PlayerStats | null> {
+    try {
+      // First, try to get stored data from live_tournament_stats
+      const { data: tournament } = await this.supabase
+        .from('tournaments')
+        .select('event_name')
+        .eq('event_id', eventId)
+        .single()
+
+      if (tournament?.event_name) {
+        const { data: storedStats } = await this.supabase
+          .from('live_tournament_stats')
+          .select('*')
+          .eq('player_name', playerName)
+          .eq('event_name', tournament.event_name)
+          .eq('round_num', roundNum.toString())
+          .single()
+
+        if (storedStats) {
+          logger.info(`Using stored stats for ${playerName} Round ${roundNum}: score=${storedStats.today}, thru=${storedStats.thru}`)
+          return {
+            dg_id: storedStats.dg_id,
+            player_name: storedStats.player_name,
+            event_id: eventId,
+            tour_type: TourType.PGA, // Default for now
+            current_position: storedStats.position || 'CUT',
+            total_score: storedStats.total || 0,
+            today_score: storedStats.today || 0,
+            thru: storedStats.thru || 18, // Historical rounds should be complete
+            round_num: roundNum,
+            finished: true,
+            made_cut: storedStats.position !== 'CUT',
+            raw_data: storedStats
+          }
+        }
+      }
+
+      // Fallback to API data if stored data not available
+      const apiStats = apiPlayerStats.find(p => 
+        p.player_name === playerName && p.round_num === roundNum
+      )
+      
+      if (apiStats) {
+        logger.info(`Using API stats for ${playerName} Round ${roundNum}`)
+        return apiStats
+      }
+
+      logger.warn(`No stats found for ${playerName} Round ${roundNum}`)
+      return null
+
+    } catch (error) {
+      logger.error(`Error getting stats for ${playerName} Round ${roundNum}: ${error}`)
+      // Fallback to API data
+      return apiPlayerStats.find(p => 
+        p.player_name === playerName && p.round_num === roundNum
+      ) || null
+    }
   }
 
   /**
@@ -421,6 +483,12 @@ export class SettlementService {
     if (player.finished === true) return true
     if (player.finished === false) return false
     
+    // Check if player was cut or withdrew
+    const position = player.current_position?.toString().toUpperCase()
+    if (position === 'CUT' || position === 'MC' || position === 'WD') {
+      return true // Cut/withdrawn players have completed their participation
+    }
+    
     // Otherwise check holes completed - standard golf round is 18 holes
     const holesCompleted = player.thru || 0
     return holesCompleted >= 18
@@ -507,10 +575,115 @@ export class SettlementService {
         })
     }
 
+    // Update parlay outcomes for parlays that have all picks settled
+    await this.updateParlayOutcomes(eventId)
+
     // Populate live_tournament_stats with player data for UI display (especially for non-PGA tours)
     await this.populateLiveStats(eventId, tourType, playerStats)
 
     logger.info(`Persisted ${settledPicks.length} settlement results to database`)
+  }
+
+  /**
+   * Update parlay outcomes for parlays where all picks have been settled
+   */
+  private async updateParlayOutcomes(eventId: number): Promise<void> {
+    try {
+      // Get all parlays for this event that don't have an outcome yet
+      const { data: parlays } = await this.supabase
+        .from('parlays')
+        .select(`
+          uuid,
+          amount,
+          total_odds,
+          potential_payout,
+          parlay_picks!inner(
+            uuid,
+            pick_outcome,
+            settlement_status
+          )
+        `)
+        .eq('parlay_picks.event_id', eventId)
+        .is('outcome', null)
+
+      if (!parlays || parlays.length === 0) {
+        return
+      }
+
+      // Process each parlay
+      for (const parlay of parlays) {
+        const picks = parlay.parlay_picks || []
+        
+        // Check if all picks are settled
+        const allSettled = picks.every((pick: any) => 
+          pick.settlement_status === 'settled' || 
+          (pick.pick_outcome && ['win', 'loss', 'push', 'void'].includes(pick.pick_outcome))
+        )
+
+        if (!allSettled) {
+          continue // Skip if not all picks are settled
+        }
+
+        // Determine parlay outcome
+        let parlayOutcome: string | null = null
+        let actualPayout = 0
+
+        const outcomes = picks.map((pick: any) => pick.pick_outcome).filter(Boolean)
+        
+        // If any pick is a loss, parlay loses
+        if (outcomes.includes('loss')) {
+          parlayOutcome = 'loss'
+          actualPayout = 0
+        } 
+        // If all picks are void, parlay is void (refund)
+        else if (outcomes.every((o: string) => o === 'void')) {
+          parlayOutcome = 'void'
+          actualPayout = Number(parlay.amount) || 0
+        }
+        // If all picks are wins or pushes (but at least one push), it's a push
+        else if (outcomes.includes('push') && outcomes.every((o: string) => o === 'win' || o === 'push')) {
+          parlayOutcome = 'push'
+          // For pushes, calculate payout based on wins only
+          const winCount = outcomes.filter((o: string) => o === 'win').length
+          if (winCount === 0) {
+            actualPayout = Number(parlay.amount) || 0 // Full refund if all pushes
+          } else {
+            // This would require recalculating odds without the pushed picks
+            // For now, we'll return the stake
+            actualPayout = Number(parlay.amount) || 0
+          }
+        }
+        // If all picks are wins, parlay wins
+        else if (outcomes.every((o: string) => o === 'win')) {
+          parlayOutcome = 'win'
+          actualPayout = Number(parlay.potential_payout) || 0
+        }
+        // Mixed void/win scenarios
+        else if (outcomes.includes('void') && !outcomes.includes('loss')) {
+          // If we have voids but no losses, and remaining are wins, it's still a win but with reduced payout
+          // For simplicity, we'll mark as push for now
+          parlayOutcome = 'push'
+          actualPayout = Number(parlay.amount) || 0
+        }
+
+        // Update parlay outcome if determined
+        if (parlayOutcome) {
+          await this.supabase
+            .from('parlays')
+            .update({
+              outcome: parlayOutcome,
+              actual_payout: actualPayout,
+              payout_amount: actualPayout.toFixed(2)
+            })
+            .eq('uuid', parlay.uuid)
+
+          logger.info(`Updated parlay ${parlay.uuid} outcome to ${parlayOutcome} with payout ${actualPayout}`)
+        }
+      }
+    } catch (error) {
+      logger.error(`Failed to update parlay outcomes for event ${eventId}: ${error}`)
+      // Don't throw - this is non-critical for pick settlement
+    }
   }
 
   /**
