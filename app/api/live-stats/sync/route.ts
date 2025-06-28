@@ -112,35 +112,68 @@ function mapInPlayDataToInsert(players: any[], tournament: string, timestamp: st
       continue;
     }
     
-    // Add current round state only (simplified for debugging)
-    const currentRound = (player.round || 1).toString();
-    const currentUniqueKey = `${player.dg_id}-${currentRound}-${tournament}`;
+    // Get the current round from player data or event info
+    const currentRound = (player.round || player.current_round || 1).toString();
     
-    if (!uniqueKeys.has(currentUniqueKey)) {
-      uniqueKeys.add(currentUniqueKey);
-      allStats.push({
-        dg_id: player.dg_id,
-        player_name: player.player_name,
-        event_name: tournament,
-        course_name: player.course || '',
-        round_num: currentRound,
-        sg_app: null, // In-play predictions don't include detailed stats
-        sg_ott: null,
-        sg_putt: null,
-        sg_arg: null,
-        sg_t2g: null,
-        sg_total: null,
-        accuracy: null,
-        distance: null,
-        gir: null,
-        prox_fw: null,
-        scrambling: null,
-        position: player.current_pos || player.position || null,
-        thru: player.thru || 0,
-        today: player.today || 0,
-        total: player.current_score || player.total || player.today || 0,
-        data_golf_updated_at: timestamp,
-      });
+    // Add round-specific data for each completed round
+    const roundsToAdd: string[] = [];
+    
+    // Always add current round
+    roundsToAdd.push(currentRound);
+    
+    // For players who have completed previous rounds, add historical data
+    if (player.score_history) {
+      // If we have R1, R2, etc. scores, add those rounds
+      for (let r = 1; r < parseInt(currentRound); r++) {
+        const roundKey = `R${r}`;
+        if (player.score_history[roundKey] !== undefined) {
+          roundsToAdd.push(r.toString());
+        }
+      }
+    }
+    
+    // Add stats for each round
+    for (const roundNum of roundsToAdd) {
+      const uniqueKey = `${player.dg_id}-${roundNum}-${tournament}`;
+      
+      if (!uniqueKeys.has(uniqueKey)) {
+        uniqueKeys.add(uniqueKey);
+        
+        // Calculate round-specific scores
+        let roundScore = 0;
+        if (roundNum === currentRound) {
+          // Current round - use today's score
+          roundScore = player.today || 0;
+        } else if (player.score_history) {
+          // Historical round - use score from history
+          const roundKey = `R${roundNum}`;
+          roundScore = player.score_history[roundKey] || 0;
+        }
+        
+        allStats.push({
+          dg_id: player.dg_id,
+          player_name: player.player_name,
+          event_name: tournament,
+          course_name: player.course || '',
+          round_num: roundNum,
+          sg_app: null, // In-play predictions don't include detailed stats
+          sg_ott: null,
+          sg_putt: null,
+          sg_arg: null,
+          sg_t2g: null,
+          sg_total: null,
+          accuracy: null,
+          distance: null,
+          gir: null,
+          prox_fw: null,
+          scrambling: null,
+          position: player.current_pos || player.position || null,
+          thru: roundNum === currentRound ? (player.thru || 0) : 18, // Historical rounds are complete
+          today: roundScore,
+          total: player.current_score || player.total || 0,
+          data_golf_updated_at: timestamp,
+        });
+      }
     }
   }
 
@@ -207,8 +240,31 @@ export async function GET(req?: NextRequest) {
         // Check if this event is in our active tournaments list
         const matchingTournament = activeTournaments.find(t => t.event_name === eventName);
         if (!matchingTournament) {
-          logger.info(`Event "${eventName}" from ${tour.toUpperCase()} tour is not in active tournaments list. Skipping sync for this event.`);
-          continue;
+          logger.warn(`Event "${eventName}" from ${tour.toUpperCase()} tour is not in active tournaments list.`);
+          logger.info(`Active tournaments: ${activeTournaments.map(t => t.event_name).join(', ')}`);
+          
+          // For Euro tour, let's be more flexible and check if we have any unsettled parlays for this event
+          if (tour === 'euro') {
+            const { data: euroTournament } = await supabase
+              .from('tournaments')
+              .select('event_id, event_name')
+              .eq('event_name', eventName)
+              .eq('tour', 'euro')
+              .single();
+              
+            if (euroTournament) {
+              logger.info(`Found Euro tour event "${eventName}" in database, proceeding with sync despite active tournament check.`);
+              fetchedEventNames.push(eventName);
+              // Continue processing this tournament
+            } else {
+              logger.info(`Euro tour event "${eventName}" not found in database, skipping.`);
+              continue;
+            }
+          } else {
+            continue;
+          }
+        } else {
+          fetchedEventNames.push(eventName);
         }
 
         fetchedEventNames.push(eventName);

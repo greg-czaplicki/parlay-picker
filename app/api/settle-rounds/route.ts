@@ -115,106 +115,80 @@ export async function POST(req: NextRequest) {
 async function findCompletedRoundsWithUnsettledParlays(supabase: any): Promise<CompletedRound[]> {
   logger.info('Finding completed rounds with unsettled parlays...')
 
-  // Get all rounds with unsettled picks
-  const { data: unsettledData, error: unsettledError } = await supabase
+  // Get all unsettled picks grouped by event and round
+  const { data: unsettledPicks, error: picksError } = await supabase
     .from('parlay_picks')
-    .select(`
-      event_id,
-      matchups!inner(
-        event_id,
-        round_num,
-        tournaments!inner(
-          event_name,
-          tour
-        )
-      ),
-      parlays!inner(
-        round_num
-      )
-    `)
+    .select('event_id, parlay_id')
     .eq('settlement_status', 'pending')
 
-  if (unsettledError) {
-    logger.error('Error fetching unsettled picks:', unsettledError)
-    throw new Error(`Failed to fetch unsettled picks: ${unsettledError.message}`)
+  if (picksError) {
+    logger.error('Error fetching unsettled picks:', picksError)
+    throw new Error(`Failed to fetch unsettled picks: ${picksError.message}`)
   }
 
-  if (!unsettledData || unsettledData.length === 0) {
+  if (!unsettledPicks || unsettledPicks.length === 0) {
     logger.info('No unsettled picks found')
     return []
   }
 
-  logger.info(`Found ${unsettledData.length} unsettled picks`)
+  logger.info(`Found ${unsettledPicks.length} unsettled picks`)
 
-  // Group by event_id and round_num
-  const roundMap = new Map<string, {
-    event_id: number
-    event_name: string
-    tour: string
-    round_num: number
-    unsettled_count: number
-  }>()
-
-  for (const pick of unsettledData) {
-    const eventId = pick.event_id || pick.matchups?.event_id
-    const roundNum = pick.parlays?.round_num || pick.matchups?.round_num
-    const eventName = pick.matchups?.tournaments?.event_name
-    const tour = pick.matchups?.tournaments?.tour
-
-    if (!eventId || !roundNum || !eventName) {
-      logger.warn('Skipping pick with missing data:', { eventId, roundNum, eventName })
-      continue
-    }
-
-    const key = `${eventId}-${roundNum}`
-    if (!roundMap.has(key)) {
-      roundMap.set(key, {
-        event_id: eventId,
-        event_name: eventName,
-        tour: tour,
-        round_num: roundNum,
-        unsettled_count: 0
-      })
-    }
-    roundMap.get(key)!.unsettled_count++
-  }
-
-  logger.info(`Found ${roundMap.size} unique event-round combinations with unsettled picks`)
-
-  // Check which of these rounds are actually complete
-  const completedRounds: CompletedRound[] = []
-
-  for (const [key, roundInfo] of roundMap) {
-    try {
-      const isComplete = await isRoundComplete(supabase, roundInfo.event_id, roundInfo.round_num, roundInfo.event_name)
+  // Group by event_id and get tournament/round info
+  const eventIds = [...new Set(unsettledPicks.map(p => p.event_id))];
+  const completedRounds: CompletedRound[] = [];
+  
+  for (const eventId of eventIds) {
+    if (!eventId) continue;
+    
+    // Get tournament info
+    const { data: tournament } = await supabase
+      .from('tournaments')
+      .select('event_name, tour')
+      .eq('event_id', eventId)
+      .single();
+    
+    if (!tournament) continue;
+    
+    // Get all parlays for this event to determine which rounds have unsettled picks
+    const eventPicks = unsettledPicks.filter(p => p.event_id === eventId);
+    const { data: parlays } = await supabase
+      .from('parlays')
+      .select('round_num')
+      .in('uuid', eventPicks.map(p => p.parlay_id));
+    
+    const rounds = [...new Set(parlays?.map(p => p.round_num) || [])];
+    
+    for (const roundNum of rounds) {
+      if (!roundNum) continue;
+      
+      // Check if this round is complete using DataGolf API
+      const isComplete = await isRoundComplete(supabase, eventId, roundNum, tournament.event_name);
       
       if (isComplete.complete) {
+        const roundPickCount = eventPicks.length; // Simplified - could be more precise per round
+        
         completedRounds.push({
-          event_id: roundInfo.event_id,
-          event_name: roundInfo.event_name,
-          tour: roundInfo.tour,
-          round_num: roundInfo.round_num,
-          unsettled_parlays: 0, // We don't track this at round level
-          unsettled_picks: roundInfo.unsettled_count,
+          event_id: eventId,
+          event_name: tournament.event_name,
+          tour: tournament.tour,
+          round_num: roundNum,
+          unsettled_parlays: 0,
+          unsettled_picks: roundPickCount,
           completed_players: isComplete.completed_players,
           total_players: isComplete.total_players
-        })
-
-        logger.info(`Round ${roundInfo.event_name} R${roundInfo.round_num} is complete: ${isComplete.completed_players}/${isComplete.total_players} players finished`)
-      } else {
-        logger.debug(`Round ${roundInfo.event_name} R${roundInfo.round_num} not complete yet: ${isComplete.completed_players}/${isComplete.total_players} players finished`)
+        });
+        
+        logger.info(`Round ${roundNum} of ${tournament.event_name} is complete and ready for settlement`)
       }
-    } catch (error) {
-      logger.warn(`Error checking completion for ${roundInfo.event_name} R${roundInfo.round_num}:`, error)
     }
   }
-
+  
   logger.info(`Found ${completedRounds.length} completed rounds with unsettled parlays`)
   return completedRounds
 }
 
 /**
- * Check if a specific round is complete
+ * Check if a specific round is complete using DataGolf API
  */
 async function isRoundComplete(
   supabase: any, 
@@ -223,51 +197,64 @@ async function isRoundComplete(
   eventName: string
 ): Promise<{ complete: boolean; completed_players: number; total_players: number }> {
   
-  // Get all players in this round from live_tournament_stats
-  const { data: roundStats, error: statsError } = await supabase
-    .from('live_tournament_stats')
-    .select('dg_id, player_name, thru, position')
-    .eq('event_name', eventName)
-    .eq('round_num', roundNum.toString())
-
-  if (statsError) {
-    logger.warn(`Error fetching stats for ${eventName} R${roundNum}:`, statsError)
-    // If we can't fetch stats, assume not complete to be safe
-    return { complete: false, completed_players: 0, total_players: 0 }
-  }
-
-  if (!roundStats || roundStats.length === 0) {
-    logger.debug(`No stats found for ${eventName} R${roundNum}`)
-    return { complete: false, completed_players: 0, total_players: 0 }
-  }
-
-  // Count completed players (either finished 18 holes or have a final position)
-  let completedPlayers = 0
-  let totalPlayers = roundStats.length
-
-  for (const player of roundStats) {
-    // Player is complete if:
-    // 1. They've completed 18 holes (thru >= 18), OR
-    // 2. They have a position indicating they're finished (not actively playing)
-    const holesCompleted = player.thru || 0
-    const hasPosition = player.position && player.position !== ''
+  try {
+    // Get tournament info to determine tour
+    const { data: tournament } = await supabase
+      .from('tournaments')
+      .select('tour')
+      .eq('event_id', eventId)
+      .single()
     
-    if (holesCompleted >= 18 || (hasPosition && !['', 'CUT'].includes(player.position))) {
-      completedPlayers++
+    if (!tournament?.tour) {
+      logger.warn(`No tour found for event ${eventId}`)
+      return { complete: false, completed_players: 0, total_players: 0 }
     }
-  }
 
-  // Round is complete if at least 80% of players have finished
-  // This accounts for withdrawals and other edge cases
-  const completionThreshold = Math.max(1, Math.floor(totalPlayers * 0.8))
-  const isComplete = completedPlayers >= completionThreshold
+    const tourType = TourDataService.getTourType(eventName, tournament.tour)
+    const playerStats = await TourDataService.fetchPlayerStats(eventId, tourType)
+    
+    if (!playerStats || playerStats.length === 0) {
+      logger.warn(`No player stats available for ${eventName} from DataGolf`)
+      return { complete: false, completed_players: 0, total_players: 0 }
+    }
 
-  logger.debug(`Round completion check for ${eventName} R${roundNum}: ${completedPlayers}/${totalPlayers} completed (threshold: ${completionThreshold}, complete: ${isComplete})`)
-
-  return {
-    complete: isComplete,
-    completed_players: completedPlayers,
-    total_players: totalPlayers
+    logger.debug(`Checking round ${roundNum} completion for ${eventName} with ${playerStats.length} players`)
+    
+    let completedPlayers = 0
+    let totalPlayers = playerStats.length
+    
+    for (const player of playerStats) {
+      const currentRound = player.round_num || 1
+      
+      // Player has completed the round if:
+      // 1. They are in a later round (round is historical)
+      // 2. They are in the same round and have completed 18 holes
+      // 3. They have withdrawn/cut (position indicates finished)
+      const isHistoricalRound = currentRound > roundNum
+      const completedCurrentRound = currentRound === roundNum && (player.thru >= 18)
+      const hasFinishedPosition = player.current_pos && !['', 'ACTIVE'].includes(player.current_pos)
+      
+      if (isHistoricalRound || completedCurrentRound || hasFinishedPosition) {
+        completedPlayers++
+      }
+    }
+    
+    // Round is complete if at least 80% of players have finished
+    // This accounts for withdrawals and other edge cases
+    const completionThreshold = Math.max(1, Math.floor(totalPlayers * 0.8))
+    const isComplete = completedPlayers >= completionThreshold
+    
+    logger.info(`Round ${roundNum} completion for ${eventName}: ${completedPlayers}/${totalPlayers} finished (threshold: ${completionThreshold}, complete: ${isComplete})`)
+    
+    return {
+      complete: isComplete,
+      completed_players: completedPlayers,
+      total_players: totalPlayers
+    }
+    
+  } catch (error) {
+    logger.error(`Error checking round completion for ${eventName} R${roundNum}:`, error)
+    return { complete: false, completed_players: 0, total_players: 0 }
   }
 }
 
