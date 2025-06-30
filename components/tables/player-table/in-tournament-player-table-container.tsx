@@ -8,6 +8,7 @@ import { getCoreRowModel, getSortedRowModel, useReactTable, SortingState } from 
 import { PlayerTablePresentation } from './player-table-presentation'
 import { PlayerTableFilters } from './player-table-filters'
 import { PlayerTableSkeleton } from './player-table-skeleton'
+import { generateHeatmapColors, GOLF_STAT_CONFIGS } from '@/lib/utils/heatmap'
 
 /**
  * InTournamentPlayerTableContainer
@@ -80,15 +81,6 @@ export function InTournamentPlayerTableContainer() {
   return <PlayerTableSkeleton rows={10} columns={8} />
 }
 
-const HEATMAP_CLASSES = [
-  'heatmap-bg-0', // strong red
-  'heatmap-bg-1', // orange
-  'heatmap-bg-2', // yellow/peach
-  'heatmap-bg-3', // light yellow (neutral)
-  'heatmap-bg-4', // light green
-  'heatmap-bg-5', // green
-  'heatmap-bg-6', // strong green
-];
 
 function getPercentile(sorted: number[], p: number) {
   if (sorted.length === 0) return 0;
@@ -131,32 +123,25 @@ function LiveStatsTable({ eventId, roundFilter, eventOptions }: { eventId: numbe
   // Restore all rows for performance
   const displayPlayers = useMemo(() => liveStats ?? [], [liveStats]);
 
-  // Restore heatmap logic and SG columns
-  // Strokes gained columns to heatmap
+  // Updated heatmap logic to use season stats color scheme
   const SG_COLUMNS = ['sg_putt', 'sg_arg', 'sg_app', 'sg_ott', 'sg_t2g', 'sg_total'];
-  // Compute 90th percentile of absolute values for each SG column (soft max)
-  const sgStats = useMemo(() => {
-    const stats: Record<string, { softMax: number }> = {};
-    SG_COLUMNS.forEach(col => {
-      const values = (liveStats ?? []).map((p: any) => Math.abs(Number(p[col]) || 0)).filter(v => !isNaN(v));
-      if (values.length) {
-        const sorted = [...values].sort((a, b) => a - b);
-        const idx = Math.floor(0.9 * (sorted.length - 1));
-        stats[col] = { softMax: sorted[idx] };
-      } else {
-        stats[col] = { softMax: 1 };
-      }
-    });
-    return stats;
-  }, [liveStats]);
+  
   const getHeatmapColor = useCallback((value: number | null, statKey: string) => {
-    if (!SG_COLUMNS.includes(statKey) || value == null) return '';
-    const softMax = sgStats[statKey]?.softMax || 1;
-    const norm = Math.max(-1, Math.min(1, value / softMax));
-    // 7-band diverging palette
-    const idx = Math.round(((norm + 1) / 2) * 6);
-    return HEATMAP_CLASSES[idx];
-  }, [sgStats]);
+    if (!SG_COLUMNS.includes(statKey) || value == null) return { className: '', style: undefined };
+    
+    // Get all values for this stat to calculate percentiles
+    const allValues = (liveStats ?? []).map((p: any) => {
+      const val = Number(p[statKey]);
+      return isNaN(val) ? null : val;
+    });
+    
+    // Use the season stats heatmap system
+    const config = GOLF_STAT_CONFIGS[statKey] || GOLF_STAT_CONFIGS.higher_better;
+    const colors = generateHeatmapColors(allValues, config);
+    const index = allValues.findIndex(v => v === value);
+    
+    return index >= 0 ? colors[index] : { className: '', style: undefined };
+  }, [liveStats]);
   const columns = useColumns<any>({ dataView: 'tournament', getHeatmapColor, data: displayPlayers });
 
   // Enable sorting - default sort by total score
@@ -207,29 +192,25 @@ function LastEventStatsTable({ eventId, eventName }: { eventId: number; eventNam
   // Restore all rows for performance
   const displayPlayers = useMemo(() => stats ?? [], [stats]);
 
-  // Restore heatmap logic and SG columns
+  // Updated heatmap logic to use season stats color scheme
   const SG_COLUMNS = ['sg_putt', 'sg_arg', 'sg_app', 'sg_ott', 'sg_t2g', 'sg_total'];
-  const sgStats = useMemo(() => {
-    const result: Record<string, { softMax: number }> = {};
-    SG_COLUMNS.forEach(col => {
-      const values = (stats ?? []).map((p: any) => Math.abs(Number(p[col]) || 0)).filter((v: number) => !isNaN(v));
-      if (values.length) {
-        const sorted = [...values].sort((a, b) => a - b);
-        const idx = Math.floor(0.9 * (sorted.length - 1));
-        result[col] = { softMax: sorted[idx] };
-      } else {
-        result[col] = { softMax: 1 };
-      }
-    });
-    return result;
-  }, [stats]);
+  
   const getHeatmapColor = useCallback((value: number | null, statKey: string) => {
-    if (!SG_COLUMNS.includes(statKey) || value == null) return '';
-    const softMax = sgStats[statKey]?.softMax || 1;
-    const norm = Math.max(-1, Math.min(1, value / softMax));
-    const idx = Math.round(((norm + 1) / 2) * 6);
-    return HEATMAP_CLASSES[idx];
-  }, [sgStats]);
+    if (!SG_COLUMNS.includes(statKey) || value == null) return { className: '', style: undefined };
+    
+    // Get all values for this stat to calculate percentiles
+    const allValues = (stats ?? []).map((p: any) => {
+      const val = Number(p[statKey]);
+      return isNaN(val) ? null : val;
+    });
+    
+    // Use the season stats heatmap system
+    const config = GOLF_STAT_CONFIGS[statKey] || GOLF_STAT_CONFIGS.higher_better;
+    const colors = generateHeatmapColors(allValues, config);
+    const index = allValues.findIndex(v => v === value);
+    
+    return index >= 0 ? colors[index] : { className: '', style: undefined };
+  }, [stats]);
   const columns = useColumns<any>({ dataView: 'tournament', getHeatmapColor, data: displayPlayers });
 
   // Enable sorting - default sort by total score

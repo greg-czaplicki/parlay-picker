@@ -135,7 +135,7 @@ export default function ParlaySummary({ selections, userId = '00000000-0000-0000
   }, [selections, stake])
   
   return (
-    <div className="glass-card highlight-card p-6">
+    <div className="glass-card p-6">
         <h2 className="text-xl font-bold mb-4">Parlay Summary</h2>
         <div className="space-y-6">
           <div>

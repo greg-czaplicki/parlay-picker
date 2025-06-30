@@ -59,6 +59,48 @@ export async function GET(req: NextRequest) {
         category_type: 'scoring',
         good_threshold: 70,
         icon: '📊'
+      },
+      'consecutive_sub_70_rounds': {
+        name: 'Sub-70 Round Streak',
+        description: 'Consecutive rounds scoring under 70',
+        category_type: 'scoring',
+        hot_threshold: 3,
+        icon: '🔥'
+      },
+      'consecutive_top_15': {
+        name: 'Top 15 Streak',
+        description: 'Consecutive top 15 finishes',
+        category_type: 'performance',
+        hot_threshold: 3,
+        icon: '🏆'
+      },
+      'consecutive_top_25': {
+        name: 'Top 25 Streak',
+        description: 'Consecutive top 25 finishes',
+        category_type: 'performance',
+        hot_threshold: 4,
+        icon: '🎯'
+      },
+      'scoring_improvement': {
+        name: 'Scoring Improvement',
+        description: 'Recent scoring improvement trend',
+        category_type: 'scoring',
+        hot_threshold: 0.5,
+        icon: '📈'
+      },
+      'recent_sub_70_frequency': {
+        name: 'Recent Sub-70 Form',
+        description: 'High frequency of sub-70 scoring in recent events',
+        category_type: 'scoring',
+        hot_threshold: 60,
+        icon: '🎯'
+      },
+      'cut_making_streak': {
+        name: 'Cut Making Streak',
+        description: 'Consecutive tournaments making the cut',
+        category_type: 'performance',
+        hot_threshold: 5,
+        icon: '✅'
       }
     };
 

@@ -9,7 +9,7 @@ import { formatPlayerName } from "@/lib/utils"
 
 interface UseColumnsProps<T> {
   dataView: "season" | "tournament"
-  getHeatmapColor: (value: number | null, statKey: string, isHigherBetter?: boolean) => string
+  getHeatmapColor: (value: number | null, statKey: string, isHigherBetter?: boolean) => string | { className: string; style?: React.CSSProperties }
   data?: T[] // Add data prop to check for SG availability
 }
 
@@ -55,7 +55,8 @@ export function useColumns<T>({ dataView, getHeatmapColor, data = [] }: UseColum
             cell: ({ row }: { row: Row<T> }) => {
               // @ts-expect-error: dynamic property access
               const value = row.original.sg_total
-              const colorClass = getHeatmapColor(value, "sg_total")
+              const colorInfo = getHeatmapColor(value, "sg_total")
+              const colorClass = typeof colorInfo === 'string' ? colorInfo : JSON.stringify(colorInfo)
               return <StatCell value={value} colorClass={colorClass} precision={3} />
             },
           },
@@ -73,7 +74,8 @@ export function useColumns<T>({ dataView, getHeatmapColor, data = [] }: UseColum
             cell: ({ row }: { row: Row<T> }) => {
               // @ts-expect-error: dynamic property access
               const value = row.original.sg_ott
-              const colorClass = getHeatmapColor(value, "sg_ott")
+              const colorInfo = getHeatmapColor(value, "sg_ott")
+              const colorClass = typeof colorInfo === 'string' ? colorInfo : JSON.stringify(colorInfo)
               return <StatCell value={value} colorClass={colorClass} precision={3} />
             },
           },
@@ -91,7 +93,8 @@ export function useColumns<T>({ dataView, getHeatmapColor, data = [] }: UseColum
             cell: ({ row }: { row: Row<T> }) => {
               // @ts-expect-error: dynamic property access
               const value = row.original.sg_app
-              const colorClass = getHeatmapColor(value, "sg_app")
+              const colorInfo = getHeatmapColor(value, "sg_app")
+              const colorClass = typeof colorInfo === 'string' ? colorInfo : JSON.stringify(colorInfo)
               return <StatCell value={value} colorClass={colorClass} precision={3} />
             },
           },
@@ -109,7 +112,8 @@ export function useColumns<T>({ dataView, getHeatmapColor, data = [] }: UseColum
             cell: ({ row }: { row: Row<T> }) => {
               // @ts-expect-error: dynamic property access
               const value = row.original.sg_arg
-              const colorClass = getHeatmapColor(value, "sg_arg")
+              const colorInfo = getHeatmapColor(value, "sg_arg")
+              const colorClass = typeof colorInfo === 'string' ? colorInfo : JSON.stringify(colorInfo)
               return <StatCell value={value} colorClass={colorClass} precision={3} />
             },
           },
@@ -127,7 +131,8 @@ export function useColumns<T>({ dataView, getHeatmapColor, data = [] }: UseColum
             cell: ({ row }: { row: Row<T> }) => {
               // @ts-expect-error: dynamic property access
               const value = row.original.sg_putt
-              const colorClass = getHeatmapColor(value, "sg_putt")
+              const colorInfo = getHeatmapColor(value, "sg_putt")
+              const colorClass = typeof colorInfo === 'string' ? colorInfo : JSON.stringify(colorInfo)
               return <StatCell value={value} colorClass={colorClass} precision={3} />
             },
           },
@@ -145,7 +150,8 @@ export function useColumns<T>({ dataView, getHeatmapColor, data = [] }: UseColum
             cell: ({ row }: { row: Row<T> }) => {
               // @ts-expect-error: dynamic property access
               const value = row.original.driving_accuracy
-              const colorClass = getHeatmapColor(value, "driving_accuracy", true)
+              const colorInfo = getHeatmapColor(value, "driving_accuracy", true)
+              const colorClass = typeof colorInfo === 'string' ? colorInfo : JSON.stringify(colorInfo)
               return <StatCell value={value} colorClass={colorClass} precision={1} isPercentage={true} />
             },
           },
@@ -163,7 +169,8 @@ export function useColumns<T>({ dataView, getHeatmapColor, data = [] }: UseColum
             cell: ({ row }: { row: Row<T> }) => {
               // @ts-expect-error: dynamic property access
               const value = row.original.driving_distance
-              const colorClass = getHeatmapColor(value, "driving_distance")
+              const colorInfo = getHeatmapColor(value, "driving_distance")
+              const colorClass = typeof colorInfo === 'string' ? colorInfo : JSON.stringify(colorInfo)
               return <StatCell value={value} colorClass={colorClass} precision={1} />
             },
           },
@@ -295,7 +302,8 @@ export function useColumns<T>({ dataView, getHeatmapColor, data = [] }: UseColum
             ),
             cell: ({ row }: { row: Row<T> }) => {
               const value = (row.original as any).sg_ott
-              const colorClass = getHeatmapColor(value, 'sg_ott')
+              const colorInfo = getHeatmapColor(value, 'sg_ott')
+              const colorClass = typeof colorInfo === 'string' ? colorInfo : JSON.stringify(colorInfo)
               return <StatCell value={value} colorClass={colorClass} precision={2} />
             },
             meta: { headerClassName: 'text-center', cellClassName: 'text-center sg-ott-cell' },
@@ -312,7 +320,8 @@ export function useColumns<T>({ dataView, getHeatmapColor, data = [] }: UseColum
             ),
             cell: ({ row }: { row: Row<T> }) => {
               const value = (row.original as any).sg_app
-              const colorClass = getHeatmapColor(value, 'sg_app')
+              const colorInfo = getHeatmapColor(value, 'sg_app')
+              const colorClass = typeof colorInfo === 'string' ? colorInfo : JSON.stringify(colorInfo)
               return <StatCell value={value} colorClass={colorClass} precision={2} />
             },
             meta: { headerClassName: 'text-center', cellClassName: 'text-center sg-app-cell' },
@@ -329,7 +338,8 @@ export function useColumns<T>({ dataView, getHeatmapColor, data = [] }: UseColum
             ),
             cell: ({ row }: { row: Row<T> }) => {
               const value = (row.original as any).sg_arg
-              const colorClass = getHeatmapColor(value, 'sg_arg')
+              const colorInfo = getHeatmapColor(value, 'sg_arg')
+              const colorClass = typeof colorInfo === 'string' ? colorInfo : JSON.stringify(colorInfo)
               return <StatCell value={value} colorClass={colorClass} precision={2} />
             },
             meta: { headerClassName: 'text-center', cellClassName: 'text-center sg-arg-cell' },
@@ -346,7 +356,8 @@ export function useColumns<T>({ dataView, getHeatmapColor, data = [] }: UseColum
             ),
             cell: ({ row }: { row: Row<T> }) => {
               const value = (row.original as any).sg_putt
-              const colorClass = getHeatmapColor(value, 'sg_putt')
+              const colorInfo = getHeatmapColor(value, 'sg_putt')
+              const colorClass = typeof colorInfo === 'string' ? colorInfo : JSON.stringify(colorInfo)
               return <StatCell value={value} colorClass={colorClass} precision={2} />
             },
             meta: { headerClassName: 'text-center', cellClassName: 'text-center sg-putt-cell' },
@@ -363,7 +374,8 @@ export function useColumns<T>({ dataView, getHeatmapColor, data = [] }: UseColum
             ),
             cell: ({ row }: { row: Row<T> }) => {
               const value = (row.original as any).sg_t2g
-              const colorClass = getHeatmapColor(value, 'sg_t2g')
+              const colorInfo = getHeatmapColor(value, 'sg_t2g')
+              const colorClass = typeof colorInfo === 'string' ? colorInfo : JSON.stringify(colorInfo)
               return <StatCell value={value} colorClass={colorClass} precision={2} />
             },
             meta: { headerClassName: 'text-center', cellClassName: 'text-center sg-t2g-cell' },
@@ -381,7 +393,8 @@ export function useColumns<T>({ dataView, getHeatmapColor, data = [] }: UseColum
             cell: ({ row }: { row: Row<T> }) => {
               const value = (row.original as any).sg_total
               const seasonValue = (row.original as any).season_sg_total
-              const colorClass = getHeatmapColor(value, 'sg_total')
+              const colorInfo = getHeatmapColor(value, 'sg_total')
+              const colorClass = typeof colorInfo === 'string' ? colorInfo : JSON.stringify(colorInfo)
               return (
                 <div className="flex flex-col items-center justify-center">
                   <StatCell value={value} colorClass={colorClass} precision={2} />

@@ -27,7 +27,7 @@ export default function TopNavigation() {
                     <span className="ml-2 text-xs px-2 py-0.5 bg-blue-800 text-white rounded-full">Opposite</span>
                   }
                   {event.eventType === 'euro' && 
-                    <span className="ml-2 text-xs px-2 py-0.5 bg-purple-800 text-white rounded-full">Euro</span>
+                    <span className="ml-2 text-xs px-2 py-0.5 bg-green-800 text-white rounded-full">Euro</span>
                   }
                 </div>
               ))

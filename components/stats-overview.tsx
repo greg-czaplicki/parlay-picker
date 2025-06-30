@@ -79,7 +79,7 @@ export default function StatsOverview({ matchupType }: { matchupType: string }) 
           <Card className="data-card">
             <div className="flex justify-between items-start mb-2">
               <span className="data-label">Parlay Potential</span>
-              <Award className="text-purple-400" size={20} />
+              <Award className="text-green-400" size={20} />
             </div>
             <div className="data-value">{matchupType === "2ball" ? "4.8x" : "5.2x"}</div>
             <div className="text-sm text-gray-400 mt-1">
@@ -148,7 +148,7 @@ export default function StatsOverview({ matchupType }: { matchupType: string }) 
               </div>
             </div>
             <div className="flex justify-between items-center mt-2">
-              <span className="stat-pill stat-pill-purple">
+              <span className="stat-pill stat-pill-primary">
                 {matchupType === "2ball" ? "65% Value Picks" : "72% Value Picks"}
               </span>
               <span className="text-sm text-gray-400">Based on current odds</span>

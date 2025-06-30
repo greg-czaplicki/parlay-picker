@@ -280,6 +280,10 @@ export class TrendsCalculationService {
     const sub70RoundsCount = allRoundScores.filter(score => score < 70).length;
     const sub70RoundsPercentage = allRoundScores.length > 0 ? (sub70RoundsCount / allRoundScores.length) * 100 : 0;
 
+    // Advanced trend analysis
+    const advancedTrends = this.calculateAdvancedScoringTrends(dgId, playerName, results, period, validUntil);
+    trends.push(...advancedTrends);
+
     // Add scoring trends
     trends.push({
       dg_id: dgId,
@@ -311,6 +315,7 @@ export class TrendsCalculationService {
         valid_until: validUntil
       });
     }
+
 
     if (sub70RoundsPercentage >= 30) {
       trends.push({
@@ -482,5 +487,236 @@ export class TrendsCalculationService {
         throw error;
       }
     }
+  }
+
+  // Comprehensive advanced scoring trends
+  private calculateAdvancedScoringTrends(
+    dgId: number,
+    playerName: string,
+    results: TournamentResult[],
+    period: string,
+    validUntil: Date
+  ): PlayerTrend[] {
+    const trends: PlayerTrend[] = [];
+    const completedTournaments = results.filter(r => r.total_score && r.rounds_completed === 4);
+    
+    if (completedTournaments.length < 3) return trends;
+
+    // 1. CONSECUTIVE SUB-70 ROUNDS STREAK
+    const consecutiveSub70Rounds = this.getConsecutiveSub70Rounds(completedTournaments);
+    if (consecutiveSub70Rounds >= 3) {
+      trends.push({
+        dg_id: dgId,
+        player_name: playerName,
+        trend_type: 'consecutive_sub_70_rounds',
+        trend_value: consecutiveSub70Rounds,
+        trend_period: period,
+        trend_category: consecutiveSub70Rounds >= 5 ? 'hot' : 'consistent',
+        context_data: {
+          streak_length: consecutiveSub70Rounds,
+          tournaments_analyzed: completedTournaments.length
+        },
+        valid_until: validUntil
+      });
+    }
+
+    // 2. TOP 15 FINISH STREAK
+    const top15Streak = this.getConsecutiveFinishStreak(completedTournaments, 15);
+    if (top15Streak >= 3) {
+      trends.push({
+        dg_id: dgId,
+        player_name: playerName,
+        trend_type: 'consecutive_top_15',
+        trend_value: top15Streak,
+        trend_period: period,
+        trend_category: 'hot',
+        context_data: {
+          streak_length: top15Streak,
+          tournaments_analyzed: completedTournaments.length
+        },
+        valid_until: validUntil
+      });
+    }
+
+    // 3. TOP 25 FINISH STREAK
+    const top25Streak = this.getConsecutiveFinishStreak(completedTournaments, 25);
+    if (top25Streak >= 4) {
+      trends.push({
+        dg_id: dgId,
+        player_name: playerName,
+        trend_type: 'consecutive_top_25',
+        trend_value: top25Streak,
+        trend_period: period,
+        trend_category: 'consistent',
+        context_data: {
+          streak_length: top25Streak,
+          tournaments_analyzed: completedTournaments.length
+        },
+        valid_until: validUntil
+      });
+    }
+
+    // 4. SCORING IMPROVEMENT TREND
+    const improvementTrend = this.getScoringImprovementTrend(completedTournaments);
+    if (improvementTrend.isImproving) {
+      trends.push({
+        dg_id: dgId,
+        player_name: playerName,
+        trend_type: 'scoring_improvement',
+        trend_value: Math.round(improvementTrend.improvement * 100) / 100,
+        trend_period: period,
+        trend_category: 'hot',
+        context_data: {
+          improvement_per_tournament: improvementTrend.improvement,
+          recent_average: improvementTrend.recentAverage,
+          early_average: improvementTrend.earlyAverage,
+          tournaments_analyzed: completedTournaments.length
+        },
+        valid_until: validUntil
+      });
+    }
+
+    // 5. SUB-70 FREQUENCY IN RECENT TOURNAMENTS
+    const recentSub70Analysis = this.getRecentSub70Analysis(completedTournaments);
+    if (recentSub70Analysis.qualifies) {
+      trends.push({
+        dg_id: dgId,
+        player_name: playerName,
+        trend_type: 'recent_sub_70_frequency',
+        trend_value: recentSub70Analysis.count,
+        trend_period: period,
+        trend_category: 'hot',
+        context_data: {
+          sub_70_tournaments: recentSub70Analysis.count,
+          tournaments_analyzed: recentSub70Analysis.analyzed,
+          percentage: recentSub70Analysis.percentage,
+          recent_averages: recentSub70Analysis.recentAverages
+        },
+        valid_until: validUntil
+      });
+    }
+
+    // 6. CUT MAKING STREAK
+    const cutStreak = this.getCutMakingStreak(results);
+    if (cutStreak >= 5) {
+      trends.push({
+        dg_id: dgId,
+        player_name: playerName,
+        trend_type: 'cut_making_streak',
+        trend_value: cutStreak,
+        trend_period: period,
+        trend_category: cutStreak >= 8 ? 'hot' : 'consistent',
+        context_data: {
+          streak_length: cutStreak,
+          tournaments_analyzed: results.length
+        },
+        valid_until: validUntil
+      });
+    }
+
+    return trends;
+  }
+
+  // Helper: Get consecutive sub-70 rounds from most recent
+  private getConsecutiveSub70Rounds(tournaments: TournamentResult[]): number {
+    let streak = 0;
+    
+    for (const tournament of tournaments) {
+      const rounds = [
+        tournament.round_4_score,
+        tournament.round_3_score,
+        tournament.round_2_score,
+        tournament.round_1_score
+      ].filter(score => score !== null).reverse(); // oldest to newest
+      
+      for (const score of rounds.reverse()) { // newest to oldest
+        if (score && score < 70) {
+          streak++;
+        } else {
+          return streak;
+        }
+      }
+    }
+    
+    return streak;
+  }
+
+  // Helper: Get consecutive finish streak (top X)
+  private getConsecutiveFinishStreak(tournaments: TournamentResult[], threshold: number): number {
+    let streak = 0;
+    
+    for (const tournament of tournaments) {
+      if (tournament.final_position && tournament.final_position <= threshold) {
+        streak++;
+      } else {
+        break;
+      }
+    }
+    
+    return streak;
+  }
+
+  // Helper: Analyze scoring improvement trend
+  private getScoringImprovementTrend(tournaments: TournamentResult[]): {
+    isImproving: boolean;
+    improvement: number;
+    recentAverage: number;
+    earlyAverage: number;
+  } {
+    if (tournaments.length < 4) {
+      return { isImproving: false, improvement: 0, recentAverage: 0, earlyAverage: 0 };
+    }
+
+    const half = Math.floor(tournaments.length / 2);
+    const recentTournaments = tournaments.slice(0, half);
+    const earlyTournaments = tournaments.slice(half);
+
+    const recentAverage = recentTournaments.reduce((sum, t) => sum + (t.total_score! / 4), 0) / recentTournaments.length;
+    const earlyAverage = earlyTournaments.reduce((sum, t) => sum + (t.total_score! / 4), 0) / earlyTournaments.length;
+    
+    const improvement = earlyAverage - recentAverage; // Positive = getting better
+    const isImproving = improvement >= 0.5; // At least half stroke improvement
+
+    return { isImproving, improvement, recentAverage, earlyAverage };
+  }
+
+  // Helper: Analyze recent sub-70 frequency
+  private getRecentSub70Analysis(tournaments: TournamentResult[]): {
+    qualifies: boolean;
+    count: number;
+    analyzed: number;
+    percentage: number;
+    recentAverages: number[];
+  } {
+    const recent = tournaments.slice(0, Math.min(5, tournaments.length)); // Last 5 tournaments
+    const sub70Count = recent.filter(t => (t.total_score! / 4) < 70).length;
+    const percentage = (sub70Count / recent.length) * 100;
+    const recentAverages = recent.map(t => Math.round((t.total_score! / 4) * 100) / 100);
+    
+    // Qualifies if 60%+ of recent tournaments averaged sub-70
+    const qualifies = percentage >= 60 && sub70Count >= 2;
+    
+    return {
+      qualifies,
+      count: sub70Count,
+      analyzed: recent.length,
+      percentage: Math.round(percentage),
+      recentAverages
+    };
+  }
+
+  // Helper: Get cut making streak
+  private getCutMakingStreak(tournaments: TournamentResult[]): number {
+    let streak = 0;
+    
+    for (const tournament of tournaments) {
+      if (tournament.made_cut) {
+        streak++;
+      } else {
+        break;
+      }
+    }
+    
+    return streak;
   }
 }
