@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     sunday.setHours(23,59,59,999);
     
     const { data: currentEvents, error: eventsError } = await supabase
-      .from('tournaments')
+      .from('tournaments_v2')
       .select('event_id, event_name, start_date, end_date')
       .lte('start_date', sunday.toISOString().split('T')[0])
       .gte('end_date', monday.toISOString().split('T')[0]);

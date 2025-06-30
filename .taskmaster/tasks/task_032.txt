@@ -1,0 +1,77 @@
+# Task ID: 32
+# Title: Create ML-Powered Parlay Recommendation Engine
+# Status: pending
+# Dependencies: 31, 35
+# Priority: high
+# Description: Build a core recommendation engine that analyzes Strokes Gained data and historical snapshots to suggest optimal parlay combinations, focusing on player-course fit, recent form, and SG momentum patterns.
+# Details:
+This task involves building a machine learning recommendation system for golf betting parlays:
+
+1. **Data Integration and Preprocessing**:
+   - Connect to the Strokes Gained API endpoints to access player performance metrics
+   - Implement data pipelines to collect and preprocess historical performance data
+   - Create feature engineering functions to extract relevant patterns (player-course fit, momentum, etc.)
+   - Normalize and standardize input features for model consumption
+
+2. **Model Development**:
+   - Implement a multi-stage recommendation approach:
+     - Stage 1: Player-course fit analysis using SG data and course DNA profiles
+     - Stage 2: Form analysis examining recent performance trends and momentum
+     - Stage 3: Matchup probability calculations for 3-ball and head-to-head scenarios
+   - Start with simpler models (logistic regression, random forests) that can be trained on limited data
+   - Design the system to improve as more data accumulates (model versioning)
+   - Implement confidence scoring for recommendations
+
+3. **Recommendation Engine Logic**:
+   - Create algorithms to identify optimal parlay combinations based on model outputs
+   - Implement risk-reward balancing to suggest parlays with different risk profiles
+   - Design a recommendation scoring system that considers both win probability and potential payout
+   - Build logic to filter out conflicting or redundant selections
+
+4. **API Development**:
+   - Create endpoints to serve recommendations based on user preferences
+   - Implement parameter controls for risk tolerance, parlay size, and bet types
+   - Design the response format to include confidence metrics and supporting data
+
+5. **Feedback Loop Implementation**:
+   - Create a system to track recommendation performance
+   - Implement automated model retraining based on new outcomes
+   - Design metrics to evaluate recommendation quality over time
+
+6. **Documentation**:
+   - Document model architecture, training procedures, and evaluation metrics
+   - Create API documentation for frontend integration
+   - Document the recommendation algorithm logic and parameters
+
+# Test Strategy:
+1. **Unit Testing**:
+   - Test data preprocessing functions with sample datasets
+   - Verify feature engineering logic produces expected outputs
+   - Test model prediction functions with controlled inputs
+   - Validate recommendation algorithms with predefined scenarios
+
+2. **Integration Testing**:
+   - Verify correct data flow from SG API endpoints to recommendation engine
+   - Test end-to-end recommendation generation with real historical data
+   - Validate API response formats and error handling
+
+3. **Model Validation**:
+   - Implement cross-validation to assess model performance
+   - Create backtesting framework to evaluate recommendations against historical outcomes
+   - Establish baseline metrics (accuracy, ROI, etc.) for model performance evaluation
+   - Test model performance across different tournament types and conditions
+
+4. **Performance Testing**:
+   - Benchmark recommendation generation time under various load conditions
+   - Test system performance with increasing data volumes
+   - Verify scalability of the recommendation engine
+
+5. **User Acceptance Testing**:
+   - Create a test environment for stakeholders to review recommendations
+   - Collect feedback on recommendation quality and relevance
+   - Compare manual expert picks against system recommendations
+
+6. **Monitoring Plan**:
+   - Implement logging for model predictions and recommendation outcomes
+   - Create dashboards to track recommendation performance over time
+   - Set up alerts for significant deviations in model performance

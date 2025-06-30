@@ -52,7 +52,7 @@ async function fetchActiveEvents(): Promise<DisplayEvent[]> {
   const mondayStr = monday.toISOString().split('T')[0]
   const sundayStr = sunday.toISOString().split('T')[0]
   const { data, error } = await supabase
-    .from('tournaments')
+    .from('tournaments_v2')
     .select('event_id, event_name, start_date, end_date, tour')
     .lte('start_date', sundayStr)
     .gte('end_date', mondayStr)

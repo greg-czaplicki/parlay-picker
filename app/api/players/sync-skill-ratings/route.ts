@@ -82,7 +82,7 @@ export async function GET() {
     async function upsertField(fieldData: DataGolfFieldResponse) {
       // Find event_id in tournaments table
       const { data: eventRows } = await supabase
-        .from("tournaments")
+        .from("tournaments_v2")
         .select("event_id")
         .eq("event_name", fieldData.event_name)
         .limit(1);

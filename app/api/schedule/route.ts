@@ -5,7 +5,7 @@ export async function GET() {
   try {
     const supabase = createSupabaseClient();
     const { data, error } = await supabase
-      .from("tournaments")
+      .from("tournaments_v2")
       .select("event_id, event_name, course, start_date, end_date")
       .order("start_date", { ascending: true });
     if (error) {

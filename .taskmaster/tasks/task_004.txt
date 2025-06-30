@@ -1,0 +1,185 @@
+# Task ID: 4
+# Title: Migrate ParlayContext to React Query
+# Status: done
+# Dependencies: 1
+# Priority: high
+# Description: Refactor the existing ParlayContext to use React Query for data fetching while simplifying the context to only handle UI-specific state.
+# Details:
+1. Analyze current ParlayContext to identify data fetching vs. UI state
+2. Create React Query hooks for each data fetching operation
+3. Simplify ParlayContext to only manage UI state
+4. Update components to use React Query hooks instead of context for data
+5. Implement optimistic updates for mutations
+6. Add proper error handling and loading states
+
+Example implementation:
+```typescript
+// src/hooks/use-matchups.ts
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { fetchMatchups, createMatchup, updateMatchup } from '../api/matchups';
+
+export function useMatchups(tournamentId: string) {
+  return useQuery({
+    queryKey: ['matchups', tournamentId],
+    queryFn: () => fetchMatchups(tournamentId),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+}
+
+export function useCreateMatchup() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: createMatchup,
+    onSuccess: (data, variables) => {
+      // Invalidate and refetch matchups for this tournament
+      queryClient.invalidateQueries(['matchups', variables.tournamentId]);
+    },
+  });
+}
+
+// src/contexts/ParlayContext.tsx
+import { createContext, useContext, useState } from 'react';
+
+interface ParlayContextType {
+  selectedMatchups: number[];
+  addMatchup: (id: number) => void;
+  removeMatchup: (id: number) => void;
+  clearMatchups: () => void;
+  activeFilter: string;
+  setActiveFilter: (filter: string) => void;
+}
+
+const ParlayContext = createContext<ParlayContextType | undefined>(undefined);
+
+export function ParlayProvider({ children }) {
+  const [selectedMatchups, setSelectedMatchups] = useState<number[]>([]);
+  const [activeFilter, setActiveFilter] = useState('balanced');
+  
+  const addMatchup = (id: number) => {
+    setSelectedMatchups(prev => [...prev, id]);
+  };
+  
+  const removeMatchup = (id: number) => {
+    setSelectedMatchups(prev => prev.filter(matchupId => matchupId !== id));
+  };
+  
+  const clearMatchups = () => {
+    setSelectedMatchups([]);
+  };
+  
+  return (
+    <ParlayContext.Provider value={{
+      selectedMatchups,
+      addMatchup,
+      removeMatchup,
+      clearMatchups,
+      activeFilter,
+      setActiveFilter,
+    }}>
+      {children}
+    </ParlayContext.Provider>
+  );
+}
+
+export function useParlay() {
+  const context = useContext(ParlayContext);
+  if (context === undefined) {
+    throw new Error('useParlay must be used within a ParlayProvider');
+  }
+  return context;
+}
+```
+
+# Test Strategy:
+1. Create unit tests for each React Query hook
+2. Test optimistic updates and cache invalidation
+3. Verify that the simplified ParlayContext correctly manages UI state
+4. Test integration between React Query and context
+5. Create tests for error handling and loading states
+6. Verify that components correctly use the new hooks and context
+
+# Subtasks:
+## 1. Analyze Current ParlayContext Implementation [done]
+### Dependencies: None
+### Description: Conduct a thorough analysis of the current ParlayContext implementation to understand data flow, state management, and component dependencies.
+### Details:
+Document all state properties in ParlayContext, identify which are UI state vs. server data, map all components that consume the context, and catalog all operations (CRUD) currently handled by the context. Create a migration plan document with identified risks and dependencies.
+
+## 2. Design API Endpoints and Database Schema [done]
+### Dependencies: 4.1
+### Description: Design comprehensive API endpoints and database schema for parlays and picks persistence.
+### Details:
+Create database schema diagrams for parlays and picks, including relationships and constraints. Design RESTful API endpoints for all CRUD operations. Document request/response formats, validation rules, and error handling. Review design with backend team for implementation feasibility.
+
+## 3. Implement Backend API Endpoints [done]
+### Dependencies: 4.2
+### Description: Develop and deploy the backend API endpoints for parlay and pick persistence based on the approved design.
+### Details:
+Implement database migrations, models, controllers, and routes for parlays and picks. Add validation, error handling, and authentication checks. Write unit and integration tests for all endpoints. Deploy to staging environment for testing.
+
+## 4. Create React Query Hooks for Data Operations [done]
+### Dependencies: 4.3
+### Description: Develop React Query hooks for all CRUD operations on parlays and picks.
+### Details:
+Create custom hooks using React Query for fetching, creating, updating, and deleting parlays and picks. Implement proper caching strategies, refetching policies, and error handling. Add TypeScript interfaces for all data structures. Include optimistic updates for mutations to provide immediate UI feedback.
+
+## 5. Refactor ParlayContext for UI State Only [done]
+### Dependencies: 4.4
+### Description: Refactor ParlayContext to only manage UI-specific state, removing all data fetching and persistence logic.
+### Details:
+Remove all API calls and data persistence from ParlayContext. Retain only UI state like active tabs, form values, and UI flags. Update the context provider to work with the new React Query hooks. Ensure backward compatibility during migration phase.
+
+## 6. Update Components to Use React Query Hooks [done]
+### Dependencies: 4.5
+### Description: Refactor all components to use the new React Query hooks instead of ParlayContext for data operations.
+### Details:
+Identify all components using ParlayContext for data. Systematically update each component to use appropriate React Query hooks. Implement loading states, error handling, and optimistic UI updates. Ensure components still access UI state from the refactored ParlayContext.
+<info added on 2025-05-13T00:28:46.175Z>
+Identify all components using ParlayContext for data. Systematically update each component to use appropriate React Query hooks. Implement loading states, error handling, and optimistic UI updates. Ensure components still access UI state from the refactored ParlayContext.
+
+Component Refactoring Progress:
+- components/parlay-card.tsx: Completed
+  - Replaced legacy persistence logic with React Query hooks (useParlayPicksQuery, useCreateParlayPickMutation, useRemoveParlayPickMutation, useDeleteParlayMutation)
+  - Implemented queryKeys factory for cache keys to ensure type safety and cache consistency
+  - Removed local state for persistent data, keeping only ephemeral UI state
+  - Added explicit typing for all map/filter callbacks and function parameters
+  - Resolved all linter errors including nullability and ReactNode issues
+  - Added TODO for future migration of any remaining direct Supabase/stat fetching
+  - Code now follows project conventions and is ready for review
+</info added on 2025-05-13T00:28:46.175Z>
+<info added on 2025-05-13T00:29:14.810Z>
+Identify all components using ParlayContext for data. Systematically update each component to use appropriate React Query hooks. Implement loading states, error handling, and optimistic UI updates. Ensure components still access UI state from the refactored ParlayContext.
+
+Component Refactoring Progress:
+- components/parlay-card.tsx: Completed
+  - Replaced legacy persistence logic with React Query hooks (useParlayPicksQuery, useCreateParlayPickMutation, useRemoveParlayPickMutation, useDeleteParlayMutation)
+  - Implemented queryKeys factory for cache keys to ensure type safety and cache consistency
+  - Removed local state for persistent data, keeping only ephemeral UI state
+  - Added explicit typing for all map/filter callbacks and function parameters
+  - Resolved all linter errors including nullability and ReactNode issues
+  - Added TODO for future migration of any remaining direct Supabase/stat fetching
+  - Code now follows project conventions and is ready for review
+
+- app/parlays/parlays-client.tsx: Completed
+  - Replaced all legacy persistence logic (createParlay, addParlayPick, direct state for parlays/picks, router.refresh) with React Query hooks: useParlaysQuery, useCreateParlayMutation, and related hooks
+  - All CRUD operations now use the queryKeys factory for cache keys, ensuring type safety and cache consistency
+  - Removed all local state for persistent data; only ephemeral UI state (e.g., selectedRound, newParlayName) remains in local state
+  - Updated all mutation logic to use React Query and invalidate queries on success
+  - Updated error handling to use React Query error states and toasts
+  - Cleaned up unused imports, dead code, and obsolete helpers
+  - All code follows project conventions and is ready for review
+</info added on 2025-05-13T00:29:14.810Z>
+
+## 7. Implement Data Migration Strategy [done]
+### Dependencies: 4.3
+### Description: Develop and execute a strategy for migrating existing parlay data to the new persistence system.
+### Details:
+Create scripts to migrate data from current storage (localStorage, existing database, etc.) to the new database schema. Implement a fallback mechanism to handle migration failures. Test migration process thoroughly in staging environment. Plan for production migration with minimal user impact.
+
+## 8. Testing, Documentation and Developer Onboarding [done]
+### Dependencies: 4.6, 4.7
+### Description: Conduct comprehensive testing of the new implementation and create documentation for developers.
+### Details:
+Write unit tests for all new hooks and updated components. Perform integration testing across the application. Create documentation explaining the new data flow, available hooks, and best practices. Conduct knowledge sharing sessions with the development team. Update relevant ADRs (Architecture Decision Records) to reflect the new pattern.
+

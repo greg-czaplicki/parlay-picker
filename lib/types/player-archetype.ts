@@ -53,7 +53,7 @@ export interface PlayerArchetype {
 
 // Player classification result
 export interface PlayerArchetypeClassification {
-  dg_id: number;
+  dg_id: bigint;
   player_name: string;
   
   // Primary archetype
@@ -103,7 +103,7 @@ export interface PlayerArchetypeClassification {
   
   // Peer comparisons
   similar_players: Array<{
-    dg_id: number;
+    dg_id: bigint;
     player_name: string;
     similarity_score: number;    // 0-100, how similar SG patterns are
     shared_archetype: string;

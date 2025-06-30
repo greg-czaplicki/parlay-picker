@@ -1,7 +1,7 @@
 // Core trend types
 export interface PlayerTrend {
   id?: number;
-  dg_id: number;
+  dg_id: bigint;
   player_name: string;
   trend_type: TrendType;
   trend_value: number;
@@ -16,7 +16,7 @@ export interface PlayerTrend {
 
 export interface TournamentResult {
   id?: number;
-  dg_id: number;
+  dg_id: bigint;
   player_name: string;
   event_id: number;
   event_name: string;
@@ -114,7 +114,7 @@ export interface TrendsResponse {
 }
 
 export interface PlayerTrendGroup {
-  dg_id: number;
+  dg_id: bigint;
   player_name: string;
   trends: {
     type: string;
@@ -143,7 +143,7 @@ export interface TrendsCalculationRequest {
 // ML export types
 export interface MLDataRecord {
   // Identifiers
-  dg_id: number;
+  dg_id: bigint;
   player_name: string;
   
   // Binary trend indicators

@@ -119,7 +119,7 @@ export interface PlayerSGArchetype {
   
   // Player examples
   example_players: Array<{
-    dg_id: number;
+    dg_id: bigint;
     player_name: string;
     fit_score: number; // 0-1, how well they match archetype
   }>;
@@ -127,7 +127,7 @@ export interface PlayerSGArchetype {
 
 // Course fit analysis for a specific player
 export interface PlayerCourseFit {
-  dg_id: number;
+  dg_id: bigint;
   player_name: string;
   event_name: string;
   
@@ -205,7 +205,7 @@ export interface CourseSimilarity {
 
 // Real-time SG momentum during tournaments
 export interface SGMomentumIndicator {
-  dg_id: number;
+  dg_id: bigint;
   player_name: string;
   event_name: string;
   current_round: number;

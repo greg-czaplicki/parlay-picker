@@ -60,7 +60,7 @@ class TournamentNameResolver {
 
   async findExactMatch(eventName, tour, startDate) {
     let query = this.supabase
-      .from('tournaments')
+      .from('tournaments_v2')
       .select('event_id, event_name, tour, start_date')
       .eq('event_name', eventName);
 
@@ -114,7 +114,7 @@ class TournamentNameResolver {
   async findFuzzyMatch(eventName, tour, startDate) {
     // Get tournaments for fuzzy matching
     let query = this.supabase
-      .from('tournaments')
+      .from('tournaments_v2')
       .select('event_id, event_name, tour, start_date, end_date');
 
     if (tour) query = query.eq('tour', tour);

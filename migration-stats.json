@@ -1,0 +1,23 @@
+{
+  "tournaments": {
+    "total": 0,
+    "migrated": 0,
+    "errors": 0
+  },
+  "players": {
+    "total": 0,
+    "migrated": 0,
+    "errors": 0
+  },
+  "scores": {
+    "total": 0,
+    "migrated": 351,
+    "errors": 200,
+    "converted": 532
+  },
+  "results": {
+    "total": 567,
+    "migrated": 551,
+    "errors": 0
+  }
+}

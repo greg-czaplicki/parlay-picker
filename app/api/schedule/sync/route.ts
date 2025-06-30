@@ -136,7 +136,7 @@ export async function GET(request: Request) {
     let processedCount = 0;
     if (allTournaments.length > 0) {
       const { error: upsertError } = await supabase
-        .from("tournaments")
+        .from("tournaments_v2")
         .upsert(allTournaments, {
           onConflict: 'event_id', // Use event_id (Primary Key) for conflict resolution
           ignoreDuplicates: false // Ensure existing records are updated

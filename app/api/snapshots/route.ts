@@ -707,7 +707,7 @@ export async function GET(request: NextRequest) {
 
     // Get active tournaments for context
     const { data: activeTournaments } = await supabase
-      .from('tournaments')
+      .from('tournaments_v2')
       .select('event_id, event_name, start_date, end_date')
       .gte('end_date', new Date().toISOString().split('T')[0])
       .order('start_date', { ascending: false })
@@ -869,7 +869,7 @@ export async function POST(request: NextRequest) {
 
     // Validate the event exists
     const { data: tournament, error: tournamentError } = await supabase
-      .from('tournaments')
+      .from('tournaments_v2')
       .select('event_id, event_name')
       .eq('event_id', event_id)
       .single()

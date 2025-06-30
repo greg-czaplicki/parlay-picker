@@ -1,0 +1,184 @@
+{
+  "timestamp": "2025-06-28T15:08:13.081Z",
+  "pipeline_status": "starting",
+  "phases_completed": [
+    {
+      "phase": "extraction",
+      "status": "completed",
+      "results": {
+        "extraction_timestamp": "2025-06-28T15:08:13.085Z",
+        "total_records": {
+          "tournaments": 81,
+          "players": 532,
+          "tournament_results": 567,
+          "live_stats": 1000,
+          "season_stats": 170
+        },
+        "score_format_analysis": {
+          "actual": 468,
+          "relative": 1083,
+          "unknown": 16,
+          "mixed": 0
+        },
+        "data_quality_summary": {
+          "players_missing_country": 532,
+          "tournaments_missing_course": 0,
+          "results_missing_scores": 1,
+          "live_stats_missing_scores": 0
+        }
+      }
+    },
+    {
+      "phase": "score_analysis",
+      "status": "completed",
+      "results": {
+        "tournaments_analyzed": 7,
+        "format_summary": {
+          "total_tournaments": 7,
+          "format_distribution": {
+            "actual": 1,
+            "relative": 5,
+            "unknown": 1
+          },
+          "confidence_distribution": {
+            "high": 6,
+            "medium": 0,
+            "low": 1
+          },
+          "format_percentages": {
+            "actual": 14,
+            "relative": 71,
+            "unknown": 14
+          }
+        },
+        "recommendations": [
+          "Majority of tournaments use relative scores - configure migration to convert to actual scores"
+        ]
+      }
+    },
+    {
+      "phase": "validation",
+      "status": "completed",
+      "results": {
+        "overall_status": "issues_detected",
+        "migration_ready": false,
+        "validation_summary": {
+          "total_issues": 10,
+          "total_warnings": 599,
+          "categories_validated": 6,
+          "categories_valid": 5,
+          "overall_health": "issues_detected"
+        },
+        "recommendations": [
+          "Consider enriching player data with country information before migration",
+          "Review and manually classify tournaments with unknown score formats",
+          "Resolve player ID mismatches between tables",
+          "Resolve blocking issues before attempting migration",
+          "Consider data cleaning procedures for problematic records"
+        ]
+      }
+    }
+  ],
+  "final_summary": {
+    "data_overview": {
+      "total_tournaments": 81,
+      "total_players": 532,
+      "total_tournament_results": 567,
+      "total_live_stats": 1000,
+      "total_season_stats": 170
+    },
+    "score_format_findings": {
+      "tournaments_analyzed": 7,
+      "format_distribution": {
+        "actual": 1,
+        "relative": 5,
+        "unknown": 1
+      },
+      "primary_format": {
+        "format": "relative",
+        "count": 5,
+        "percentage": 0
+      },
+      "confidence_assessment": "high"
+    },
+    "data_quality_assessment": {
+      "overall_status": "issues_detected",
+      "migration_readiness": false,
+      "critical_issues": 10,
+      "warnings": 599,
+      "data_completeness": {
+        "tournaments": "good",
+        "players": "partial",
+        "scores": "variable",
+        "overall": "poor"
+      }
+    },
+    "migration_recommendations": [
+      {
+        "category": "score_format",
+        "recommendation": "Majority of tournaments use relative scores - configure migration to convert to actual scores",
+        "priority": "high"
+      },
+      {
+        "category": "data_quality",
+        "recommendation": "Consider enriching player data with country information before migration",
+        "priority": "medium"
+      },
+      {
+        "category": "data_quality",
+        "recommendation": "Review and manually classify tournaments with unknown score formats",
+        "priority": "medium"
+      },
+      {
+        "category": "data_quality",
+        "recommendation": "Resolve player ID mismatches between tables",
+        "priority": "medium"
+      },
+      {
+        "category": "data_quality",
+        "recommendation": "Resolve blocking issues before attempting migration",
+        "priority": "critical"
+      },
+      {
+        "category": "data_quality",
+        "recommendation": "Consider data cleaning procedures for problematic records",
+        "priority": "medium"
+      },
+      {
+        "category": "strategy",
+        "recommendation": "Implement phased migration approach: tournaments → players → results → advanced stats",
+        "priority": "high"
+      },
+      {
+        "category": "testing",
+        "recommendation": "Create comprehensive test dataset for migration validation",
+        "priority": "high"
+      },
+      {
+        "category": "monitoring",
+        "recommendation": "Set up data quality monitoring during migration process",
+        "priority": "medium"
+      }
+    ],
+    "next_steps": [
+      {
+        "step": 1,
+        "action": "Resolve blocking data quality issues",
+        "description": "Address critical issues identified in validation",
+        "estimated_effort": "2-5 days"
+      },
+      {
+        "step": 2,
+        "action": "Re-run validation pipeline",
+        "description": "Validate that issues have been resolved",
+        "estimated_effort": "0.5 days"
+      },
+      {
+        "step": 3,
+        "action": "Proceed with migration once validation passes",
+        "description": "Continue with migration process after validation success",
+        "estimated_effort": "TBD"
+      }
+    ]
+  }
+}

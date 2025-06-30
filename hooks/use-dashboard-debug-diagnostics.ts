@@ -39,7 +39,7 @@ async function runDashboardDebugDiagnostics(): Promise<DashboardDebugResults> {
   const sundayStr = new Date(today.setDate(today.getDate() + 6)).toISOString().split('T')[0]
 
   const { data: eventsData, error: eventsError } = await supabase
-    .from('tournaments')
+    .from('tournaments_v2')
     .select('event_id, event_name, start_date, end_date')
     .lte('start_date', sundayStr)
     .gte('end_date', mondayStr)

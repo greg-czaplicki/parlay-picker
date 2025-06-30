@@ -106,7 +106,7 @@ export class TournamentNameResolver {
     startDate?: string
   ): Promise<Omit<TournamentMatch, 'confidence' | 'match_type'> | null> {
     let query = this.supabase
-      .from('tournaments')
+      .from('tournaments_v2')
       .select('event_id, event_name, tour, start_date')
       .eq('event_name', eventName)
 
@@ -168,7 +168,7 @@ export class TournamentNameResolver {
   ): Promise<TournamentMatch | null> {
     // Get tournaments for fuzzy matching
     let query = this.supabase
-      .from('tournaments')
+      .from('tournaments_v2')
       .select('event_id, event_name, tour, start_date, end_date')
 
     if (tour) query = query.eq('tour', tour)
@@ -268,7 +268,7 @@ export class TournamentNameResolver {
 
     // Get suggestions for low confidence or no matches
     let query = this.supabase
-      .from('tournaments')
+      .from('tournaments_v2')
       .select('event_name')
       .order('start_date', { ascending: false })
       .limit(20)

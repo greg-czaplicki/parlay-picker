@@ -1,0 +1,731 @@
+[
+  {
+    "event_id": 10001,
+    "event_name": "BMW Australian PGA Championship",
+    "course": "Royal Queensland GC",
+    "start_date": "2024-11-21",
+    "end_date": "2024-11-24",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 10002,
+    "event_name": "ISPS Handa Australian Open",
+    "course": "Kingston Heath GC",
+    "start_date": "2024-11-28",
+    "end_date": "2024-12-01",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 10003,
+    "event_name": "Nedbank Golf Challenge",
+    "course": "Gary Player CC",
+    "start_date": "2024-12-05",
+    "end_date": "2024-12-08",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 10004,
+    "event_name": "Alfred Dunhill Championship",
+    "course": "Leopard Creek CC",
+    "start_date": "2024-12-12",
+    "end_date": "2024-12-15",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 10005,
+    "event_name": "AfrAsia Bank Mauritius Open",
+    "course": "Mont Choisy Le Golf",
+    "start_date": "2024-12-19",
+    "end_date": "2024-12-22",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 16,
+    "event_name": "The Sentry",
+    "course": "Plantation Course at Kapalua",
+    "start_date": "2025-01-02",
+    "end_date": "2025-01-05",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 6,
+    "event_name": "Sony Open in Hawaii",
+    "course": "Waialae Country Club",
+    "start_date": "2025-01-09",
+    "end_date": "2025-01-12",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 2,
+    "event_name": "The American Express",
+    "course": "Pete Dye Stadium Course;La Quinta Country Club;Nicklaus Tournament Course",
+    "start_date": "2025-01-16",
+    "end_date": "2025-01-19",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 10006,
+    "event_name": "Hero Dubai Desert Classic",
+    "course": "Emirates GC",
+    "start_date": "2025-01-16",
+    "end_date": "2025-01-19",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 4,
+    "event_name": "Farmers Insurance Open",
+    "course": "Torrey Pines Golf Course (South Course);Torrey Pines Golf Course (North Course)",
+    "start_date": "2025-01-22",
+    "end_date": "2025-01-25",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 10007,
+    "event_name": "Ras Al Khaimah Championship",
+    "course": "Al Hamra GC",
+    "start_date": "2025-01-23",
+    "end_date": "2025-01-26",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 5,
+    "event_name": "AT&T Pebble Beach Pro-Am",
+    "course": "Pebble Beach Golf Links;Spyglass Hill Golf Course",
+    "start_date": "2025-01-30",
+    "end_date": "2025-02-02",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 10008,
+    "event_name": "Bapco Energies Bahrain Championship",
+    "course": "Royal GC",
+    "start_date": "2025-01-30",
+    "end_date": "2025-02-02",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 3,
+    "event_name": "WM Phoenix Open",
+    "course": "TPC Scottsdale (Stadium Course)",
+    "start_date": "2025-02-06",
+    "end_date": "2025-02-09",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 10009,
+    "event_name": "Commercial Bank Qatar Masters",
+    "course": "Doha GC",
+    "start_date": "2025-02-06",
+    "end_date": "2025-02-09",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 7,
+    "event_name": "The Genesis Invitational",
+    "course": "Torrey Pines Golf Course (South Course)",
+    "start_date": "2025-02-13",
+    "end_date": "2025-02-16",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 540,
+    "event_name": "Mexico Open at VidantaWorld",
+    "course": "VidantaWorld",
+    "start_date": "2025-02-20",
+    "end_date": "2025-02-23",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 10010,
+    "event_name": "Magical Kenya Open",
+    "course": "Muthaiga GC",
+    "start_date": "2025-02-20",
+    "end_date": "2025-02-23",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 10,
+    "event_name": "Cognizant Classic in The Palm Beaches",
+    "course": "PGA National Resort (The Champion Course)",
+    "start_date": "2025-02-27",
+    "end_date": "2025-03-02",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 10011,
+    "event_name": "Investec South African Open Championship",
+    "course": "Durban CC",
+    "start_date": "2025-02-27",
+    "end_date": "2025-03-02",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 9,
+    "event_name": "Arnold Palmer Invitational presented by Mastercard",
+    "course": "Arnold Palmer's Bay Hill Club & Lodge",
+    "start_date": "2025-03-06",
+    "end_date": "2025-03-09",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 483,
+    "event_name": "Puerto Rico Open",
+    "course": "Grand Reserve Golf Club",
+    "start_date": "2025-03-06",
+    "end_date": "2025-03-09",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 10012,
+    "event_name": "Joburg Open",
+    "course": "Houghton GC",
+    "start_date": "2025-03-06",
+    "end_date": "2025-03-09",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 11,
+    "event_name": "THE PLAYERS Championship",
+    "course": "TPC Sawgrass (THE PLAYERS Stadium Course)",
+    "start_date": "2025-03-13",
+    "end_date": "2025-03-16",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 10013,
+    "event_name": "Porsche Singapore Classic",
+    "course": "Laguna National Golf Resort Club",
+    "start_date": "2025-03-20",
+    "end_date": "2025-03-23",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 475,
+    "event_name": "Valspar Championship",
+    "course": "Innisbrook Resort (Copperhead Course)",
+    "start_date": "2025-03-20",
+    "end_date": "2025-03-23",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 20,
+    "event_name": "Texas Children's Houston Open",
+    "course": "Memorial Park Golf Course",
+    "start_date": "2025-03-27",
+    "end_date": "2025-03-30",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 10014,
+    "event_name": "Hero Indian Open",
+    "course": "DLF G&CC",
+    "start_date": "2025-03-27",
+    "end_date": "2025-03-30",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 41,
+    "event_name": "Valero Texas Open",
+    "course": "TPC San Antonio (Oaks Course)",
+    "start_date": "2025-04-03",
+    "end_date": "2025-04-06",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 14,
+    "event_name": "Masters Tournament",
+    "course": "Augusta National Golf Club",
+    "start_date": "2025-04-10",
+    "end_date": "2025-04-13",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 12,
+    "event_name": "RBC Heritage",
+    "course": "Harbour Town Golf Links",
+    "start_date": "2025-04-17",
+    "end_date": "2025-04-20",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 522,
+    "event_name": "Corales Puntacana Championship",
+    "course": "Puntacana Resort & Club (Corales Golf Course)",
+    "start_date": "2025-04-17",
+    "end_date": "2025-04-20",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 10015,
+    "event_name": "Volvo China Open",
+    "course": "Enhance Anting GC",
+    "start_date": "2025-04-17",
+    "end_date": "2025-04-20",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 18,
+    "event_name": "Zurich Classic of New Orleans",
+    "course": "TPC Louisiana",
+    "start_date": "2025-04-24",
+    "end_date": "2025-04-27",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 10016,
+    "event_name": "Hainan Classic",
+    "course": "Blackstone Course, Mission Hills Resort Haikou",
+    "start_date": "2025-04-24",
+    "end_date": "2025-04-27",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 19,
+    "event_name": "THE CJ CUP Byron Nelson",
+    "course": "TPC Craig Ranch",
+    "start_date": "2025-05-01",
+    "end_date": "2025-05-04",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 480,
+    "event_name": "Truist Championship",
+    "course": "The Philadelphia Cricket Club (Wissahickon Course)",
+    "start_date": "2025-05-08",
+    "end_date": "2025-05-11",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 553,
+    "event_name": "ONEflight Myrtle Beach Classic",
+    "course": "Dunes Golf and Beach Club",
+    "start_date": "2025-05-08",
+    "end_date": "2025-05-11",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 10017,
+    "event_name": "Turkish Airlines Open",
+    "course": "Regnum Carya",
+    "start_date": "2025-05-08",
+    "end_date": "2025-05-11",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 33,
+    "event_name": "PGA Championship",
+    "course": "Quail Hollow Club",
+    "start_date": "2025-05-15",
+    "end_date": "2025-05-18",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 10018,
+    "event_name": "Soudal Open",
+    "course": "Rinkven International GC",
+    "start_date": "2025-05-22",
+    "end_date": "2025-05-25",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 21,
+    "event_name": "Charles Schwab Challenge",
+    "course": "Colonial Country Club",
+    "start_date": "2025-05-22",
+    "end_date": "2025-05-25",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 23,
+    "event_name": "the Memorial Tournament presented by Workday",
+    "course": "Muirfield Village Golf Club",
+    "start_date": "2025-05-29",
+    "end_date": "2025-06-01",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 10019,
+    "event_name": "Austrian Alpine Open presented by SalzburgerLand",
+    "course": "Gut Altentann GC",
+    "start_date": "2025-05-29",
+    "end_date": "2025-06-01",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 32,
+    "event_name": "RBC Canadian Open",
+    "course": "TPC Toronto at Osprey Valley (North Course)",
+    "start_date": "2025-06-05",
+    "end_date": "2025-06-08",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 10020,
+    "event_name": "KLM Open",
+    "course": "The International",
+    "start_date": "2025-06-05",
+    "end_date": "2025-06-08",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 26,
+    "event_name": "U.S. Open",
+    "course": "Oakmont Country Club",
+    "start_date": "2025-06-12",
+    "end_date": "2025-06-15",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 34,
+    "event_name": "Travelers Championship",
+    "course": "TPC River Highlands",
+    "start_date": "2025-06-19",
+    "end_date": "2025-06-22",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 524,
+    "event_name": "Rocket Classic",
+    "course": "Detroit Golf Club",
+    "start_date": "2025-06-26",
+    "end_date": "2025-06-29",
+    "synced_at": "2025-06-24T22:24:17.119701+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 10021,
+    "event_name": "Italian Open",
+    "course": "Argentario GC",
+    "start_date": "2025-06-26",
+    "end_date": "2025-06-29",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 30,
+    "event_name": "John Deere Classic",
+    "course": "TPC Deere Run",
+    "start_date": "2025-07-03",
+    "end_date": "2025-07-06",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 10022,
+    "event_name": "BMW International Open",
+    "course": "Golfclub München Eichenried",
+    "start_date": "2025-07-03",
+    "end_date": "2025-07-06",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 518,
+    "event_name": "ISCO Championship",
+    "course": "Hurstbourne Country Club (Championship Course)",
+    "start_date": "2025-07-10",
+    "end_date": "2025-07-13",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 541,
+    "event_name": "Genesis Scottish Open",
+    "course": "The Renaissance Club",
+    "start_date": "2025-07-10",
+    "end_date": "2025-07-13",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 100,
+    "event_name": "The Open Championship",
+    "course": "Royal Portrush Golf Club",
+    "start_date": "2025-07-17",
+    "end_date": "2025-07-20",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 472,
+    "event_name": "Barracuda Championship",
+    "course": "Tahoe Mountain Club (Old Greenwood)",
+    "start_date": "2025-07-17",
+    "end_date": "2025-07-20",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 525,
+    "event_name": "3M Open",
+    "course": "TPC Twin Cities",
+    "start_date": "2025-07-24",
+    "end_date": "2025-07-27",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 13,
+    "event_name": "Wyndham Championship",
+    "course": "Sedgefield Country Club",
+    "start_date": "2025-07-31",
+    "end_date": "2025-08-03",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 27,
+    "event_name": "FedEx St. Jude Championship",
+    "course": "TPC Southwind",
+    "start_date": "2025-08-07",
+    "end_date": "2025-08-10",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 28,
+    "event_name": "BMW Championship",
+    "course": "Caves Valley Golf Club",
+    "start_date": "2025-08-14",
+    "end_date": "2025-08-17",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 10023,
+    "event_name": "Danish Golf Championship",
+    "course": "Furesø Golf Klub",
+    "start_date": "2025-08-14",
+    "end_date": "2025-08-17",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 10024,
+    "event_name": "Betfred British Masters hosted by Sir Nick Faldo",
+    "course": "The Belfry",
+    "start_date": "2025-08-21",
+    "end_date": "2025-08-24",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 60,
+    "event_name": "TOUR Championship",
+    "course": "East Lake Golf Club",
+    "start_date": "2025-08-21",
+    "end_date": "2025-08-24",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 10025,
+    "event_name": "Omega European Masters",
+    "course": "Crans-sur-Sierre GC",
+    "start_date": "2025-08-28",
+    "end_date": "2025-08-31",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 10026,
+    "event_name": "Amgen Irish Open",
+    "course": "The K Club",
+    "start_date": "2025-09-04",
+    "end_date": "2025-09-07",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 464,
+    "event_name": "Procore Championship",
+    "course": "Silverado Resort (North Course)",
+    "start_date": "2025-09-11",
+    "end_date": "2025-09-14",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 10027,
+    "event_name": "BMW PGA Championship",
+    "course": "Wentworth Club",
+    "start_date": "2025-09-11",
+    "end_date": "2025-09-14",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 10028,
+    "event_name": "FedEx Open de France",
+    "course": "Golf de Saint-Nom-La-Bretèche",
+    "start_date": "2025-09-18",
+    "end_date": "2025-09-21",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 468,
+    "event_name": "Ryder Cup",
+    "course": "TBD",
+    "start_date": "2025-09-25",
+    "end_date": "2025-09-28",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 10029,
+    "event_name": "Alfred Dunhill Links Championship",
+    "course": "Old Course St. Andrews",
+    "start_date": "2025-10-02",
+    "end_date": "2025-10-05",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 54,
+    "event_name": "Sanderson Farms Championship",
+    "course": "The Country Club of Jackson",
+    "start_date": "2025-10-02",
+    "end_date": "2025-10-05",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 527,
+    "event_name": "Baycurrent Classic",
+    "course": "Yokohama Country Club",
+    "start_date": "2025-10-09",
+    "end_date": "2025-10-12",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 10030,
+    "event_name": "acciona Open de España presented by Madrid",
+    "course": "Club de Campo Villa de Madrid",
+    "start_date": "2025-10-09",
+    "end_date": "2025-10-12",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 554,
+    "event_name": "Black Desert Championship",
+    "course": "Black Desert Resort",
+    "start_date": "2025-10-23",
+    "end_date": "2025-10-26",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 10031,
+    "event_name": "Genesis Championship",
+    "course": "TBC",
+    "start_date": "2025-10-23",
+    "end_date": "2025-10-26",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 457,
+    "event_name": "World Wide Technology Championship",
+    "course": "El Cardonal at Diamante",
+    "start_date": "2025-11-06",
+    "end_date": "2025-11-09",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 10032,
+    "event_name": "Abu Dhabi Championship",
+    "course": "Yas Links",
+    "start_date": "2025-11-06",
+    "end_date": "2025-11-09",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 10033,
+    "event_name": "DP World Tour Championship",
+    "course": "Jumeirah Golf Estates",
+    "start_date": "2025-11-13",
+    "end_date": "2025-11-16",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "euro"
+  },
+  {
+    "event_id": 528,
+    "event_name": "Butterfield Bermuda Championship",
+    "course": "Port Royal Golf Course",
+    "start_date": "2025-11-13",
+    "end_date": "2025-11-16",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 493,
+    "event_name": "The RSM Classic",
+    "course": "Sea Island Golf Club (Seaside Course);Sea Island Golf Club (Plantation Course)",
+    "start_date": "2025-11-20",
+    "end_date": "2025-11-23",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  },
+  {
+    "event_id": 478,
+    "event_name": "Hero World Challenge",
+    "course": "Albany GC",
+    "start_date": "2025-12-04",
+    "end_date": "2025-12-07",
+    "synced_at": "2025-06-03T22:52:41.655988+00:00",
+    "tour": "pga"
+  }
+]

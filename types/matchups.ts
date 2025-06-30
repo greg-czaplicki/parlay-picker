@@ -16,11 +16,11 @@ export interface BaseMatchupRow {
 
 // Interface for 3-ball matchups
 export interface Supabase3BallMatchupRow extends BaseMatchupRow {
-  player1_dg_id: number;
+  player1_dg_id: bigint;
   player1_name: string;
-  player2_dg_id: number;
+  player2_dg_id: bigint;
   player2_name: string;
-  player3_dg_id: number | null;
+  player3_dg_id: bigint | null;
   player3_name: string | null;
   odds1: number | null;
   odds2: number | null;
@@ -35,9 +35,9 @@ export interface Supabase3BallMatchupRow extends BaseMatchupRow {
 
 // Interface for 2-ball matchups
 export interface Supabase2BallMatchupRow extends BaseMatchupRow {
-  player1_dg_id: number;
+  player1_dg_id: bigint;
   player1_name: string;
-  player2_dg_id: number;
+  player2_dg_id: bigint;
   player2_name: string;
   odds1: number | null;
   odds2: number | null;
@@ -51,7 +51,7 @@ export type MatchupRow = Supabase2BallMatchupRow | Supabase3BallMatchupRow;
 
 export interface PlayerData {
   id: string;
-  dg_id: number;
+  dg_id: bigint;
   name: string;
   odds: number | null;
   dgOdds: number | null;
@@ -78,7 +78,7 @@ export const isSupabase2BallMatchupRow = (row: MatchupRow): row is Supabase2Ball
 // Player data structure
 export interface PlayerData {
   id: string;
-  dg_id: number;
+  dg_id: bigint;
   name: string;
   odds: number | null;
   dgOdds: number | null;
@@ -87,7 +87,7 @@ export interface PlayerData {
 
 // Interface for live tournament stats
 export interface LiveTournamentStat {
-  dg_id: number;
+  dg_id: bigint;
   player_name: string;
   event_name: string;
   round_num: string;

@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
 
     // Verify event exists
     const { data: tournament, error: tournamentError } = await supabase
-      .from('tournaments')
+      .from('tournaments_v2')
       .select('event_id, event_name, tour')
       .eq('event_id', eventId)
       .single()
@@ -150,7 +150,7 @@ async function getEventsWithUnsettledParlays(supabase: any) {
 
   // Now fetch tournament info for these events
   const { data: tournamentData, error: tournamentError } = await supabase
-    .from('tournaments')
+    .from('tournaments_v2')
     .select('event_id, event_name, tour')
     .in('event_id', eventIds)
 

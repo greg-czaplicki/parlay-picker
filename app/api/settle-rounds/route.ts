@@ -143,7 +143,7 @@ async function findCompletedRoundsWithUnsettledParlays(supabase: any): Promise<C
     
     // Get tournament info
     const { data: tournament } = await supabase
-      .from('tournaments')
+      .from('tournaments_v2')
       .select('event_name, tour')
       .eq('event_id', eventId)
       .single();
@@ -201,7 +201,7 @@ async function isRoundComplete(
   try {
     // Get tournament info to determine tour
     const { data: tournament } = await supabase
-      .from('tournaments')
+      .from('tournaments_v2')
       .select('tour')
       .eq('event_id', eventId)
       .single()

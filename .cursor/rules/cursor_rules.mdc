@@ -3,6 +3,7 @@ description: Guidelines for creating and maintaining Cursor rules to ensure cons
 globs: .cursor/rules/*.mdc
 alwaysApply: true
 ---
+
 - **Required Rule Structure:**
   ```markdown
   ---
@@ -49,55 +50,4 @@ alwaysApply: true
   - Keep descriptions concise
   - Include both DO and DON'T examples
   - Reference actual code over theoretical examples
-  - Use consistent formatting across rules
-
-- **Use pnpm for all dependency management**
-  - All install, add, remove, and update commands must use pnpm, not npm or yarn
-  - Example:
-    ```sh
-    pnpm add @tanstack/react-query @tanstack/react-query-devtools
-    pnpm remove some-package
-    pnpm install
-    ```
-  - All documentation, scripts, and onboarding instructions must reference pnpm
-  - Do not use npm or yarn for any package management tasks
-  - If a script or CI step references npm or yarn, update it to use pnpm
-  - Reference: [pnpm documentation](mdc:https:/pnpm.io)
-
-- **Always use the queryKeys factory from [query-keys.ts](mdc:lib/query-keys.ts) for all React Query queryKey definitions**
-  - Do not use inline arrays for query keys
-  - Reference the query-keys.ts file for all cache key construction
-  - Ensures type safety, cache consistency, and easier invalidation
-  - Example:
-    ```typescript
-    // ✅ DO: Use the factory
-    queryKey: queryKeys.matchups.byEventAndType(eventId, '3ball')
-    queryKey: queryKeys.playerData.season({ dataSource })
-    queryKey: queryKeys.playerData.live(eventId, roundFilter)
-    ```
-    ```typescript
-    // ❌ DON'T: Use inline arrays
-    queryKey: ['matchups', 'event', eventId, '3ball']
-    queryKey: ['playerData', 'season', dataSource]
-    ```
-  - Update all hooks and components to follow this pattern
-  - Reference: [lib/query-keys.ts](mdc:lib/query-keys.ts)
-
-- **Use Supabase MCP tools for all DB work**
-  - All schema changes, migrations, and queries must be performed using the Supabase MCP tools (see dev_workflow and taskmaster rules)
-  - Do not use manual SQL, the Supabase dashboard, or other migration tools
-  - Ensures auditability, repeatability, and team visibility
-  - Example:
-    - ✅ DO: Use MCP tool to create/drop tables, add columns, or run migrations
-    - ❌ DON'T: Edit schema directly in the dashboard or run raw SQL outside MCP
-  - Reference: [dev_workflow.mdc](mdc:.cursor/rules/dev_workflow.mdc), [taskmaster.mdc](mdc:.cursor/rules/taskmaster.mdc)
-
-- **Task Master task/subtask workflow**
-  - Always check the current Task Master task/subtask before starting any work
-  - Mark the current subtask as 'in-progress' when you begin
-  - When you believe a task/subtask is complete, provide a clear notification for user review and confirmation before marking as 'done'
-  - Ensures traceability, review, and alignment with project priorities
-  - Example:
-    - ✅ DO: Check and update subtask status in MCP before/after coding
-    - ❌ DON'T: Work on code without referencing or updating the task/subtask status
-  - Reference: [dev_workflow.mdc](mdc:.cursor/rules/dev_workflow.mdc) 
+  - Use consistent formatting across rules 

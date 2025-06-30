@@ -1,0 +1,177 @@
+# Task ID: 18
+# Title: Task #18: Refactor PlayerTable Component for Performance and Maintainability
+# Status: done
+# Dependencies: None
+# Priority: medium
+# Description: Refactor the PlayerTable and related components/hooks to eliminate performance issues, reduce re-renders, and improve overall maintainability while enhancing the user experience.
+# Details:
+## Objectives
+- Eliminate infinite render loops and excessive React Query fetches
+- Implement proper component architecture with separation of concerns
+- Optimize React performance with appropriate memoization
+
+## Implementation Details
+1. **Data Fetching Layer**:
+   - Create dedicated React Query hooks for player data fetching
+   - Implement proper query keys and caching strategies
+   - Add suspense boundaries for loading states
+   - Use React Server Components where applicable for data fetching
+
+2. **Component Structure**:
+   - Separate the PlayerTable into smaller, focused components:
+     - PlayerTableContainer (manages data fetching)
+     - PlayerTablePresentation (pure presentation component)
+     - PlayerTableFilters (handles filter UI and logic)
+     - PlayerTablePagination (handles pagination)
+   - Ensure each component has a single responsibility
+
+3. **React Table Implementation**:
+   - Use memoized column definitions (useCallback/useMemo)
+   - Implement memoized data transformations
+   - Optimize sorting and filtering functions
+   - Follow React Table best practices for performance
+
+4. **UI/UX Improvements**:
+   - Implement clear loading states using Suspense or skeleton loaders
+   - Add proper error handling with user-friendly messages
+   - Improve table layout for better readability
+   - Ensure responsive design for all screen sizes
+   - Implement Shadcn UI and Radix UI components for consistent styling
+   - Use Tailwind for custom styling needs
+
+5. **Code Quality**:
+   - Remove all console.log statements and debugging code
+   - Ensure all hooks follow React's Rules of Hooks
+   - Add comprehensive JSDoc comments
+   - Follow project conventions for file structure
+   - Implement proper TypeScript typing
+
+6. **Accessibility**:
+   - Ensure proper ARIA attributes on table elements
+   - Implement keyboard navigation
+   - Test with screen readers
+   - Ensure sufficient color contrast
+
+7. **Documentation**:
+   - Document the new component architecture
+   - Create a migration guide for any breaking changes
+   - Document any new patterns or conventions introduced
+
+## Dependencies
+- React Query for data fetching
+- React Table for table implementation
+- Shadcn UI and Radix UI for components
+- Tailwind CSS for styling
+
+# Test Strategy:
+## Testing Approach
+
+1. **Unit Tests**:
+   - Test each individual component in isolation
+   - Mock React Query hooks and data fetching
+   - Verify proper rendering of loading, error, and success states
+   - Test memoization effectiveness by monitoring render counts
+   - Verify proper prop passing between components
+
+2. **Integration Tests**:
+   - Test the complete PlayerTable with all subcomponents
+   - Verify data flows correctly through the component hierarchy
+   - Test sorting functionality with different column types
+   - Test filtering with various filter combinations
+   - Verify pagination works correctly
+
+3. **Performance Testing**:
+   - Use React DevTools Profiler to measure render counts
+   - Compare before/after render performance
+   - Verify elimination of infinite loops using console logging
+   - Test with large datasets (100+ rows) to ensure smooth performance
+   - Measure and compare initial load time and interaction responsiveness
+
+4. **Accessibility Testing**:
+   - Run automated accessibility tests (e.g., axe, lighthouse)
+   - Perform manual keyboard navigation testing
+   - Test with screen readers
+   - Verify proper focus management
+
+5. **Responsive Testing**:
+   - Test on multiple screen sizes (mobile, tablet, desktop)
+   - Verify table layout adapts appropriately
+   - Test touch interactions on mobile devices
+
+6. **User Acceptance Criteria**:
+   - Table loads player data without infinite loops or excessive fetches
+   - Sorting and filtering work correctly and efficiently
+   - Loading states are clearly indicated
+   - Error states provide helpful information
+   - Table is responsive and accessible
+   - Performance is noticeably improved from previous implementation
+   - All project code conventions are followed
+
+7. **Documentation Verification**:
+   - Review migration guide for completeness
+   - Verify component documentation matches implementation
+   - Ensure new patterns are clearly explained
+
+# Subtasks:
+## 1. Create Dedicated Data Fetching Layer with React Query [done]
+### Dependencies: None
+### Description: Implement a dedicated data fetching layer using React Query to eliminate excessive fetches and implement proper caching strategies.
+### Details:
+1. Create a `usePlayersQuery.ts` hook that encapsulates all player data fetching logic
+2. Implement proper query keys for effective caching
+3. Add suspense boundaries for loading states
+4. Configure proper stale time and cache time settings
+5. Implement error handling within the query hook
+6. Add pagination, sorting, and filtering parameters to the query
+7. Use React Query's built-in state management for loading/error states
+
+## 2. Refactor PlayerTable into Smaller Component Architecture [done]
+### Dependencies: 18.1
+### Description: Break down the monolithic PlayerTable component into smaller, focused components with clear separation of concerns.
+### Details:
+1. Create a PlayerTableContainer component that manages data fetching using the new query hook
+2. Implement a pure PlayerTablePresentation component that receives data via props
+3. Create separate PlayerTableFilters component for filter UI and logic
+4. Build a PlayerTablePagination component for pagination controls
+5. Ensure each component has a single responsibility
+6. Implement proper prop typing with TypeScript
+7. Use React.memo() for components that don't need frequent re-renders
+
+## 3. Optimize React Table Implementation with Memoization [done]
+### Dependencies: 18.2
+### Description: Implement performance optimizations for React Table to reduce unnecessary re-renders and improve overall table performance.
+### Details:
+1. Use useMemo for column definitions to prevent recreation on each render
+2. Implement useCallback for sorting and filtering functions
+3. Memoize data transformations that process the raw API data
+4. Follow React Table best practices for virtualization if dealing with large datasets
+5. Optimize row selection and expansion logic if applicable
+6. Ensure proper key usage for list rendering
+7. Implement debouncing for filter inputs to prevent excessive re-renders
+
+## 4. Enhance UI/UX with Loading States and Accessibility [done]
+### Dependencies: 18.2, 18.3
+### Description: Improve the user experience by implementing proper loading states, error handling, and accessibility features.
+### Details:
+1. Implement skeleton loaders during data fetching
+2. Add user-friendly error messages with retry options
+3. Improve table layout for better readability using Shadcn UI and Tailwind
+4. Ensure responsive design for all screen sizes
+5. Add proper ARIA attributes to table elements
+6. Implement keyboard navigation for the table
+7. Ensure sufficient color contrast for all UI elements
+8. Test with screen readers to verify accessibility
+
+## 5. Clean Up Code and Create Documentation [done]
+### Dependencies: 18.1, 18.2, 18.3, 18.4
+### Description: Remove debugging code, improve code quality, and create comprehensive documentation for the refactored components.
+### Details:
+1. Remove all console.log statements and debugging code
+2. Ensure all hooks follow React's Rules of Hooks
+3. Add comprehensive JSDoc comments to all components and functions
+4. Follow project conventions for file structure
+5. Document the new component architecture with diagrams
+6. Create a migration guide for any breaking changes
+7. Document new patterns or conventions introduced
+8. Add inline comments for complex logic
+

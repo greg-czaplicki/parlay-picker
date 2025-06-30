@@ -1,0 +1,244 @@
+# Task ID: 23
+# Title: Refactor Database and Application for Machine Learning Readiness
+# Status: in-progress
+# Dependencies: None
+# Priority: medium
+# Description: Restructure the database schema and application logic to capture, store, and normalize betting data in a format suitable for machine learning analysis, including outcome tracking, feature snapshotting, and context preservation. This will enable future predictive modeling and ML workflows.
+# Details:
+This epic covers all work needed to make betting data ML-ready: outcome/result fields, feature snapshotting, user context logging, ID normalization, data migration, and ML-ready API/docs.
+
+# Test Strategy:
+
+
+# Subtasks:
+## 1. Update Database Schema with Outcome Fields [done]
+### Dependencies: None
+### Description: Add outcome/result fields to parlays and parlay_picks, with indexes and constraints for ML labeling.
+### Details:
+1. Design ENUMs and new fields for parlays and parlay_picks
+2. Write Supabase migration to add new fields
+3. Add indexes and update constraints/triggers
+4. Update TypeScript types/interfaces for new fields
+5. Write and run migration tests
+<info added on 2025-05-16T22:47:58.856Z>
+1. Design ENUMs and new fields for parlays and parlay_picks
+   - Add ENUM 'outcome' to parlays: values ('win', 'loss', 'push')
+   - Add DECIMAL 'payout_amount' to parlays
+   - Add ENUM 'outcome' to parlay_picks: values ('win', 'loss', 'push', 'void')
+   - Consider nullable for historical data
+
+2. Write Supabase migration to add new fields
+   - Use Supabase MCP migration tools for all schema changes
+   - Draft migration SQL for review before applying
+   - Plan for data migration/handling nulls for old records
+
+3. Add indexes and update constraints/triggers
+   - Add indexes on outcome fields for fast ML queries
+   - Review current parlays and parlay_picks schema for existing fields that may overlap (e.g., status, payout)
+   - Check for any triggers or constraints that reference status/outcome
+   - Update constraints/triggers if any logic depends on bet status
+
+4. Update TypeScript types/interfaces for new fields
+   - Confirm naming conventions (snake_case, etc.)
+   - Ensure no conflicts with existing data types or reserved words
+
+5. Write and run migration tests
+   - Verify schema changes
+   - Test data integrity after migration
+</info added on 2025-05-16T22:47:58.856Z>
+<info added on 2025-06-03T23:20:10.865Z>
+**COMPLETED: Database Schema Update with Outcome Fields**
+
+**What we accomplished:**
+1. **Created ENUM Types**: `outcome_type` for parlays ('win', 'loss', 'push') and `pick_outcome_type` for parlay_picks ('win', 'loss', 'push', 'void')
+2. **Converted Existing Fields**: Both `parlays.outcome` and `parlay_picks.outcome` converted from text to proper ENUMs
+3. **Added Performance Indexes**: Created indexes on outcome fields for ML query optimization plus composite indexes with created_at
+4. **Updated TypeScript Types**: Fixed interfaces in `app/actions/matchups.ts` to match actual schema with proper ENUM values
+5. **Fixed Code Dependencies**: Updated `batchLoadParlayPicksData` function to work with new schema structure
+
+**Database Migration Applied:**
+- `convert_outcome_fields_to_enums` migration successfully applied
+- All indexes created and verified
+- No data conflicts (tables were empty)
+
+**Schema is now ML-ready** with proper outcome tracking and optimized for analytics queries. Ready to proceed with Feature Snapshotting System (subtask 23.2).
+</info added on 2025-06-03T23:20:10.865Z>
+
+## 2. Implement Feature Snapshotting System [done]
+### Dependencies: None
+### Description: Create a bet_snapshots table and logic to capture point-in-time player, matchup, and odds data at bet time.
+### Details:
+1. Design bet_snapshots table schema (columns, types, JSON structure)
+2. Create Supabase migration for bet_snapshots
+3. Implement backend logic to capture snapshot at bet time
+4. Integrate snapshot logic into bet placement flow
+5. Write unit/integration tests for snapshotting
+<info added on 2025-05-16T23:45:29.957Z>
+1. Design bet_snapshots table schema (columns, types, JSON structure)
+2. Create Supabase migration for bet_snapshots
+3. Implement backend logic to capture snapshot at bet time
+4. Integrate snapshot logic into bet placement flow
+5. Write unit/integration tests for snapshotting
+6. Update the /api/settle endpoint to use live_tournament_stats for scoring:
+   a. Review current settlement logic and identify data sources in use
+   b. Refactor endpoint to use live_tournament_stats as the canonical source
+   c. Ensure all bet/parlay outcome determinations use live_tournament_stats
+   d. Handle edge cases (missing stats, incomplete rounds, etc.)
+   e. Verify UI and backend use the same data source and matching logic
+   f. Add integration tests for various settlement scenarios
+   g. Document changes in code and update relevant documentation
+</info added on 2025-05-16T23:45:29.957Z>
+<info added on 2025-05-16T23:46:10.886Z>
+The /api/settle endpoint has been successfully refactored to use live_tournament_stats as the canonical data source for all scoring and settlement logic. The implementation includes:
+
+1. Efficient data fetching through batching of all unsettled picks and their associated matchups
+2. Collection of all relevant player names and round numbers from the matchups
+3. A single optimized query to fetch live_tournament_stats for all players and rounds needed
+4. Outcome determination logic (win/loss/push) that uses the 'today' field from live_tournament_stats for the correct round and player
+5. Support for both 2-ball and 3-ball matchup types
+6. Consistent pick and parlay outcome updates using the live stats data
+7. Comprehensive code comments documenting the new logic and implementation details
+
+This refactoring ensures complete alignment between the backend settlement logic and the UI, with both now using the same canonical live stats source. This consistency eliminates potential discrepancies in outcome determination and provides a more reliable betting experience.
+</info added on 2025-05-16T23:46:10.886Z>
+<info added on 2025-05-16T23:52:16.079Z>
+A bug has been identified in the settlement logic of the /api/settle endpoint. The issue involves incorrect winner determination in golf matchups, specifically with matchup 970 where Daniel Berger was incorrectly marked as 'win' when Sergio Garcia should have won with a lower 'Today' score of -3.
+
+The root causes of this bug are:
+1. Improper handling of non-numeric values in the 'today' field (such as 'E' for even par)
+2. Logic flaw where a player could be awarded a win if they were the only one with a valid score
+3. Inconsistent parsing of score values across the codebase
+
+The fix implementation includes:
+1. Added a parseToday helper function that:
+   - Converts 'E'/'e' string values to numeric 0
+   - Preserves numeric values
+   - Returns null for all other invalid values
+2. Modified the validScores filtering to include all players with valid 'today' values
+3. Enhanced the win condition logic to require:
+   - The picked player must have the lowest score
+   - At least one other player must have a valid score for comparison
+   - In case of a tie for lowest score, outcome is 'push'
+4. Added detailed logging for edge cases to assist with future debugging
+5. Added test cases specifically for 'E' par scores and single-player valid score scenarios
+
+This fix ensures proper settlement of golf matchups by correctly handling all score formats and edge cases, maintaining consistency between the UI display and backend settlement logic.
+</info added on 2025-05-16T23:52:16.079Z>
+<info added on 2025-06-03T23:25:53.588Z>
+The bet_snapshots implementation has been successfully completed with the following components:
+
+1. Created a comprehensive SnapshotService in lib/snapshot-service.ts that:
+   - Captures complete betting context (timestamp, round, event details)
+   - Records full matchup data including players and odds from multiple sources
+   - Stores player skill metrics from player_skill_ratings table
+   - Includes live tournament stats when available
+   - Calculates implied probabilities and group analysis features
+   - Stores all data in the bet_snapshots.snapshot JSONB field
+
+2. Integrated snapshot capture into the bet placement flow:
+   - Modified app/actions/matchups.ts → addParlayPick() function
+   - Updated app/api/parlay-picks/route.ts POST endpoint
+   - Implemented automatic snapshot creation when picks are placed
+   - Added robust error handling to ensure bet placement continues even if snapshot creation fails
+
+3. Developed an analysis API endpoint (app/api/snapshots/route.ts):
+   - Implemented GET /api/snapshots with pagination and filtering options
+   - Created data transformation logic to convert JSONB to flat features for ML
+   - Added summary statistics and outcome analysis capabilities
+   - Implemented optional include_outcomes=true parameter to link snapshots with results
+
+The system now captures ML-ready data including betting context, player metrics, group analysis features, live performance data, and outcome labels, providing a complete dataset for both training and inference.
+</info added on 2025-06-03T23:25:53.588Z>
+
+## 3. Develop User Context Logging [deferred]
+### Dependencies: None
+### Description: Create a bet_context table and frontend tracking to capture filters, UI state, and time spent on options at bet time.
+### Details:
+1. Design bet_context table schema
+2. Create Supabase migration for bet_context
+3. Implement React hooks for filter/UI tracking
+4. Add context data to bet submission payload
+5. Write Cypress/Jest tests for context capture
+
+## 4. Normalize IDs and Establish Relationships [pending]
+### Dependencies: None
+### Description: Audit and standardize IDs, add foreign keys, and update TypeScript interfaces for data integrity.
+### Details:
+1. Audit all tables for ID consistency (choose UUIDs or int)
+2. Write migration scripts to standardize IDs
+3. Add missing foreign key constraints
+4. Create junction tables if needed
+5. Update TypeScript interfaces and ER diagrams
+<info added on 2025-05-17T00:49:46.891Z>
+1. Audit all tables for ID consistency (choose UUIDs or int)
+2. Write migration scripts to standardize IDs
+3. Add missing foreign key constraints
+4. Create junction tables if needed
+5. Update TypeScript interfaces and ER diagrams
+
+Implementation plan for dual ID support in matchups (UUID and DG_ID):
+
+1. Update the matchups table schema:
+   - Add new integer columns: player1_dg_id, player2_dg_id, (and player3_dg_id if 3-ball) to the matchups table
+   - Ensure these columns are properly indexed for performance optimization
+   - Use Supabase MCP migration tools for all schema changes to maintain consistency
+
+2. Update ingestion/parsing logic:
+   - Modify data ingestion pipelines to populate both UUID (application primary key) and DG_ID (DataGolf numeric ID)
+   - Update ETL scripts to fetch and store both identifier types for each player in matchups
+
+3. Update TypeScript interfaces:
+   - Add the new DG_ID fields to matchup-related interfaces and types
+   - Ensure type safety throughout the application when accessing these new fields
+
+4. Backfill existing data:
+   - Develop migration script to populate DG_IDs for all existing matchup records
+   - Use player mapping tables to establish correct relationships between UUIDs and DG_IDs
+
+5. Implement foreign key constraints:
+   - Add appropriate foreign key constraints to maintain referential integrity
+   - Verify constraints work correctly with both ID systems
+
+6. Update table rendering logic:
+   - Modify React components to use playerX_dg_id for stats lookups instead of UUID
+   - Update sortedPlayers and stats-related lookups to use DG_IDs consistently
+   - Test UI components to verify correct stats display
+
+7. Testing and documentation:
+   - Create comprehensive test cases for the dual ID system
+   - Document all changes to schema, code, and processes
+   - Prepare rollback procedures in case of issues
+</info added on 2025-05-17T00:49:46.891Z>
+
+## 5. Create Data Migration Scripts [pending]
+### Dependencies: None
+### Description: Write scripts to backfill new fields, handle nulls, validate, and test rollback for historical data.
+### Details:
+1. Write script to backfill new outcome fields for existing data
+2. Handle nulls/defaults for historical records
+3. Add validation checks for data integrity
+4. Create and test rollback strategy
+5. Run migration on staging and verify
+
+## 6. Create ML-Ready API Endpoints and Documentation [pending]
+### Dependencies: None
+### Description: Build API endpoints for ML data export and write documentation for ML engineers.
+### Details:
+1. Design API contract for ML data export
+2. Implement Next.js API endpoints for bets, snapshots, context
+3. Add pagination/filtering to endpoints
+4. Update TypeScript types and OpenAPI docs (if used)
+5. Write ML data documentation and example queries/notebooks
+
+## 7. Migrate all primary and foreign keys to UUIDs [pending]
+### Dependencies: None
+### Description: Convert all relevant tables (parlays, parlay_picks, users, matchups, etc.) to use UUIDs for primary and foreign keys. Update schema, backfill data, and refactor application logic to use UUIDs throughout.
+### Details:
+1. Add UUID columns to all tables with integer PKs (parlays, parlay_picks, users, matchups, etc.)
+2. Backfill UUIDs for all existing rows
+3. Update all foreign key relationships to use UUIDs
+4. Refactor application logic, API routes, and TypeScript types to use UUIDs
+5. Remove old bigint columns after migration
+6. Test all flows for correct UUID handling
+7. Document the migration process and update onboarding docs
+

@@ -33,7 +33,7 @@ async function fetchCurrentWeekEvents(): Promise<Event[]> {
   const supabase = createBrowserClient();
   const { monday, sunday } = getCurrentWeekRange();
   const { data, error } = await supabase
-    .from('tournaments')
+    .from('tournaments_v2')
     .select('event_id, event_name, start_date, end_date')
     .lte('start_date', sunday)
     .gte('end_date', monday);

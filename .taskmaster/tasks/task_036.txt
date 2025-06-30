@@ -1,0 +1,90 @@
+# Task ID: 36
+# Title: Create SG Data Processing Pipeline
+# Status: pending
+# Dependencies: 35
+# Priority: high
+# Description: Build a data pipeline that extracts SG-relevant data from tournament snapshots, processes it into normalized format, and stores it in optimized tables for analysis. The pipeline should handle historical backfill and ongoing data processing from live tournaments.
+# Details:
+The SG Data Processing Pipeline should be implemented with the following components and considerations:
+
+1. Data Extraction Layer:
+   - Create connectors to tournament data sources to extract raw shot data
+   - Implement snapshot capture mechanism for both historical tournaments and live events
+   - Design a robust error handling system for API failures or data inconsistencies
+   - Include metadata capture (course conditions, weather, tournament specifics)
+
+2. Data Transformation Layer:
+   - Develop normalization routines to standardize shot data across different sources
+   - Implement data cleaning procedures to handle missing values and outliers
+   - Create transformation logic to prepare data for SG calculations
+   - Build player identification and tournament mapping systems
+   - Design course mapping to standardize hole distances and par values
+
+3. SG Calculation Integration:
+   - Integrate with the SG Calculation Engine (Task 35) to process normalized data
+   - Implement batch processing for historical data
+   - Create near-real-time processing for live tournament data
+   - Design caching mechanisms for frequently accessed baseline values
+
+4. Storage Layer:
+   - Design optimized database schema for SG analytics
+   - Implement partitioning strategy for efficient querying (by player, tournament, date)
+   - Create indexing strategy for common query patterns
+   - Develop data versioning to track changes in calculation methodologies
+
+5. Pipeline Orchestration:
+   - Build scheduling system for regular data updates
+   - Implement backfill capabilities for historical tournaments
+   - Create monitoring and alerting for pipeline health
+   - Design logging system for debugging and auditing
+
+6. Performance Considerations:
+   - Implement parallel processing for batch calculations
+   - Design incremental processing for live updates
+   - Create caching strategies for commonly accessed data
+   - Optimize database queries for analytics workloads
+
+7. API Layer:
+   - Develop endpoints for accessing processed SG data
+   - Implement filtering and aggregation capabilities
+   - Create documentation for API consumers
+   - Design versioning strategy for API evolution
+
+# Test Strategy:
+The SG Data Processing Pipeline should be tested using the following approach:
+
+1. Unit Testing:
+   - Test each component of the pipeline in isolation
+   - Verify data extraction functions correctly handle various API responses
+   - Validate transformation logic produces expected output for known inputs
+   - Ensure storage functions correctly write and retrieve data
+
+2. Integration Testing:
+   - Test the complete pipeline flow from extraction to storage
+   - Verify correct integration with the SG Calculation Engine
+   - Test pipeline orchestration with simulated scheduling events
+   - Validate error handling across component boundaries
+
+3. Data Validation Testing:
+   - Create a test dataset with known SG values for validation
+   - Compare pipeline output against manually calculated SG values
+   - Verify data consistency across different processing runs
+   - Test boundary conditions (first/last tournament day, player withdrawals)
+
+4. Performance Testing:
+   - Measure throughput for historical data backfill scenarios
+   - Test latency for live tournament data processing
+   - Verify database query performance for common analytics patterns
+   - Validate system behavior under high load conditions
+
+5. End-to-End Testing:
+   - Process a complete historical tournament and verify results
+   - Simulate live tournament updates and verify incremental processing
+   - Test API endpoints with realistic query patterns
+   - Validate data consistency between raw sources and final analytics tables
+
+6. Regression Testing:
+   - Create automated test suite for continuous validation
+   - Implement data quality checks for ongoing monitoring
+   - Develop comparison tools to detect unexpected changes in SG calculations
+   - Test backward compatibility with existing analytics systems

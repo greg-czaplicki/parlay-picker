@@ -4,13 +4,19 @@ export interface TournamentResult {
   dg_id: number;
   player_name: string;
   event_id: number;
-  event_name: string;
-  start_date: string;
-  finish_position: number | null;
+  final_position: number | null;
   total_score: number | null;
-  missed_cut: boolean;
-  rounds_played: number;
-  round_scores: number[] | null;
+  made_cut: boolean;
+  rounds_completed: number;
+  round_1_score: number | null;
+  round_2_score: number | null;
+  round_3_score: number | null;
+  round_4_score: number | null;
+  tournaments_v2?: {
+    event_id: number;
+    event_name: string;
+    start_date: string;
+  };
 }
 
 export interface PlayerTrend {
@@ -32,18 +38,38 @@ export class TrendsCalculationService {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - (periodCount * 7)); // Approximate weeks
 
-    // Get recent tournament results
-    const { data: results, error } = await this.supabase
-      .from('tournament_results')
-      .select('*')
+    // First get recent tournaments
+    const { data: recentTournaments, error: tourError } = await this.supabase
+      .from('tournaments_v2')
+      .select('event_id, event_name, start_date')
       .gte('start_date', cutoffDate.toISOString().split('T')[0])
       .order('start_date', { ascending: false });
+    
+    if (tourError) throw tourError;
+    if (!recentTournaments || recentTournaments.length === 0) return [];
+    
+    const eventIds = recentTournaments.map(t => t.event_id);
+    
+    // Then get results for those tournaments
+    const { data: results, error } = await this.supabase
+      .from('tournament_results_v2')
+      .select('*')
+      .in('event_id', eventIds);
 
     if (error) throw error;
     if (!results) return [];
+    
+    // Create a map of tournament info
+    const tournamentMap = new Map(recentTournaments.map(t => [t.event_id, t]));
+    
+    // Add tournament info to each result
+    const enrichedResults = results.map(result => ({
+      ...result,
+      tournaments_v2: tournamentMap.get(result.event_id)
+    }));
 
     // Group by player
-    const playerGroups = this.groupResultsByPlayer(results);
+    const playerGroups = this.groupResultsByPlayer(enrichedResults);
     const trends: PlayerTrend[] = [];
 
     for (const [dgId, playerResults] of playerGroups) {
@@ -85,7 +111,7 @@ export class TrendsCalculationService {
     // Sort each player's results by date
     for (const [, playerResults] of groups) {
       playerResults.sort((a, b) => 
-        new Date(b.start_date).getTime() - new Date(a.start_date).getTime()
+        new Date(b.tournaments_v2?.start_date || '').getTime() - new Date(a.tournaments_v2?.start_date || '').getTime()
       );
     }
 
@@ -133,7 +159,7 @@ export class TrendsCalculationService {
     // Top 10 streak
     let top10Streak = 0;
     for (const result of results) {
-      if (result.finish_position && result.finish_position <= 10) {
+      if (result.final_position && result.final_position <= 10) {
         top10Streak++;
       } else {
         break;
@@ -141,15 +167,15 @@ export class TrendsCalculationService {
     }
 
     // Top 5 count
-    const top5Count = results.filter(r => r.finish_position && r.finish_position <= 5).length;
+    const top5Count = results.filter(r => r.final_position && r.final_position <= 5).length;
 
     // Top 3 count
-    const top3Count = results.filter(r => r.finish_position && r.finish_position <= 3).length;
+    const top3Count = results.filter(r => r.final_position && r.final_position <= 3).length;
 
     // Missed cut streak
     let missedCutStreak = 0;
     for (const result of results) {
-      if (result.missed_cut) {
+      if (!result.made_cut) {
         missedCutStreak++;
       } else {
         break;
@@ -157,7 +183,7 @@ export class TrendsCalculationService {
     }
 
     // Made cut percentage
-    const madeCutCount = results.filter(r => !r.missed_cut).length;
+    const madeCutCount = results.filter(r => r.made_cut).length;
     const madeCutPercentage = (madeCutCount / results.length) * 100;
 
     if (top10Streak >= 2) {
@@ -226,14 +252,17 @@ export class TrendsCalculationService {
     validUntil: Date
   ): PlayerTrend[] {
     const trends: PlayerTrend[] = [];
-    const completedTournaments = results.filter(r => r.total_score && r.rounds_played === 4);
+    const completedTournaments = results.filter(r => r.total_score && r.rounds_completed === 4);
     
     if (completedTournaments.length === 0) return trends;
 
-    // Scoring average
-    const avgScore = completedTournaments.reduce((sum, r) => sum + (r.total_score! / 4), 0) / completedTournaments.length;
+    // Scoring average (total_score is now actual total score in v2 schema)
+    const avgScore = completedTournaments.reduce((sum, r) => {
+      const roundAverage = r.total_score! / 4; // Per round average
+      return sum + roundAverage;
+    }, 0) / completedTournaments.length;
 
-    // Sub-70 average tournaments
+    // Sub-70 average tournaments (tournaments where average per round < 70)
     const sub70Count = completedTournaments.filter(r => (r.total_score! / 4) < 70).length;
 
     // Sub-68 average tournaments (exceptional scoring)
@@ -242,9 +271,10 @@ export class TrendsCalculationService {
     // Round analysis for consistent scoring
     const allRoundScores: number[] = [];
     completedTournaments.forEach(tournament => {
-      if (tournament.round_scores) {
-        allRoundScores.push(...tournament.round_scores);
-      }
+      if (tournament.round_1_score) allRoundScores.push(tournament.round_1_score);
+      if (tournament.round_2_score) allRoundScores.push(tournament.round_2_score);
+      if (tournament.round_3_score) allRoundScores.push(tournament.round_3_score);
+      if (tournament.round_4_score) allRoundScores.push(tournament.round_4_score);
     });
 
     const sub70RoundsCount = allRoundScores.filter(score => score < 70).length;
@@ -309,7 +339,7 @@ export class TrendsCalculationService {
     validUntil: Date
   ): PlayerTrend[] {
     const trends: PlayerTrend[] = [];
-    const completedTournaments = results.filter(r => r.total_score && r.rounds_played === 4);
+    const completedTournaments = results.filter(r => r.total_score && r.rounds_completed === 4);
     
     if (completedTournaments.length < 3) return trends;
 

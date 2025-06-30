@@ -327,7 +327,7 @@ export async function POST(req: NextRequest) {
       if (eventName) {
         // Find the event_id
         const { data: eventRows, error: eventError } = await supabase
-          .from('tournaments')
+          .from('tournaments_v2')
           .select('event_id')
           .eq('event_name', eventName)
           .limit(1);
@@ -443,7 +443,7 @@ export async function POST(req: NextRequest) {
     // Upsert all unique players into the players table
     if (allPlayers.length > 0) {
       const { error: upsertError } = await supabase
-        .from('players')
+        .from('players_v2')
         .upsert(allPlayers, { onConflict: 'dg_id' });
       if (upsertError) {
         throw new Error(`Could not upsert players: ${upsertError.message}`);
@@ -460,7 +460,7 @@ export async function POST(req: NextRequest) {
     ];
     // Fetch UUIDs for all DG_IDs
     const { data: playerRows, error: playerError } = await supabase
-      .from('players')
+      .from('players_v2')
       .select('uuid, dg_id')
       .in('dg_id', allDgIds);
     if (playerError) {

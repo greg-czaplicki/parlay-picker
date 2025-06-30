@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
 
     // Get recent tournaments from the tournaments table
     const { data: tournaments, error: tournamentsError } = await supabase
-      .from('tournaments')
+      .from('tournaments_v2')
       .select('event_id, event_name, start_date, end_date')
       .gte('start_date', new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]) // Last 6 months
       .order('start_date', { ascending: false });
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     for (const tournament of tournaments) {
       // Check if we already have results for this tournament
       const { data: existingResults, error: checkError } = await supabase
-        .from('tournament_results')
+        .from('tournament_results_v2')
         .select('id')
         .eq('event_id', tournament.event_id)
         .limit(1);
@@ -41,20 +41,23 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      // Get live stats data for this tournament to extract final results
+      // Get round-by-round data from live_tournament_stats which has actual round scores
       const { data: liveStats, error: liveStatsError } = await supabase
-        .from('latest_live_tournament_stats_view')
+        .from('live_tournament_stats')
         .select(`
           dg_id,
           player_name,
           event_name,
           round_num,
           position,
+          today,
           total,
           thru
         `)
         .eq('event_name', tournament.event_name)
-        .not('position', 'is', null);
+        .not('position', 'is', null)
+        .not('round_num', 'eq', 'event_avg') // Exclude event average records
+        .in('round_num', ['1', '2', '3', '4']); // Only include actual rounds
 
       if (liveStatsError) {
         console.warn(`Error fetching live stats for ${tournament.event_name}:`, liveStatsError);
@@ -118,14 +121,16 @@ export async function POST(req: NextRequest) {
             dg_id: playerId,
             player_name: playerData.player_name,
             event_id: tournament.event_id,
-            event_name: tournament.event_name,
-            start_date: tournament.start_date,
-            end_date: tournament.end_date,
-            finish_position: finishPosition,
+            final_position: finishPosition,
             total_score: totalScore,
-            missed_cut: missedCut,
-            rounds_played: roundsPlayed,
-            round_scores: roundScores.length > 0 ? roundScores : null
+            made_cut: !missedCut,
+            rounds_completed: roundsPlayed,
+            round_1_score: roundScores[0] || null,
+            round_2_score: roundScores[1] || null,
+            round_3_score: roundScores[2] || null,
+            round_4_score: roundScores[3] || null,
+            scoring_average: totalScore && roundsPlayed > 0 ? totalScore / roundsPlayed : null,
+            relative_to_par: null // We don't have course par info here
           });
         }
       }
@@ -143,7 +148,7 @@ export async function POST(req: NextRequest) {
         const batch = resultsToInsert.slice(i, i + batchSize);
         
         const { error: insertError } = await supabase
-          .from('tournament_results')
+          .from('tournament_results_v2')
           .insert(batch);
 
         if (insertError) {

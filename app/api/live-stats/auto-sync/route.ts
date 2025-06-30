@@ -7,7 +7,7 @@ async function getActiveTournaments() {
   const today = new Date().toISOString().split('T')[0]
   
   const { data, error } = await supabase
-    .from('tournaments')
+    .from('tournaments_v2')
     .select('event_id, event_name, start_date, end_date, tour')
     .lte('start_date', today)
     .gte('end_date', today)

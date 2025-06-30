@@ -89,7 +89,7 @@ async function validateTournamentName(apiEventName, tour) {
 
   // 1. Check for exact match
   const { data: exactMatch } = await supabase
-    .from('tournaments')
+    .from('tournaments_v2')
     .select('event_id, event_name, tour, start_date')
     .eq('event_name', apiEventName)
     .eq('tour', tour)
@@ -120,7 +120,7 @@ async function validateTournamentName(apiEventName, tour) {
 
   // 3. Look for fuzzy matches
   const { data: tournaments } = await supabase
-    .from('tournaments')
+    .from('tournaments_v2')
     .select('event_id, event_name, tour, start_date')
     .eq('tour', tour)
     .order('start_date', { ascending: false })

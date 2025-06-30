@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
       country: p.country,
       country_code: p.country_code,
     }))
-    const { error, count } = await supabase.from('players').upsert(upserts, { onConflict: 'dg_id', count: 'exact' })
+    const { error, count } = await supabase.from('players_v2').upsert(upserts, { onConflict: 'dg_id', count: 'exact' })
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ success: true, upserted: upserts.length, count })
   } catch (err: any) {

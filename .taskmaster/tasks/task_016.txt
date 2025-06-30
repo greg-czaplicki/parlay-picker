@@ -1,0 +1,232 @@
+# Task ID: 16
+# Title: Refactor Dashboard Components to Use React Query for Data Fetching
+# Status: done
+# Dependencies: None
+# Priority: high
+# Description: Migrate all data-fetching logic in the Dashboard and its child components from direct API calls and useEffect hooks to React Query custom hooks for improved state management, caching, and error handling.
+# Details:
+This task involves systematically refactoring the data-fetching logic across multiple Dashboard components to use React Query:
+
+1. **MatchupsTable Component**:
+   - Create a `useMatchupsQuery` custom hook
+   - Move all existing data fetching logic from the component to this hook
+   - Ensure proper error handling, loading states, and data transformation
+   - Update component to consume the new hook
+
+2. **RecommendedPicks Component**:
+   - Create a `useRecommendedPicksQuery` custom hook
+   - Migrate existing data fetching from useEffect or direct API calls
+   - Implement proper caching strategy using queryKeys
+   - Update component to use the new hook's loading/error/data states
+
+3. **ParlayBuilder Component**:
+   - Audit for any direct data fetching
+   - If present, create appropriate custom hook(s)
+   - Refactor component to use the new hook(s)
+
+4. **PlayerTable Component**:
+   - Audit for any direct data fetching
+   - If present, create appropriate custom hook(s)
+   - Refactor component to use the new hook(s)
+
+5. **General Refactoring**:
+   - Audit all Dashboard components for any remaining direct Supabase or fetch calls
+   - Create a queryKeys factory if not already present to ensure consistent cache keys
+   - Ensure all hooks follow the same pattern and project conventions
+   - Remove all useEffect-based data fetching
+   - Update component props and interfaces as needed
+
+For each component, follow these steps:
+- Identify all data fetching logic
+- Create a custom hook in a dedicated hooks directory
+- Implement proper loading, error, and success states
+- Use React Query's built-in features for caching, refetching, and invalidation
+- Update the component to use the new hook
+- Remove any redundant state management code
+
+All hooks should follow the project's naming conventions and be placed in the appropriate directory structure. Ensure proper TypeScript typing throughout the refactoring process.
+
+# Test Strategy:
+To verify the successful completion of this task:
+
+1. **Code Review Checklist**:
+   - Confirm all identified components no longer contain direct API calls or useEffect-based data fetching
+   - Verify custom hooks exist for each data fetching need
+   - Ensure hooks use the queryKeys factory consistently
+   - Check that TypeScript types are properly defined and used
+
+2. **Functional Testing**:
+   - Test each refactored component in isolation to verify:
+     - Data is correctly fetched and displayed
+     - Loading states are properly shown
+     - Error states are handled appropriately
+     - Refetching works as expected (e.g., on window focus, manual triggers)
+
+3. **Performance Testing**:
+   - Verify that duplicate requests are properly cached
+   - Confirm that stale data is refreshed according to configured strategies
+   - Check that the React DevTools and React Query DevTools show proper query states
+
+4. **Regression Testing**:
+   - Ensure the Dashboard and all child components function exactly as before
+   - Verify all data is displayed correctly after refactoring
+   - Test edge cases like empty data sets, error responses, and slow connections
+
+5. **Documentation Check**:
+   - Confirm all new hooks are properly documented
+   - Verify that any changes to component props or interfaces are reflected in documentation
+
+The task is complete when all components successfully fetch data through React Query hooks, no direct API calls remain, and all functionality works as expected with improved caching and error handling.
+
+# Subtasks:
+## 1. Create queryKeys factory and setup React Query infrastructure [done]
+### Dependencies: None
+### Description: Set up the foundational React Query infrastructure by creating a queryKeys factory to ensure consistent cache keys across all components and establish project conventions for custom hooks.
+### Details:
+1. Create a `queryKeys.ts` file in a shared utilities directory that exports factory functions for generating consistent query keys for each data type (matchups, recommended picks, etc.)
+2. Set up a standard pattern for React Query custom hooks including error handling, loading states, and data transformation
+3. Configure React Query defaults for the dashboard context (staleTime, cacheTime, refetchOnWindowFocus, etc.)
+4. Create a directory structure for organizing the custom hooks by component or data domain
+5. Document the conventions to be followed for all subsequent hook implementations
+<info added on 2025-05-10T13:19:14.508Z>
+1. Create a `queryKeys.ts` file in a shared utilities directory that exports factory functions for generating consistent query keys for each data type (matchups, recommended picks, etc.)
+2. Set up a standard pattern for React Query custom hooks including error handling, loading states, and data transformation
+3. Configure React Query defaults for the dashboard context (staleTime, cacheTime, refetchOnWindowFocus, etc.)
+4. Create a directory structure for organizing the custom hooks by component or data domain
+5. Document the conventions to be followed for all subsequent hook implementations
+
+Implementation Plan:
+1. Review Existing Query Key Patterns:
+   - Audit the current `lib/query-keys.ts` file for completeness and consistency
+   - Ensure all major data domains (matchups, recommended picks, parlays, players, events, etc.) have a proper namespace and key factory
+   - Add or refactor keys as needed for new hooks that will be created (useMatchupsQuery, useRecommendedPicksQuery, etc.)
+
+2. Directory Structure:
+   - Confirm all custom hooks will be placed in a `hooks/` directory, organized by resource or feature
+   - Establish `lib/query-keys.ts` as the single source of truth for all query keys in the application
+
+3. React Query Provider Configuration:
+   - Review and update the global QueryClient defaults in `app/providers.tsx`:
+     - Set appropriate values for `staleTime` (5 minutes for dashboard data)
+     - Configure `cacheTime` (30 minutes for most resources)
+     - Set sensible defaults for `retry` (3 attempts)
+     - Configure `refetchOnWindowFocus` (true for real-time data, false for static content)
+   - Add detailed code comments explaining the rationale behind each configuration choice
+
+4. Documentation and Conventions:
+   - Add comprehensive usage examples to `lib/query-keys.ts`
+   - Document the standard pattern for all new hooks including:
+     - Consistent naming convention (use[Resource]Query)
+     - Proper query key usage
+     - Standardized error and loading state handling
+     - Data transformation patterns
+
+5. Testing Strategy:
+   - Create unit tests for the queryKeys factory to ensure it generates consistent keys
+   - Test with various parameters to verify key uniqueness and predictability
+</info added on 2025-05-10T13:19:14.508Z>
+
+## 2. Refactor MatchupsTable component to use React Query [done]
+### Dependencies: 16.1
+### Description: Create a useMatchupsQuery custom hook and refactor the MatchupsTable component to use this hook instead of direct API calls or useEffect for data fetching.
+### Details:
+1. Create a `useMatchupsQuery.ts` hook that encapsulates all data fetching logic for matchups
+2. Implement proper error handling, loading states, and data transformation in the hook
+3. Use the queryKeys factory to generate appropriate cache keys
+4. Remove all useEffect-based data fetching from the MatchupsTable component
+5. Update the component to consume the new hook's loading, error, and data states
+6. Implement optimistic updates if the component allows data mutations
+7. Update any component props and interfaces as needed
+<info added on 2025-05-11T12:30:47.774Z>
+1. Create a `useMatchupsQuery.ts` hook that encapsulates all data fetching logic for matchups
+2. Implement proper error handling, loading states, and data transformation in the hook
+3. Use the queryKeys factory to generate appropriate cache keys
+4. Remove all useEffect-based data fetching from the MatchupsTable component
+5. Update the component to consume the new hook's loading, error, and data states
+6. Implement optimistic updates if the component allows data mutations
+7. Update any component props and interfaces as needed
+
+**Implementation Plan for Subtask 16.2: Refactor MatchupsTable component to use React Query**
+
+1. **Audit the MatchupsTable component**
+   - Identify all data-fetching logic (matchups, player stats, etc.) currently using useEffect, Supabase, or direct fetch calls.
+   - Note all props and state related to data fetching, loading, and error handling.
+
+2. **Create useMatchupsQuery custom hook**
+   - Move all matchup data-fetching logic into a new hook in hooks/use-matchups-query.ts.
+   - Use the queryKeys factory for cache keys (e.g., byEventAndType).
+   - Implement proper error handling, loading states, and data transformation.
+   - Add TypeScript types for all parameters and results.
+   - Document usage at the top of the hook.
+
+3. **Create usePlayerStatsQuery custom hook (if needed)**
+   - If player stats fetching is complex or reused, move it to hooks/use-player-stats-query.ts.
+   - Use queryKeys for cache keys (e.g., playerData.live).
+   - Implement error/loading handling and typing.
+
+4. **Refactor MatchupsTable to use the new hooks**
+   - Remove all useEffect-based data fetching and related state.
+   - Use the hooks' data, loading, and error states to drive the UI.
+   - Update all references to matchups and playerStats accordingly.
+   - Ensure all props and interfaces are updated as needed.
+
+5. **Testing and Validation**
+   - Test the refactored component for correct data loading, error handling, and UI updates.
+   - Verify React Query Devtools shows correct query states.
+
+**Potential Challenges:**
+- Handling dependencies between eventId, matchupType, and player stats queries
+- Ensuring cache keys are unique and consistent
+- Migrating all loading/error logic cleanly
+</info added on 2025-05-11T12:30:47.774Z>
+
+## 3. Refactor RecommendedPicks component to use React Query [done]
+### Dependencies: 16.1
+### Description: Create a useRecommendedPicksQuery custom hook and refactor the RecommendedPicks component to use this hook for data fetching and state management.
+### Details:
+1. Create a `useRecommendedPicksQuery.ts` hook that encapsulates all data fetching logic for recommended picks
+2. Implement proper caching strategy using queryKeys from the factory
+3. Handle loading states, errors, and data transformation within the hook
+4. Remove all direct API calls and useEffect-based data fetching from the RecommendedPicks component
+5. Update the component to use the new hook's states
+6. Implement any necessary refetch or invalidation logic
+7. Update component props and interfaces as needed
+
+## 4. Refactor ParlayBuilder and PlayerTable components [done]
+### Dependencies: 16.1
+### Description: Audit and refactor the ParlayBuilder and PlayerTable components to use appropriate React Query hooks for any data fetching operations.
+### Details:
+1. Audit both components for any direct data fetching or useEffect-based API calls
+2. For ParlayBuilder, create a `useParlayBuilderQuery.ts` hook if data fetching is present
+3. For PlayerTable, create a `usePlayerTableQuery.ts` hook if data fetching is present
+4. Implement proper error handling, loading states, and data transformation in each hook
+5. Use the queryKeys factory to generate appropriate cache keys
+6. Update both components to use their respective hooks
+7. Remove any redundant state management code
+8. Update component props and interfaces as needed
+<info added on 2025-05-11T13:38:02.867Z>
+1. Audit both components for any direct data fetching or useEffect-based API calls
+2. For ParlayBuilder, create a `useParlayBuilderQuery.ts` hook if data fetching is present
+3. For PlayerTable, create a `usePlayerTableQuery.ts` hook if data fetching is present
+4. Implement proper error handling, loading states, and data transformation in each hook
+5. Use the queryKeys factory to generate appropriate cache keys
+6. Update both components to use their respective hooks
+7. Remove any redundant state management code
+8. Update component props and interfaces as needed
+
+NOTE: PlayerTable refactoring and related improvements (performance, memoization, UI/UX) are now being handled in dedicated task #18. This subtask should focus ONLY on the ParlayBuilder component. For any PlayerTable-related work, refer to task #18 to avoid duplicate efforts.
+</info added on 2025-05-11T13:38:02.867Z>
+
+## 5. Perform final audit and integration testing of Dashboard components [done]
+### Dependencies: 16.2, 16.3, 16.4
+### Description: Conduct a comprehensive audit of all Dashboard components to ensure all data fetching has been migrated to React Query hooks, and perform integration testing to verify proper functionality.
+### Details:
+1. Audit all Dashboard components for any remaining direct Supabase or fetch calls
+2. Create additional custom hooks for any overlooked data fetching operations
+3. Ensure all hooks follow the same pattern and project conventions
+4. Verify that all useEffect-based data fetching has been removed
+5. Test data refetching, cache invalidation, and optimistic updates across components
+6. Ensure proper error handling and loading states are displayed consistently
+7. Update the main Dashboard component to properly coordinate between child components if needed
+8. Document any performance improvements or changes in component behavior
+

@@ -1,0 +1,140 @@
+# Task ID: 7
+# Title: Implement Code Splitting and Bundle Optimization
+# Status: pending
+# Dependencies: 5
+# Priority: medium
+# Description: Optimize application performance by implementing code splitting, lazy loading, and bundle size reduction techniques.
+# Details:
+1. Configure Next.js for optimal code splitting
+2. Implement dynamic imports for non-critical components
+3. Set up lazy loading for heavy components
+4. Configure webpack bundle analyzer
+5. Reduce dependency sizes through tree shaking
+6. Preload critical chunks
+7. Implement bundle size monitoring
+
+Example implementation:
+```typescript
+// src/components/ParlayBuilder/index.tsx
+import dynamic from 'next/dynamic';
+import { Suspense } from 'react';
+
+// Dynamically import heavy components
+const ParlaySimulator = dynamic(
+  () => import('./ParlaySimulator'),
+  {
+    suspense: true,
+    loading: () => <div>Loading simulator...</div>,
+  }
+);
+
+const AdvancedFilters = dynamic(
+  () => import('./AdvancedFilters'),
+  {
+    suspense: true,
+    loading: () => <div>Loading filters...</div>,
+  }
+);
+
+export default function ParlayBuilder() {
+  const [showSimulator, setShowSimulator] = useState(false);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  
+  return (
+    <div className="parlay-builder">
+      <h2>Build Your Parlay</h2>
+      
+      {/* Always loaded */}
+      <BasicFilters />
+      <MatchupSelector />
+      
+      {/* Conditionally loaded */}
+      <button onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}>
+        {showAdvancedFilters ? 'Hide' : 'Show'} Advanced Filters
+      </button>
+      
+      {showAdvancedFilters && (
+        <Suspense fallback={<div>Loading advanced filters...</div>}>
+          <AdvancedFilters />
+        </Suspense>
+      )}
+      
+      <button onClick={() => setShowSimulator(!showSimulator)}>
+        {showSimulator ? 'Hide' : 'Show'} Parlay Simulator
+      </button>
+      
+      {showSimulator && (
+        <Suspense fallback={<div>Loading simulator...</div>}>
+          <ParlaySimulator />
+        </Suspense>
+      )}
+    </div>
+  );
+}
+
+// next.config.js
+const withBundleAnalyzer = require('@next/bundle-analyzer')({
+  enabled: process.env.ANALYZE === 'true',
+});
+
+module.exports = withBundleAnalyzer({
+  // Next.js config
+  reactStrictMode: true,
+  swcMinify: true,
+  images: {
+    domains: ['images.example.com'],
+  },
+  experimental: {
+    optimizeCss: true,
+    scrollRestoration: true,
+  },
+});
+```
+
+# Test Strategy:
+1. Measure bundle sizes before and after optimization
+2. Test lazy loading components with network throttling
+3. Verify that code splitting works correctly
+4. Test application performance on low-end devices
+5. Measure Time to Interactive and other Core Web Vitals
+6. Create performance regression tests
+7. Test preloading of critical chunks
+8. Verify tree shaking is removing unused code
+
+# Subtasks:
+## 1. Configure Next.js for code splitting [pending]
+### Dependencies: None
+### Description: Set up the Next.js configuration to enable automatic and manual code splitting options
+### Details:
+Update next.config.js to optimize chunking strategy, configure splitChunks options, set appropriate chunk size limits, and enable granular code splitting for different application sections. Document the configuration choices and their expected impact on performance.
+
+## 2. Implement dynamic imports and lazy loading [pending]
+### Dependencies: 7.1
+### Description: Add dynamic import statements for components and modules that don't need to be loaded immediately
+### Details:
+Identify components suitable for lazy loading, implement React.lazy() and dynamic imports for these components, add appropriate loading states or fallbacks, and ensure proper error boundaries are in place for failed chunk loading.
+
+## 3. Set up webpack bundle analyzer [pending]
+### Dependencies: 7.1
+### Description: Integrate and configure webpack-bundle-analyzer to visualize bundle composition
+### Details:
+Install webpack-bundle-analyzer package, configure it in next.config.js, create npm scripts to generate bundle analysis reports, document how to interpret the reports, and establish a baseline of current bundle sizes for future comparison.
+
+## 4. Optimize tree shaking [pending]
+### Dependencies: 7.3
+### Description: Ensure proper tree shaking is configured to eliminate unused code
+### Details:
+Review import/export patterns across the codebase, fix any imports that prevent effective tree shaking, configure babel and webpack for optimal dead code elimination, verify tree shaking effectiveness using the bundle analyzer, and document best practices for maintaining tree-shakable code.
+
+## 5. Implement critical chunk preloading [pending]
+### Dependencies: 7.2, 7.4
+### Description: Set up preloading for critical JavaScript chunks to improve initial load performance
+### Details:
+Identify critical chunks needed for initial rendering, implement resource hints (preload, prefetch) for these chunks, configure priority loading for above-the-fold content, test the impact on Core Web Vitals metrics, and document the preloading strategy.
+
+## 6. Establish bundle size monitoring [pending]
+### Dependencies: 7.3, 7.4, 7.5
+### Description: Set up automated monitoring and alerts for JavaScript bundle size changes
+### Details:
+Integrate bundle size tracking into the CI/CD pipeline, set up size limits and budgets for different chunk types, configure alerts for significant size increases, create a dashboard for visualizing bundle size trends over time, and document the monitoring process and response procedures.
+

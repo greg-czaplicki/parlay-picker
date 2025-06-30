@@ -144,7 +144,7 @@ export class GolfFeatureEngineering {
 
       // Get basic player info
       const { data: playerInfo } = await this.supabase
-        .from('players')
+        .from('players_v2')
         .select('dg_id, name')
         .eq('dg_id', dgId)
         .single()

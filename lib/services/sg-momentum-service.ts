@@ -404,7 +404,7 @@ export class SGMomentumService {
     const today = new Date().toISOString().split('T')[0];
     
     const { data, error } = await this.supabase
-      .from('tournaments')
+      .from('tournaments_v2')
       .select('event_name')
       .lte('start_date', today)
       .gte('end_date', today);

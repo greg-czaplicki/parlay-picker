@@ -94,12 +94,29 @@ export async function POST(req: NextRequest) {
 
     // If recalculate is true, trigger trend calculations
     if (recalculate) {
-      // First, get recent tournament data to calculate trends from
-      const { data: recentResults, error: resultsError } = await supabase
-        .from('tournament_results')
-        .select('*')
-        .gte('start_date', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+      // First, get recent tournaments
+      const cutoffDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const { data: recentTournaments, error: tourError } = await supabase
+        .from('tournaments_v2')
+        .select('event_id, start_date')
+        .gte('start_date', cutoffDate)
         .order('start_date', { ascending: false });
+      
+      if (tourError) {
+        return Response.json({ success: false, error: tourError.message }, { status: 500 });
+      }
+      
+      if (!recentTournaments || recentTournaments.length === 0) {
+        return Response.json({ success: true, data: [], message: 'No recent tournaments found' });
+      }
+      
+      const eventIds = recentTournaments.map(t => t.event_id);
+      
+      // Then get results for those tournaments
+      const { data: recentResults, error: resultsError } = await supabase
+        .from('tournament_results_v2')
+        .select('*')
+        .in('event_id', eventIds);
 
       if (resultsError) {
         return Response.json({ success: false, error: resultsError.message }, { status: 500 });
@@ -120,7 +137,13 @@ export async function POST(req: NextRequest) {
 
       for (const [dgId, results] of playerGroups) {
         const playerName = results[0]?.player_name || '';
-        const sortedResults = results.sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime());
+        // Create a map of tournament dates for sorting
+        const tournamentDates = new Map(recentTournaments.map(t => [t.event_id, t.start_date]));
+        const sortedResults = results.sort((a, b) => {
+          const dateA = tournamentDates.get(a.event_id) || '';
+          const dateB = tournamentDates.get(b.event_id) || '';
+          return new Date(dateB).getTime() - new Date(dateA).getTime();
+        });
         
         // Get the most recent tournaments based on period
         const periodCount = period === 'last_3' ? 3 : period === 'last_5' ? 5 : 10;
@@ -131,7 +154,7 @@ export async function POST(req: NextRequest) {
           // Calculate top 10 streak
           let top10Streak = 0;
           for (const tournament of recentTournaments) {
-            if (tournament.finish_position && tournament.finish_position <= 10) {
+            if (tournament.final_position && tournament.final_position <= 10) {
               top10Streak++;
             } else {
               break;
@@ -139,12 +162,12 @@ export async function POST(req: NextRequest) {
           }
 
           // Calculate top 5 count in period
-          const top5Count = recentTournaments.filter(t => t.finish_position && t.finish_position <= 5).length;
+          const top5Count = recentTournaments.filter(t => t.final_position && t.final_position <= 5).length;
           
           // Calculate missed cut streak
           let missedCutStreak = 0;
           for (const tournament of recentTournaments) {
-            if (tournament.missed_cut) {
+            if (!tournament.made_cut) {
               missedCutStreak++;
             } else {
               break;
@@ -153,11 +176,11 @@ export async function POST(req: NextRequest) {
 
           // Calculate sub-70 average tournaments
           const sub70Tournaments = recentTournaments.filter(t => 
-            t.total_score && t.rounds_played === 4 && (t.total_score / 4) < 70
+            t.total_score && t.rounds_completed === 4 && (t.total_score / 4) < 70
           ).length;
 
           // Calculate scoring average
-          const completedTournaments = recentTournaments.filter(t => t.total_score && t.rounds_played === 4);
+          const completedTournaments = recentTournaments.filter(t => t.total_score && t.rounds_completed === 4);
           const avgScore = completedTournaments.length > 0 
             ? completedTournaments.reduce((sum, t) => sum + (t.total_score / 4), 0) / completedTournaments.length 
             : null;

@@ -1,0 +1,606 @@
+{
+  "timestamp": "2025-06-28T15:08:14.263Z",
+  "tournaments_analyzed": [
+    {
+      "tournament_id": 33,
+      "tournament_name": "PGA Championship",
+      "start_date": "2025-05-15",
+      "course_name": "Quail Hollow Club",
+      "results_count": 156,
+      "live_stats_count": 780,
+      "round_scores_analysis": {
+        "status": "analyzed",
+        "valid_results": 151,
+        "total_scores": 151,
+        "statistics": {
+          "count": 151,
+          "min": -11,
+          "max": 23,
+          "mean": 4.56,
+          "median": 4,
+          "range": 34,
+          "q1": 2,
+          "q3": 8
+        },
+        "format_analysis": {
+          "likely_format": "relative",
+          "confidence": 1,
+          "distribution": {
+            "actual_count": 0,
+            "actual_percent": 0,
+            "relative_count": 151,
+            "relative_percent": 100,
+            "uncertain_count": 0,
+            "uncertain_percent": 0
+          }
+        },
+        "round_breakdown": {
+          "round_1": {
+            "count": 151,
+            "min": -11,
+            "max": 23,
+            "mean": 4.56,
+            "median": 4,
+            "range": 34,
+            "q1": 2,
+            "q3": 8
+          },
+          "round_2": {
+            "count": 0
+          },
+          "round_3": {
+            "count": 0
+          },
+          "round_4": {
+            "count": 0
+          }
+        }
+      },
+      "live_stats_analysis": {
+        "status": "analyzed",
+        "today_scores_count": 532,
+        "total_scores_count": 780,
+        "statistics": {
+          "count": 1312,
+          "min": -11,
+          "max": 23,
+          "mean": 3.21,
+          "median": 3,
+          "range": 34,
+          "q1": 0,
+          "q3": 6
+        },
+        "format_analysis": {
+          "likely_format": "relative",
+          "confidence": 1,
+          "distribution": {
+            "actual_count": 0,
+            "actual_percent": 0,
+            "relative_count": 1312,
+            "relative_percent": 100,
+            "uncertain_count": 0,
+            "uncertain_percent": 0
+          }
+        }
+      },
+      "inferred_par": {
+        "inferred_par": 72,
+        "confidence": 0.1,
+        "method": "default_fallback",
+        "data_points": 0
+      },
+      "final_format_determination": {
+        "determined_format": "relative",
+        "confidence": 1,
+        "primary_source": "round_scores",
+        "reasoning": [
+          "High confidence from round scores analysis (100%)",
+          "Round scores and live stats agree on format"
+        ]
+      },
+      "confidence_level": null,
+      "issues": []
+    },
+    {
+      "tournament_id": 23,
+      "tournament_name": "the Memorial Tournament presented by Workday",
+      "start_date": "2025-05-29",
+      "course_name": "Muirfield Village Golf Club",
+      "results_count": 71,
+      "live_stats_count": 200,
+      "round_scores_analysis": {
+        "status": "analyzed",
+        "valid_results": 67,
+        "total_scores": 67,
+        "statistics": {
+          "count": 67,
+          "min": -10,
+          "max": 17,
+          "mean": 5.19,
+          "median": 6,
+          "range": 27,
+          "q1": 2,
+          "q3": 9
+        },
+        "format_analysis": {
+          "likely_format": "relative",
+          "confidence": 1,
+          "distribution": {
+            "actual_count": 0,
+            "actual_percent": 0,
+            "relative_count": 67,
+            "relative_percent": 100,
+            "uncertain_count": 0,
+            "uncertain_percent": 0
+          }
+        },
+        "round_breakdown": {
+          "round_1": {
+            "count": 67,
+            "min": -10,
+            "max": 17,
+            "mean": 5.19,
+            "median": 6,
+            "range": 27,
+            "q1": 2,
+            "q3": 9
+          },
+          "round_2": {
+            "count": 0
+          },
+          "round_3": {
+            "count": 0
+          },
+          "round_4": {
+            "count": 0
+          }
+        }
+      },
+      "live_stats_analysis": {
+        "status": "analyzed",
+        "today_scores_count": 183,
+        "total_scores_count": 197,
+        "statistics": {
+          "count": 380,
+          "min": -10,
+          "max": 17,
+          "mean": 3.57,
+          "median": 4,
+          "range": 27,
+          "q1": 1,
+          "q3": 7
+        },
+        "format_analysis": {
+          "likely_format": "relative",
+          "confidence": 1,
+          "distribution": {
+            "actual_count": 0,
+            "actual_percent": 0,
+            "relative_count": 380,
+            "relative_percent": 100,
+            "uncertain_count": 0,
+            "uncertain_percent": 0
+          }
+        }
+      },
+      "inferred_par": {
+        "inferred_par": 72,
+        "confidence": 0.1,
+        "method": "default_fallback",
+        "data_points": 0
+      },
+      "final_format_determination": {
+        "determined_format": "relative",
+        "confidence": 1,
+        "primary_source": "round_scores",
+        "reasoning": [
+          "High confidence from round scores analysis (100%)",
+          "Round scores and live stats agree on format"
+        ]
+      },
+      "confidence_level": null,
+      "issues": []
+    },
+    {
+      "tournament_id": 32,
+      "tournament_name": "RBC Canadian Open",
+      "start_date": "2025-06-05",
+      "course_name": "TPC Toronto at Osprey Valley (North Course)",
+      "results_count": 3,
+      "live_stats_count": 0,
+      "round_scores_analysis": {
+        "status": "no_data",
+        "message": "No valid round scores found"
+      },
+      "live_stats_analysis": null,
+      "inferred_par": {
+        "inferred_par": 72,
+        "confidence": 0.1,
+        "method": "default_fallback",
+        "data_points": 0
+      },
+      "final_format_determination": {
+        "determined_format": "unknown",
+        "confidence": 0,
+        "primary_source": null,
+        "reasoning": []
+      },
+      "confidence_level": null,
+      "issues": []
+    },
+    {
+      "tournament_id": 10020,
+      "tournament_name": "KLM Open",
+      "start_date": "2025-06-05",
+      "course_name": "The International",
+      "results_count": 8,
+      "live_stats_count": 0,
+      "round_scores_analysis": {
+        "status": "analyzed",
+        "valid_results": 7,
+        "total_scores": 7,
+        "statistics": {
+          "count": 7,
+          "min": 8,
+          "max": 17,
+          "mean": 11.29,
+          "median": 10,
+          "range": 9,
+          "q1": 9,
+          "q3": 14
+        },
+        "format_analysis": {
+          "likely_format": "relative",
+          "confidence": 1,
+          "distribution": {
+            "actual_count": 0,
+            "actual_percent": 0,
+            "relative_count": 7,
+            "relative_percent": 100,
+            "uncertain_count": 0,
+            "uncertain_percent": 0
+          }
+        },
+        "round_breakdown": {
+          "round_1": {
+            "count": 7,
+            "min": 8,
+            "max": 17,
+            "mean": 11.29,
+            "median": 10,
+            "range": 9,
+            "q1": 9,
+            "q3": 14
+          },
+          "round_2": {
+            "count": 0
+          },
+          "round_3": {
+            "count": 0
+          },
+          "round_4": {
+            "count": 0
+          }
+        }
+      },
+      "live_stats_analysis": null,
+      "inferred_par": {
+        "inferred_par": 72,
+        "confidence": 0.1,
+        "method": "default_fallback",
+        "data_points": 0
+      },
+      "final_format_determination": {
+        "determined_format": "relative",
+        "confidence": 1,
+        "primary_source": "round_scores",
+        "reasoning": [
+          "High confidence from round scores analysis (100%)"
+        ]
+      },
+      "confidence_level": null,
+      "issues": []
+    },
+    {
+      "tournament_id": 34,
+      "tournament_name": "Travelers Championship",
+      "start_date": "2025-06-19",
+      "course_name": "TPC River Highlands",
+      "results_count": 16,
+      "live_stats_count": 16,
+      "round_scores_analysis": {
+        "status": "analyzed",
+        "valid_results": 16,
+        "total_scores": 16,
+        "statistics": {
+          "count": 16,
+          "min": 67,
+          "max": 77,
+          "mean": 72.13,
+          "median": 73,
+          "range": 10,
+          "q1": 70,
+          "q3": 74
+        },
+        "format_analysis": {
+          "likely_format": "actual",
+          "confidence": 1,
+          "distribution": {
+            "actual_count": 16,
+            "actual_percent": 100,
+            "relative_count": 0,
+            "relative_percent": 0,
+            "uncertain_count": 0,
+            "uncertain_percent": 0
+          }
+        },
+        "round_breakdown": {
+          "round_1": {
+            "count": 16,
+            "min": 67,
+            "max": 77,
+            "mean": 72.13,
+            "median": 73,
+            "range": 10,
+            "q1": 70,
+            "q3": 74
+          },
+          "round_2": {
+            "count": 0
+          },
+          "round_3": {
+            "count": 0
+          },
+          "round_4": {
+            "count": 0
+          }
+        }
+      },
+      "live_stats_analysis": {
+        "status": "analyzed",
+        "today_scores_count": 16,
+        "total_scores_count": 16,
+        "statistics": {
+          "count": 32,
+          "min": 67,
+          "max": 77,
+          "mean": 72.13,
+          "median": 73,
+          "range": 10,
+          "q1": 70,
+          "q3": 74
+        },
+        "format_analysis": {
+          "likely_format": "actual",
+          "confidence": 1,
+          "distribution": {
+            "actual_count": 32,
+            "actual_percent": 100,
+            "relative_count": 0,
+            "relative_percent": 0,
+            "uncertain_count": 0,
+            "uncertain_percent": 0
+          }
+        }
+      },
+      "inferred_par": {
+        "inferred_par": 72,
+        "confidence": 0.7,
+        "method": "round_score_average",
+        "data_points": 16
+      },
+      "final_format_determination": {
+        "determined_format": "actual",
+        "confidence": 1,
+        "primary_source": "round_scores",
+        "reasoning": [
+          "High confidence from round scores analysis (100%)",
+          "Round scores and live stats agree on format"
+        ]
+      },
+      "confidence_level": null,
+      "issues": []
+    },
+    {
+      "tournament_id": 524,
+      "tournament_name": "Rocket Classic",
+      "start_date": "2025-06-26",
+      "course_name": "Detroit Golf Club",
+      "results_count": 156,
+      "live_stats_count": 4,
+      "round_scores_analysis": {
+        "status": "analyzed",
+        "valid_results": 155,
+        "total_scores": 155,
+        "statistics": {
+          "count": 155,
+          "min": -14,
+          "max": 8,
+          "mean": -5.34,
+          "median": -6,
+          "range": 22,
+          "q1": -8,
+          "q3": -3
+        },
+        "format_analysis": {
+          "likely_format": "relative",
+          "confidence": 1,
+          "distribution": {
+            "actual_count": 0,
+            "actual_percent": 0,
+            "relative_count": 155,
+            "relative_percent": 100,
+            "uncertain_count": 0,
+            "uncertain_percent": 0
+          }
+        },
+        "round_breakdown": {
+          "round_1": {
+            "count": 155,
+            "min": -14,
+            "max": 8,
+            "mean": -5.34,
+            "median": -6,
+            "range": 22,
+            "q1": -8,
+            "q3": -3
+          },
+          "round_2": {
+            "count": 0
+          },
+          "round_3": {
+            "count": 0
+          },
+          "round_4": {
+            "count": 0
+          }
+        }
+      },
+      "live_stats_analysis": {
+        "status": "analyzed",
+        "today_scores_count": 4,
+        "total_scores_count": 4,
+        "statistics": {
+          "count": 8,
+          "min": -14,
+          "max": 0,
+          "mean": -8.25,
+          "median": -7,
+          "range": 14,
+          "q1": -14,
+          "q3": 0
+        },
+        "format_analysis": {
+          "likely_format": "relative",
+          "confidence": 1,
+          "distribution": {
+            "actual_count": 0,
+            "actual_percent": 0,
+            "relative_count": 8,
+            "relative_percent": 100,
+            "uncertain_count": 0,
+            "uncertain_percent": 0
+          }
+        }
+      },
+      "inferred_par": {
+        "inferred_par": 72,
+        "confidence": 0.1,
+        "method": "default_fallback",
+        "data_points": 0
+      },
+      "final_format_determination": {
+        "determined_format": "relative",
+        "confidence": 1,
+        "primary_source": "round_scores",
+        "reasoning": [
+          "High confidence from round scores analysis (100%)",
+          "Round scores and live stats agree on format"
+        ]
+      },
+      "confidence_level": null,
+      "issues": []
+    },
+    {
+      "tournament_id": 10021,
+      "tournament_name": "Italian Open",
+      "start_date": "2025-06-26",
+      "course_name": "Argentario GC",
+      "results_count": 156,
+      "live_stats_count": 0,
+      "round_scores_analysis": {
+        "status": "analyzed",
+        "valid_results": 155,
+        "total_scores": 155,
+        "statistics": {
+          "count": 155,
+          "min": -9,
+          "max": 23,
+          "mean": 1.46,
+          "median": 1,
+          "range": 32,
+          "q1": -2,
+          "q3": 4
+        },
+        "format_analysis": {
+          "likely_format": "relative",
+          "confidence": 1,
+          "distribution": {
+            "actual_count": 0,
+            "actual_percent": 0,
+            "relative_count": 155,
+            "relative_percent": 100,
+            "uncertain_count": 0,
+            "uncertain_percent": 0
+          }
+        },
+        "round_breakdown": {
+          "round_1": {
+            "count": 155,
+            "min": -9,
+            "max": 23,
+            "mean": 1.46,
+            "median": 1,
+            "range": 32,
+            "q1": -2,
+            "q3": 4
+          },
+          "round_2": {
+            "count": 0
+          },
+          "round_3": {
+            "count": 0
+          },
+          "round_4": {
+            "count": 0
+          }
+        }
+      },
+      "live_stats_analysis": null,
+      "inferred_par": {
+        "inferred_par": 72,
+        "confidence": 0.1,
+        "method": "default_fallback",
+        "data_points": 0
+      },
+      "final_format_determination": {
+        "determined_format": "relative",
+        "confidence": 1,
+        "primary_source": "round_scores",
+        "reasoning": [
+          "High confidence from round scores analysis (100%)"
+        ]
+      },
+      "confidence_level": null,
+      "issues": []
+    }
+  ],
+  "score_format_summary": {
+    "total_tournaments": 7,
+    "format_distribution": {
+      "actual": 1,
+      "relative": 5,
+      "unknown": 1
+    },
+    "confidence_distribution": {
+      "high": 6,
+      "medium": 0,
+      "low": 1
+    },
+    "format_percentages": {
+      "actual": 14,
+      "relative": 71,
+      "unknown": 14
+    }
+  },
+  "par_inference_results": {
+    "tournaments_with_par": 7,
+    "average_par": 72,
+    "par_distribution": {
+      "72": 7
+    }
+  },
+  "recommendations": [
+    "Majority of tournaments use relative scores - configure migration to convert to actual scores"
+  ]
+}

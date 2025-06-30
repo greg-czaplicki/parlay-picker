@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
 
     // Get tournament info
     const { data: tournament } = await supabase
-      .from('tournaments')
+      .from('tournaments_v2')
       .select('event_id, event_name, tour')
       .eq('event_id', eventIdNum)
       .single()

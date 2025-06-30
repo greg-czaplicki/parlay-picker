@@ -1,0 +1,192 @@
+# Task ID: 9
+# Title: Implement Shadcn UI Components
+# Status: pending
+# Dependencies: 8
+# Priority: medium
+# Description: Integrate and customize Shadcn UI components to create a consistent component library with proper theming and accessibility.
+# Details:
+1. Set up Shadcn UI with the CLI tool
+2. Audit and refactor all UI components to use Shadcn
+3. Create consistent component variants for the application
+4. Implement proper theming for dark/light modes
+5. Ensure all components meet WCAG standards
+6. Implement proper keyboard navigation
+7. Add focus states and screen reader support
+8. Create domain-specific extensions of Shadcn components
+
+Example implementation:
+```bash
+# Install Shadcn UI CLI
+npm install -D @shadcn/ui
+
+# Initialize Shadcn UI
+npx shadcn-ui init
+```
+
+```typescript
+// src/components/ui/button.tsx (customized Shadcn button)
+import * as React from 'react';
+import { Slot } from '@radix-ui/react-slot';
+import { cva, type VariantProps } from 'class-variance-authority';
+import { cn } from '@/lib/utils';
+
+const buttonVariants = cva(
+  'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background',
+  {
+    variants: {
+      variant: {
+        default: 'bg-primary text-primary-foreground hover:bg-primary/90',
+        destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
+        outline: 'border border-input hover:bg-accent hover:text-accent-foreground',
+        secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
+        ghost: 'hover:bg-accent hover:text-accent-foreground',
+        link: 'underline-offset-4 hover:underline text-primary',
+        // Custom golf-specific variants
+        success: 'bg-green-600 text-white hover:bg-green-700',
+        parlay: 'bg-purple-600 text-white hover:bg-purple-700',
+      },
+      size: {
+        default: 'h-10 py-2 px-4',
+        sm: 'h-9 px-3 rounded-md',
+        lg: 'h-11 px-8 rounded-md',
+        icon: 'h-10 w-10',
+      },
+    },
+    defaultVariants: {
+      variant: 'default',
+      size: 'default',
+    },
+  }
+);
+
+export interface ButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {
+  asChild?: boolean;
+}
+
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
+    const Comp = asChild ? Slot : 'button';
+    return (
+      <Comp
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref}
+        {...props}
+      />
+    );
+  }
+);
+Button.displayName = 'Button';
+
+export { Button, buttonVariants };
+
+// src/components/golf/MatchupCard.tsx (domain-specific component)
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { useParlay } from '@/contexts/ParlayContext';
+
+interface MatchupCardProps {
+  matchup: {
+    id: number;
+    player1: string;
+    player2: string;
+    odds1: number;
+    odds2: number;
+  };
+}
+
+export function MatchupCard({ matchup }: MatchupCardProps) {
+  const { selectedMatchups, addMatchup, removeMatchup } = useParlay();
+  const isSelected = selectedMatchups.includes(matchup.id);
+  
+  const handleToggle = () => {
+    if (isSelected) {
+      removeMatchup(matchup.id);
+    } else {
+      addMatchup(matchup.id);
+    }
+  };
+  
+  return (
+    <Card className={cn(
+      'transition-all duration-200',
+      isSelected ? 'border-primary-500 shadow-md' : 'border-gray-200'
+    )}>
+      <CardHeader>
+        <CardTitle className="text-lg">2-Ball Matchup</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex justify-between items-center">
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2">
+              <span className="font-medium">{matchup.player1}</span>
+              <span className="text-sm text-gray-500">{matchup.odds1 > 0 ? `+${matchup.odds1}` : matchup.odds1}</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <span className="font-medium">{matchup.player2}</span>
+              <span className="text-sm text-gray-500">{matchup.odds2 > 0 ? `+${matchup.odds2}` : matchup.odds2}</span>
+            </div>
+          </div>
+          <Button
+            variant={isSelected ? 'success' : 'outline'}
+            size="sm"
+            onClick={handleToggle}
+            aria-pressed={isSelected}
+          >
+            {isSelected ? 'Selected' : 'Add to Parlay'}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+```
+
+# Test Strategy:
+1. Create visual regression tests for Shadcn components
+2. Test accessibility using automated tools (axe, Lighthouse)
+3. Verify keyboard navigation works correctly
+4. Test screen reader compatibility
+5. Verify color contrast meets WCAG standards
+6. Test component variants with different props
+7. Create Storybook stories for each component
+8. Test dark/light mode theming
+
+# Subtasks:
+## 1. Initial Shadcn UI Setup [pending]
+### Dependencies: None
+### Description: Set up Shadcn UI in the project and configure the basic integration
+### Details:
+Install Shadcn UI CLI, initialize the configuration, set up the required dependencies (tailwindcss, etc.), create the component directory structure, and configure the import paths. Ensure the base configuration aligns with the project's build system.
+
+## 2. Component Audit and Selection [pending]
+### Dependencies: 9.1
+### Description: Audit existing UI components and identify which Shadcn components to implement
+### Details:
+Create an inventory of current UI components in the application. Map these to available Shadcn components. Identify gaps and prioritize which components to implement first based on usage frequency and importance. Document the mapping for reference.
+
+## 3. Component Variant Creation [pending]
+### Dependencies: 9.2
+### Description: Create custom variants for Shadcn components to match design requirements
+### Details:
+Extend the base Shadcn components with custom variants that match the application's design language. Implement size variations, style alternatives, and state-specific appearances. Document the variant API for each component.
+
+## 4. Theming Implementation [pending]
+### Dependencies: 9.3
+### Description: Implement comprehensive theming support for Shadcn components
+### Details:
+Set up the theme configuration for light/dark modes, create color tokens, implement CSS variables for theming, ensure consistent styling across components, and create theme switching functionality if required.
+
+## 5. Accessibility Improvements [pending]
+### Dependencies: 9.4
+### Description: Enhance accessibility features of implemented Shadcn components
+### Details:
+Audit components for accessibility compliance, implement proper ARIA attributes, ensure keyboard navigation works correctly, test with screen readers, fix contrast issues, and document accessibility features for each component.
+
+## 6. Domain-Specific Component Extensions [pending]
+### Dependencies: 9.5
+### Description: Create domain-specific composite components using Shadcn primitives
+### Details:
+Identify and implement application-specific composite components that combine multiple Shadcn primitives. Examples might include specialized forms, data visualization components, or domain-specific UI patterns that are unique to the application.
+

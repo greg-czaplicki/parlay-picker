@@ -1,0 +1,97 @@
+# Task ID: 33
+# Title: Build SG Analysis Dashboard Interface
+# Status: pending
+# Dependencies: 32
+# Priority: high
+# Description: Create a frontend dashboard that displays course DNA profiles, player archetype analysis, and real-time SG insights with course comparison tools, player-course fit analysis, and visual representations of SG data.
+# Details:
+This task involves building a functional frontend dashboard for Strokes Gained analysis:
+
+1. **Core Dashboard Components**:
+   - Create main dashboard layout with responsive grid system
+   - Implement navigation between different SG analysis views
+   - Build data visualization components for SG metrics (charts, graphs, heatmaps)
+   - Design course DNA profile display with key characteristics highlighted
+
+2. **Course Comparison Tools**:
+   - Develop side-by-side course DNA profile comparison interface
+   - Implement filtering and sorting capabilities for course attributes
+   - Create visual overlays to highlight similarities/differences between courses
+   - Build historical performance comparison for selected players across courses
+
+3. **Player Archetype Analysis**:
+   - Design player archetype classification display with visual indicators
+   - Implement player search and filtering functionality
+   - Create player-to-player comparison tools for archetype analysis
+   - Build trend visualization for player performance by course type
+
+4. **Player-Course Fit Analysis**:
+   - Develop interface showing compatibility scores between players and courses
+   - Implement color-coded indicators for strong/weak player-course matches
+   - Create detailed breakdown views of specific player-course combinations
+   - Build historical performance overlay for selected player-course pairs
+
+5. **Real-time SG Insights**:
+   - Design real-time data display components with auto-refresh capabilities
+   - Implement tournament progress tracking with SG metrics
+   - Create alert indicators for significant SG performance shifts
+   - Build round-by-round SG comparison tools
+
+6. **Integration with Recommendation Engine**:
+   - Develop UI components to display parlay recommendations
+   - Implement filters to customize recommendation parameters
+   - Create visual indicators for recommendation confidence levels
+   - Build detailed explanation views for recommendation logic
+
+7. **Data Fetching and State Management**:
+   - Implement API service layer to fetch data from SG Analysis endpoints
+   - Create state management structure for dashboard components
+   - Implement caching strategies for performance optimization
+   - Build error handling and loading states for data fetching
+
+8. **Technical Implementation**:
+   - Use React.js for component architecture
+   - Implement D3.js or Chart.js for data visualizations
+   - Utilize CSS Grid/Flexbox for responsive layouts
+   - Focus on functional implementation over visual polish for alpha testing
+
+# Test Strategy:
+1. **Functional Testing**:
+   - Verify all dashboard components render correctly with test data
+   - Confirm navigation between different views works as expected
+   - Test all interactive elements (filters, selectors, buttons) function properly
+   - Validate that course comparison tools display accurate information
+   - Ensure player archetype analysis components show correct classifications
+   - Verify player-course fit analysis displays appropriate compatibility metrics
+   - Test real-time SG insights update with new data
+
+2. **Integration Testing**:
+   - Validate API integration with SG Analysis endpoints
+   - Confirm recommendation engine data is properly displayed
+   - Test data flow between different dashboard components
+   - Verify state management correctly handles data updates
+   - Ensure error states are properly handled and displayed
+
+3. **Performance Testing**:
+   - Measure initial load time of dashboard components
+   - Test dashboard performance with large datasets
+   - Verify responsiveness across different screen sizes
+   - Measure time for data refresh and component updates
+
+4. **User Acceptance Testing**:
+   - Create test scenarios for common user workflows
+   - Conduct alpha testing sessions with internal stakeholders
+   - Document usability issues and prioritize fixes
+   - Verify dashboard provides valuable insights for target users
+
+5. **Cross-browser Testing**:
+   - Test dashboard functionality in Chrome, Firefox, Safari, and Edge
+   - Verify visualizations render correctly across browsers
+   - Ensure responsive design works on different devices and browsers
+
+6. **Specific Test Cases**:
+   - Test course DNA profile display with at least 5 different course profiles
+   - Verify player archetype analysis with players from each classification
+   - Test course comparison with courses of varying characteristics
+   - Validate player-course fit analysis with known good/poor fit examples
+   - Test recommendation display with various confidence levels

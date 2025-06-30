@@ -1,0 +1,143 @@
+# Task ID: 28
+# Title: Implement Dynamic Timezone Detection and Display for Tee Times
+# Status: pending
+# Dependencies: 8, 12
+# Priority: medium
+# Description: Enhance the tee time display with automatic timezone detection and user-relative time differences, replacing the hardcoded Eastern timezone with a dynamic system that shows both tournament local time and the user's local time.
+# Details:
+This task involves implementing a comprehensive timezone management system for tee times. The implementation should follow these steps:
+
+1. **Browser Timezone Detection**:
+   - Use JavaScript's `Intl.DateTimeFormat().resolvedOptions().timeZone` to detect the user's browser timezone
+   - Implement a fallback mechanism using offset detection if the Intl API is not available
+   - Store the detected timezone in the user's session/local storage for persistence
+
+2. **Course-to-Timezone Mapping Database**:
+   - Create a new database table `course_timezones` with fields:
+     - `course_id` (foreign key to courses table)
+     - `timezone_identifier` (IANA timezone string, e.g., "America/New_York")
+     - `display_name` (user-friendly name, e.g., "Eastern Time")
+   - Populate the table with known golf courses and their corresponding timezones
+   - For courses without explicit mappings, implement a fallback based on country/region
+
+3. **Time Difference Calculation**:
+   - Create a utility function that takes a tee time and calculates:
+     - The time in the tournament's local timezone
+     - The time in the user's detected timezone
+     - The time difference between the two (e.g., "+3 hours")
+   - Handle DST (Daylight Saving Time) transitions correctly
+   - Format times according to user preferences (12h/24h format)
+
+4. **UI Implementation**:
+   - Modify the tee time display component to show both times:
+     ```jsx
+     <div className="tee-time">
+       <div className="tournament-time">2:30 PM ET (Tournament Local)</div>
+       <div className="user-time">11:30 AM PT (Your Time)</div>
+     </div>
+     ```
+   - Add a tooltip or info icon that explains the timezone conversion
+   - Ensure the display is responsive and works well on mobile devices
+
+5. **Edge Case Handling**:
+   - Create special handling for international tournaments
+   - Account for tournaments that span timezone changes
+   - Handle rare cases where courses may change timezones (e.g., Arizona during DST)
+   - Implement proper error handling for timezone conversion failures
+
+6. **Performance Considerations**:
+   - Cache timezone calculations where appropriate
+   - Minimize unnecessary re-renders when displaying multiple tee times
+   - Batch timezone conversions when displaying lists of tee times
+
+Example implementation for timezone detection:
+```javascript
+// utils/timezone.js
+export function detectUserTimezone() {
+  try {
+    // Primary method using Intl API
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (timezone) return timezone;
+    
+    // Fallback method using offset
+    const offset = new Date().getTimezoneOffset();
+    // Map offset to likely timezone (simplified)
+    return mapOffsetToTimezone(offset);
+  } catch (error) {
+    console.error("Failed to detect timezone:", error);
+    return "America/New_York"; // Default fallback
+  }
+}
+
+export function formatTimeInTimezones(teeTimeISO, courseId) {
+  // Get course timezone from database
+  const courseTimezone = getCourseTimezone(courseId);
+  const userTimezone = getUserTimezone();
+  
+  // Format in both timezones
+  const tournamentTime = formatInTimezone(teeTimeISO, courseTimezone);
+  const userTime = formatInTimezone(teeTimeISO, userTimezone);
+  
+  // Calculate difference
+  const diffHours = calculateTimeDifference(courseTimezone, userTimezone);
+  
+  return {
+    tournamentTime,
+    userTime,
+    difference: diffHours > 0 ? `+${diffHours}h` : `${diffHours}h`
+  };
+}
+```
+
+# Test Strategy:
+To verify the correct implementation of the dynamic timezone detection and display for tee times:
+
+1. **Unit Testing**:
+   - Create unit tests for the timezone detection function:
+     - Mock different browser environments to simulate various timezones
+     - Test the fallback mechanism when Intl API is unavailable
+     - Verify correct timezone string is returned
+   - Test the time difference calculation function:
+     - Verify correct calculations between different timezone pairs
+     - Test edge cases like DST transitions
+     - Ensure proper handling of international date line crossings
+
+2. **Integration Testing**:
+   - Test the database integration:
+     - Verify course-to-timezone mappings are correctly retrieved
+     - Test fallback behavior for unmapped courses
+   - Test the UI component with the timezone service:
+     - Ensure correct rendering of both tournament and user times
+     - Verify time difference is accurately displayed
+
+3. **End-to-End Testing**:
+   - Create E2E tests that simulate users in different timezones:
+     - Use browser timezone override capabilities in testing frameworks
+     - Verify the complete flow from timezone detection to display
+   - Test with real tournament data:
+     - Use past tournament schedules to verify correct conversions
+
+4. **Manual Testing Scenarios**:
+   - Test with VPN connections from different global locations
+   - Test on different browsers (Chrome, Firefox, Safari, Edge)
+   - Test on mobile devices with location services enabled/disabled
+   - Verify display for tournaments in various timezones:
+     - US tournaments (Eastern, Central, Mountain, Pacific)
+     - European tournaments
+     - Asian/Australian tournaments
+
+5. **Edge Case Verification**:
+   - Test during actual DST transition weekends
+   - Test with tournaments that span timezone changes
+   - Verify behavior when system time/timezone is changed while app is open
+   - Test with unusual timezones (half-hour offsets like in India)
+
+6. **Performance Testing**:
+   - Measure render times when displaying multiple tee times simultaneously
+   - Verify caching mechanisms are working as expected
+   - Test with simulated slow connections to ensure reasonable performance
+
+7. **Accessibility Testing**:
+   - Verify that timezone information is accessible to screen readers
+   - Ensure color contrast is sufficient for time difference indicators
+   - Check that timezone abbreviations have proper expanded text for assistive technologies

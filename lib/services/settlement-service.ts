@@ -77,7 +77,7 @@ export class SettlementService {
     try {
       // Get tournament info to determine tour type
       const { data: tournament } = await this.supabase
-        .from('tournaments')
+        .from('tournaments_v2')
         .select('event_id, event_name, tour')
         .eq('event_id', eventId)
         .single()
@@ -290,7 +290,7 @@ export class SettlementService {
     try {
       // First, try to get stored data from live_tournament_stats
       const { data: tournament } = await this.supabase
-        .from('tournaments')
+        .from('tournaments_v2')
         .select('event_name')
         .eq('event_id', eventId)
         .single()
@@ -697,7 +697,7 @@ export class SettlementService {
     try {
       // Get tournament name for the event
       const { data: tournament } = await this.supabase
-        .from('tournaments')
+        .from('tournaments_v2')
         .select('event_name')
         .eq('event_id', eventId)
         .single()

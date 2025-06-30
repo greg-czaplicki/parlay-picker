@@ -198,7 +198,7 @@ export async function GET(req: NextRequest) {
   
   if (eventIds.length > 0) {
     const { data: tournamentsData, error: tournamentsError } = await supabase
-      .from('tournaments')
+      .from('tournaments_v2')
       .select('event_id, event_name, start_date, end_date')
       .in('event_id', eventIds)
     if (!tournamentsError && tournamentsData) {

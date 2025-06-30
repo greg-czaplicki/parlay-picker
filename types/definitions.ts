@@ -4,7 +4,7 @@
 export type PgaTourPlayerStats = {
   pga_player_id: string;
   player_name: string;
-  dg_id: number | null; // Mapped DataGolf ID if available
+  dg_id: bigint | null; // Mapped DataGolf ID if available
   sg_putt: number | null;
   sg_arg: number | null;
   sg_app: number | null;
@@ -18,7 +18,7 @@ export type PgaTourPlayerStats = {
 
 // Type for Season Skill Ratings (from player_skill_ratings table)
 export type PlayerSkillRating = {
-  dg_id: number;
+  dg_id: bigint;
   player_name: string;
   sg_putt: number | null;
   sg_arg: number | null;
@@ -34,7 +34,7 @@ export type PlayerSkillRating = {
 
 // Type for Live Tournament Stats (from latest_live_tournament_stats_view)
 export type LiveTournamentStat = {
-  dg_id: number;
+  dg_id: bigint;
   player_name: string;
   event_name: string;
   course_name: string;
@@ -67,7 +67,7 @@ export type TrendIndicator = {
 
 // Combined type used in PlayerTable, includes optional pre-calculated trends
 export type DisplayPlayer = Partial<PlayerSkillRating> & Partial<LiveTournamentStat> & Partial<PgaTourPlayerStats> & {
-    dg_id?: number;
+    dg_id?: bigint;
     pga_player_id?: string;
     player_name: string;
     trends?: Record<string, TrendIndicator>; // Storing pre-calculated trend objects

@@ -1,0 +1,189 @@
+# Task ID: 11
+# Title: Improve Error Handling and Loading States
+# Status: pending
+# Dependencies: 4, 5
+# Priority: medium
+# Description: Implement comprehensive error handling and loading states throughout the application to improve user experience.
+# Details:
+1. Implement proper error boundaries
+2. Add retry mechanisms for failed requests
+3. Create user-friendly error messages
+4. Implement consistent loading states
+5. Add Suspense boundaries for progressive rendering
+6. Create fallback UI for error states
+
+Example implementation:
+```typescript
+// src/components/ErrorBoundary.tsx
+import { Component, ErrorInfo, ReactNode } from 'react';
+
+interface Props {
+  children: ReactNode;
+  fallback?: ReactNode | ((error: Error) => ReactNode);
+  onError?: (error: Error, errorInfo: ErrorInfo) => void;
+}
+
+interface State {
+  hasError: boolean;
+  error: Error | null;
+}
+
+export class ErrorBoundary extends Component<Props, State> {
+  constructor(props: Props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
+    if (this.props.onError) {
+      this.props.onError(error, errorInfo);
+    }
+    
+    // Log error to monitoring service
+    console.error('Error caught by ErrorBoundary:', error, errorInfo);
+  }
+
+  render(): ReactNode {
+    if (this.state.hasError) {
+      if (typeof this.props.fallback === 'function') {
+        return this.props.fallback(this.state.error!);
+      }
+      
+      return this.props.fallback || (
+        <div className="error-boundary">
+          <h2>Something went wrong.</h2>
+          <details>
+            <summary>Error details</summary>
+            <pre>{this.state.error?.message}</pre>
+          </details>
+          <button
+            onClick={() => this.setState({ hasError: false, error: null })}
+            className="btn btn-primary mt-4"
+          >
+            Try again
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+// src/components/LoadingStates.tsx
+export function Spinner({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
+  const sizeClasses = {
+    sm: 'w-4 h-4',
+    md: 'w-8 h-8',
+    lg: 'w-12 h-12',
+  };
+  
+  return (
+    <div className="flex justify-center items-center">
+      <div className={`animate-spin rounded-full border-t-2 border-primary-500 ${sizeClasses[size]}`}></div>
+    </div>
+  );
+}
+
+export function SkeletonCard() {
+  return (
+    <div className="bg-white rounded-lg shadow-md p-4 animate-pulse">
+      <div className="h-4 bg-gray-200 rounded w-3/4 mb-4"></div>
+      <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
+      <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+    </div>
+  );
+}
+
+// Usage in a component
+import { Suspense } from 'react';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { Spinner, SkeletonCard } from '@/components/LoadingStates';
+import { useQuery } from '@tanstack/react-query';
+
+export default function MatchupList({ tournamentId }) {
+  const { data, error, isLoading, refetch } = useQuery({
+    queryKey: ['matchups', tournamentId],
+    queryFn: () => fetchMatchups(tournamentId),
+  });
+  
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <SkeletonCard key={i} />
+        ))}
+      </div>
+    );
+  }
+  
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-md p-4">
+        <h3 className="text-red-800 font-medium">Error loading matchups</h3>
+        <p className="text-red-600 mt-1">{error.message}</p>
+        <button 
+          onClick={() => refetch()}
+          className="mt-2 px-3 py-1 bg-red-100 text-red-800 rounded hover:bg-red-200"
+        >
+          Try Again
+        </button>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {data.map(matchup => (
+        <MatchupCard key={matchup.id} matchup={matchup} />
+      ))}
+    </div>
+  );
+}
+```
+
+# Test Strategy:
+1. Test error boundaries with simulated errors
+2. Verify retry mechanisms work correctly
+3. Test loading states with delayed responses
+4. Verify Suspense boundaries work correctly
+5. Test error messages for clarity and helpfulness
+6. Create visual regression tests for loading and error states
+7. Test accessibility of error and loading states
+8. Verify that error tracking captures appropriate information
+
+# Subtasks:
+## 1. Implement Error Boundary Components [pending]
+### Dependencies: None
+### Description: Create reusable error boundary components to catch and handle JavaScript errors in component trees
+### Details:
+Develop a global ErrorBoundary component that catches JavaScript errors in child component trees, prevents the entire app from crashing, and displays fallback UI. Include options for different fallback UIs based on error type and component context. Add logging functionality to capture error details for debugging.
+
+## 2. Create Retry Mechanism for Failed Operations [pending]
+### Dependencies: 11.1
+### Description: Implement a standardized retry mechanism for API calls and other operations that might fail
+### Details:
+Develop a retry utility that can wrap API calls and automatically retry failed operations with exponential backoff. Include configuration options for maximum retry attempts, delay between retries, and conditions for retry eligibility. Create hooks or higher-order components to easily apply retry logic to any operation.
+
+## 3. Standardize Error Message Format and Display [pending]
+### Dependencies: 11.1
+### Description: Create a consistent system for formatting and displaying error messages across the application
+### Details:
+Design and implement a standardized error message format that includes error code, user-friendly message, technical details (when appropriate), and suggested actions. Create reusable components for displaying these messages in different contexts (toasts, inline errors, modal dialogs). Implement translation support for error messages.
+
+## 4. Develop Loading State Components [pending]
+### Dependencies: None
+### Description: Create a set of reusable loading state components for different UI contexts
+### Details:
+Design and implement various loading indicators (spinners, skeletons, progress bars) appropriate for different contexts. Create a LoadingProvider context to manage loading states across the application. Implement smart loading components that can determine appropriate loading visualization based on context, expected load time, and component size.
+
+## 5. Integrate React Suspense Boundaries [pending]
+### Dependencies: 11.1, 11.4
+### Description: Implement React Suspense boundaries throughout the application for code-splitting and data fetching
+### Details:
+Add React Suspense boundaries at strategic points in the component tree to enable code-splitting and data fetching with fallback UI. Create custom suspense-compatible data fetching utilities that work with the application's data layer. Implement lazy loading for routes and heavy components using Suspense. Ensure proper integration with error boundaries for handling loading failures.
+

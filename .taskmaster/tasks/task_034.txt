@@ -1,0 +1,79 @@
+# Task ID: 34
+# Title: Implement Live Tournament SG Integration
+# Status: pending
+# Dependencies: 31
+# Priority: medium
+# Description: Build real-time integration that analyzes current tournament conditions (weather, pin positions, course setup) and adjusts Strokes Gained analysis accordingly, providing live momentum tracking, round-by-round SG performance, and dynamic course DNA adjustments.
+# Details:
+This task involves implementing a real-time Strokes Gained (SG) analysis system that adapts to live tournament conditions:
+
+1. **Data Collection Layer**:
+   - Implement API connectors to ingest live tournament data including weather conditions, pin positions, and course setup changes
+   - Create a caching mechanism to store current tournament state with appropriate TTL values
+   - Develop a change detection system to identify significant tournament condition changes
+
+2. **SG Analysis Adjustment Engine**:
+   - Build algorithms to adjust baseline SG calculations based on current conditions
+   - Implement weighting factors for different conditions (e.g., wind speed/direction impact on driving, rain impact on putting)
+   - Create a normalization layer to ensure SG comparisons remain valid across changing conditions
+
+3. **Live Momentum Tracking**:
+   - Develop a sliding-window algorithm to calculate player momentum based on recent hole performance
+   - Implement statistical significance checks to distinguish real momentum from random variance
+   - Create visualization data structures for momentum representation (direction, magnitude, duration)
+
+4. **Round-by-Round SG Performance**:
+   - Build a real-time aggregation system for SG metrics by round
+   - Implement comparative analysis between current round and historical performance
+   - Create delta calculations to highlight performance changes in specific SG categories
+
+5. **Dynamic Course DNA Adjustments**:
+   - Extend the existing Course DNA system to incorporate real-time condition adjustments
+   - Implement a weighting algorithm that blends historical course DNA with current conditions
+   - Create an API endpoint that provides the current effective Course DNA profile
+
+6. **Integration with Existing SG API**:
+   - Extend the existing SG API endpoints to include condition-adjusted values
+   - Implement versioning to allow clients to request raw or adjusted SG metrics
+   - Create documentation for the new condition-adjusted endpoints
+
+7. **Performance Considerations**:
+   - Implement background processing for computationally intensive adjustments
+   - Design a caching strategy for frequently accessed adjusted SG metrics
+   - Create a fallback mechanism if live data feeds become unavailable
+
+# Test Strategy:
+1. **Unit Testing**:
+   - Create unit tests for each adjustment algorithm using mock tournament condition data
+   - Verify that SG calculations correctly adjust based on different weather scenarios
+   - Test boundary conditions (extreme weather, rapid condition changes)
+
+2. **Integration Testing**:
+   - Set up a test environment with simulated live tournament data feeds
+   - Verify that the system correctly integrates with the existing SG API endpoints
+   - Test the complete flow from condition change to adjusted SG metrics
+
+3. **Performance Testing**:
+   - Measure response times for adjusted SG calculations under various load conditions
+   - Verify that caching mechanisms effectively reduce computation time for repeated requests
+   - Test system behavior during simulated data feed interruptions
+
+4. **Validation Testing**:
+   - Compare adjusted SG predictions against actual tournament outcomes using historical data
+   - Verify that momentum tracking correlates with subsequent player performance
+   - Validate that dynamic Course DNA adjustments accurately reflect playing difficulty
+
+5. **User Acceptance Testing**:
+   - Create a test dashboard displaying live-adjusted SG metrics during an actual tournament
+   - Have golf analysts review the adjusted metrics for accuracy and usefulness
+   - Collect feedback on the most valuable condition-adjusted insights
+
+6. **Regression Testing**:
+   - Verify that existing SG functionality continues to work correctly
+   - Ensure that raw (unadjusted) SG metrics remain available and accurate
+   - Test backward compatibility with existing API clients
+
+7. **Documentation Verification**:
+   - Review API documentation for completeness and accuracy
+   - Verify that all new endpoints and parameters are properly documented
+   - Ensure examples accurately demonstrate the condition-adjusted functionality

@@ -1,0 +1,282 @@
+# Task ID: 12
+# Title: Implement Comprehensive TypeScript Interfaces
+# Status: pending
+# Dependencies: None
+# Priority: medium
+# Description: Create comprehensive TypeScript interfaces for all data structures and component props to improve type safety and developer experience.
+# Details:
+1. Create domain-specific interfaces for all data types
+2. Add proper prop typing with required/optional distinctions
+3. Use stricter TypeScript settings
+4. Create utility types for common patterns
+5. Add type guards for runtime type checking
+6. Document interfaces with JSDoc comments
+
+Example implementation:
+```typescript
+// src/types/golf.ts
+
+/**
+ * Represents a golf tournament
+ */
+export interface Tournament {
+  id: string;
+  name: string;
+  course: string;
+  startDate: string;
+  endDate: string;
+  tour: 'pga' | 'european' | 'other';
+  isActive: boolean;
+  field?: GolferBasic[];
+}
+
+/**
+ * Basic golfer information
+ */
+export interface GolferBasic {
+  id: string;
+  name: string;
+  worldRanking?: number;
+}
+
+/**
+ * Detailed golfer information with stats
+ */
+export interface GolferDetailed extends GolferBasic {
+  stats: GolferStats;
+  recentForm?: TournamentResult[];
+}
+
+/**
+ * Golfer statistics
+ */
+export interface GolferStats {
+  sgTotal?: number;
+  sgOtt?: number;
+  sgApp?: number;
+  sgArg?: number;
+  sgPutt?: number;
+  recentSgTotal?: number;
+  courseFit?: number;
+}
+
+/**
+ * Tournament result for a golfer
+ */
+export interface TournamentResult {
+  tournamentId: string;
+  tournamentName: string;
+  position: number;
+  score: number;
+  strokes?: number;
+  sgTotal?: number;
+}
+
+/**
+ * Types of matchups
+ */
+export type MatchupType = '2ball' | '3ball';
+
+/**
+ * Base matchup interface
+ */
+export interface MatchupBase {
+  id: number;
+  tournamentId: string;
+  round: number;
+  type: MatchupType;
+  startTime?: string;
+  isSettled: boolean;
+  winner?: string;
+}
+
+/**
+ * 2-ball matchup between two golfers
+ */
+export interface TwoBallMatchup extends MatchupBase {
+  type: '2ball';
+  player1: {
+    id: string;
+    name: string;
+    odds: number;
+  };
+  player2: {
+    id: string;
+    name: string;
+    odds: number;
+  };
+}
+
+/**
+ * 3-ball matchup between three golfers
+ */
+export interface ThreeBallMatchup extends MatchupBase {
+  type: '3ball';
+  player1: {
+    id: string;
+    name: string;
+    odds: number;
+  };
+  player2: {
+    id: string;
+    name: string;
+    odds: number;
+  };
+  player3: {
+    id: string;
+    name: string;
+    odds: number;
+  };
+}
+
+/**
+ * Union type for all matchup types
+ */
+export type Matchup = TwoBallMatchup | ThreeBallMatchup;
+
+/**
+ * Type guard to check if a matchup is a 2-ball matchup
+ */
+export function isTwoBallMatchup(matchup: Matchup): matchup is TwoBallMatchup {
+  return matchup.type === '2ball';
+}
+
+/**
+ * Type guard to check if a matchup is a 3-ball matchup
+ */
+export function isThreeBallMatchup(matchup: Matchup): matchup is ThreeBallMatchup {
+  return matchup.type === '3ball';
+}
+
+/**
+ * Parlay consisting of multiple matchup selections
+ */
+export interface Parlay {
+  id: string;
+  userId: string;
+  createdAt: string;
+  legs: ParlayLeg[];
+  isSettled: boolean;
+  status: 'won' | 'lost' | 'pending' | 'push';
+  odds: number;
+  stake?: number;
+  potentialPayout?: number;
+  strategy: StrategyType;
+}
+
+/**
+ * Individual leg of a parlay
+ */
+export interface ParlayLeg {
+  matchupId: number;
+  matchupType: MatchupType;
+  selectedPlayerId: string;
+  selectedPlayerName: string;
+  odds: number;
+  status: 'won' | 'lost' | 'pending' | 'push';
+}
+
+/**
+ * Strategy types for parlay generation
+ */
+export type StrategyType = 'balanced' | 'sgHeavy' | 'heavyFavorites' | 'scoreHeavy' | 'sgValue' | 'custom';
+
+// src/components/golf/MatchupCard.tsx
+import { TwoBallMatchup, ThreeBallMatchup } from '@/types/golf';
+
+interface MatchupCardProps {
+  matchup: TwoBallMatchup | ThreeBallMatchup;
+  onSelect?: (matchupId: number, playerId: string) => void;
+  selectedPlayerId?: string;
+  disabled?: boolean;
+}
+
+export function MatchupCard({
+  matchup,
+  onSelect,
+  selectedPlayerId,
+  disabled = false,
+}: MatchupCardProps) {
+  // Component implementation
+}
+```
+
+```typescript
+// tsconfig.json
+{
+  "compilerOptions": {
+    "target": "es2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitAny": true,
+    "noImplicitThis": true,
+    "strictNullChecks": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules"]
+}
+```
+
+# Test Strategy:
+1. Use TypeScript compiler to verify type correctness
+2. Test type guards with various inputs
+3. Verify that interfaces correctly represent the actual data
+4. Test utility types with edge cases
+5. Create tests for runtime type checking
+6. Verify that TypeScript errors are caught during development
+7. Test integration with external APIs and data sources
+8. Verify that documentation is accurate and helpful
+
+# Subtasks:
+## 1. Define Domain Model Interfaces [pending]
+### Dependencies: None
+### Description: Create TypeScript interfaces for all core domain entities and data structures in the application
+### Details:
+Identify all key domain entities and create corresponding TypeScript interfaces. Include all properties with appropriate types, consider relationships between entities, and add JSDoc comments for better documentation. Ensure interfaces are extensible for future requirements.
+
+## 2. Implement Component Prop Types [pending]
+### Dependencies: 12.1
+### Description: Define TypeScript interfaces for all React component props
+### Details:
+Create interfaces for props of each React component. Use the domain model interfaces where appropriate. Include optional and required props, default values, and event handler types. Consider component hierarchy and prop drilling requirements.
+
+## 3. Create Utility Types [pending]
+### Dependencies: 12.1, 12.2
+### Description: Develop reusable utility types to enhance type safety and reduce duplication
+### Details:
+Implement utility types such as Partial, Pick, Omit, Record, etc. for common type transformations. Create mapped types, conditional types, and type aliases as needed. Focus on DRY principles and type reusability across the codebase.
+
+## 4. Implement Type Guards [pending]
+### Dependencies: 12.1, 12.3
+### Description: Create type guard functions for runtime type checking and safe type assertions
+### Details:
+Develop type guard functions using type predicates (is narrowing) for key interfaces. Implement user-defined type guards for complex types. Add validation logic to ensure runtime type safety, especially for external data sources and API responses.
+
+## 5. Configure TypeScript Settings [pending]
+### Dependencies: None
+### Description: Set up and optimize TypeScript configuration for the project
+### Details:
+Configure tsconfig.json with appropriate compiler options. Set strictness levels, module resolution, target ECMAScript version, and other relevant settings. Ensure compatibility with the build system and development workflow. Consider performance implications of type checking.
+
+## 6. Create TypeScript Documentation [pending]
+### Dependencies: 12.1, 12.2, 12.3, 12.4, 12.5
+### Description: Document the type system and provide usage examples for the team
+### Details:
+Create comprehensive documentation for the TypeScript type system. Include examples of interface usage, type guard implementation, and common patterns. Document any gotchas or edge cases. Provide guidelines for extending the type system and maintaining type safety.
+

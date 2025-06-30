@@ -1,0 +1,331 @@
+# Task ID: 25
+# Title: Implement Comprehensive Parlay Settlement System
+# Status: done
+# Dependencies: 2, 6, 12, 24
+# Priority: medium
+# Description: Create a robust system that automatically settles 2-ball and 3-ball parlays across multiple tours (PGA, Euro, etc.) when tournaments complete, handling different data sources and settlement logic.
+# Details:
+The parlay settlement system should be implemented with the following components:
+
+1. **Data Model Enhancement**:
+   - Extend the `parlay_picks` table to include `event_id` and `tour_id` fields
+   - Add settlement status fields (`settled_at`, `settlement_status`, `settlement_notes`)
+   - Create a new `settlement_history` table for audit trails
+
+2. **Multi-Tour Data Source Integration**:
+   - Create adapter interfaces for different tour data sources:
+   ```typescript
+   // src/lib/settlement/adapters/types.ts
+   export interface TournamentDataAdapter {
+     getTournamentResults(tournamentId: string): Promise<TournamentResults>;
+     getPlayerResults(tournamentId: string, playerId: string): Promise<PlayerResult>;
+     isTournamentComplete(tournamentId: string): Promise<boolean>;
+   }
+   
+   // Implementation for PGA
+   export class PGADataAdapter implements TournamentDataAdapter {
+     // Implementation using DataGolf API endpoints
+   }
+   
+   // Implementation for European Tour
+   export class EuroTourDataAdapter implements TournamentDataAdapter {
+     // Implementation using Euro in-play API
+   }
+   ```
+
+3. **Intelligent Settlement Logic**:
+   - Create settlement strategies for different parlay types:
+   ```typescript
+   // src/lib/settlement/strategies/types.ts
+   export interface SettlementStrategy {
+     calculateOutcome(pick: ParlayPick, tournamentData: TournamentResults): PickOutcome;
+   }
+   
+   export class TwoBallSettlementStrategy implements SettlementStrategy {
+     // Implementation for head-to-head matchups
+   }
+   
+   export class ThreeBallSettlementStrategy implements SettlementStrategy {
+     // Implementation for 3-player groups
+   }
+   ```
+   - Handle edge cases like ties, withdrawals, and disqualifications
+
+4. **Automated Settlement Workflow**:
+   - Create a settlement service:
+   ```typescript
+   // src/lib/settlement/service.ts
+   export class ParlaySettlementService {
+     async settleTournament(tournamentId: string, tourId: string): Promise<SettlementResult> {
+       // 1. Check if tournament is complete
+       // 2. Get all unsettled picks for this tournament
+       // 3. Apply appropriate settlement strategy for each pick
+       // 4. Update pick outcomes
+       // 5. Update parlay statuses
+       // 6. Record settlement history
+     }
+     
+     async findTournamentsReadyForSettlement(): Promise<TournamentInfo[]> {
+       // Logic to detect completed tournaments
+     }
+   }
+   ```
+   - Implement a scheduled job to run settlement automatically:
+   ```typescript
+   // src/app/api/cron/settle-tournaments/route.ts
+   export async function POST(request: Request) {
+     // Verify cron authentication
+     const settlementService = new ParlaySettlementService();
+     const tournaments = await settlementService.findTournamentsReadyForSettlement();
+     
+     const results = await Promise.all(
+       tournaments.map(t => settlementService.settleTournament(t.id, t.tourId))
+     );
+     
+     return Response.json({ success: true, results });
+   }
+   ```
+
+5. **Settlement UI/UX**:
+   - Create an admin interface for manual settlement:
+   ```typescript
+   // src/app/admin/settlement/page.tsx
+   export default function SettlementPage() {
+     // UI for viewing pending tournaments and triggering settlement
+   }
+   ```
+   - Add settlement status indicators to user parlay views
+
+6. **Settlement Status Tracking**:
+   - Implement logging and history tracking:
+   ```typescript
+   // src/lib/settlement/history.ts
+   export async function recordSettlementAction(
+     action: SettlementAction,
+     parlayIds: string[],
+     metadata: SettlementMetadata
+   ): Promise<void> {
+     // Record to settlement_history table
+   }
+   ```
+   - Create rollback capabilities:
+   ```typescript
+   // src/lib/settlement/rollback.ts
+   export async function rollbackSettlement(
+     settlementId: string,
+     reason: string
+   ): Promise<RollbackResult> {
+     // Implement idempotent rollback logic
+   }
+   ```
+
+7. **Error Handling and Edge Cases**:
+   - Implement robust error handling for API failures
+   - Create strategies for handling ties in different formats
+   - Handle player withdrawals and disqualifications
+   - Ensure settlement is idempotent (can be run multiple times safely)
+
+# Test Strategy:
+The parlay settlement system should be tested using the following approach:
+
+1. **Unit Tests**:
+   - Test each settlement strategy with mock tournament data:
+   ```typescript
+   // src/lib/settlement/strategies/__tests__/two-ball-strategy.test.ts
+   describe('TwoBallSettlementStrategy', () => {
+     it('should correctly identify winner in head-to-head matchup', () => {
+       // Test with mock data
+     });
+     
+     it('should handle ties correctly', () => {
+       // Test tie scenarios
+     });
+     
+     it('should handle player withdrawal correctly', () => {
+       // Test withdrawal scenarios
+     });
+   });
+   ```
+   - Test data adapters with mock API responses
+   - Test settlement service with mocked dependencies
+
+2. **Integration Tests**:
+   - Create test fixtures with sample parlays and tournament data
+   - Test the end-to-end settlement process with controlled data
+   - Verify database updates are correct after settlement
+
+3. **API Tests**:
+   - Test the settlement API endpoints with various scenarios
+   - Verify authentication and authorization controls
+
+4. **Manual Testing Scenarios**:
+   - Create a test tournament with known outcomes
+   - Create test parlays with various combinations (wins, losses, ties)
+   - Trigger settlement and verify results
+   - Test rollback functionality
+   - Verify settlement history is recorded correctly
+
+5. **Edge Case Testing**:
+   - Test with tournaments that have ties
+   - Test with tournaments where players have withdrawn
+   - Test with tournaments where players are disqualified
+   - Test with incomplete tournament data
+   - Test settlement of the same tournament multiple times (idempotency)
+
+6. **UI Testing**:
+   - Verify settlement status is displayed correctly in admin UI
+   - Verify settlement status is displayed correctly in user parlay views
+   - Test manual settlement triggers
+   - Test settlement history views
+
+7. **Performance Testing**:
+   - Test settlement of large numbers of parlays
+   - Measure and optimize settlement time
+
+8. **Monitoring Plan**:
+   - Set up alerts for failed settlements
+   - Create dashboard for settlement statistics
+   - Monitor API response times during settlement processes
+
+# Subtasks:
+## 1. Implement Data Model Enhancement [done]
+### Dependencies: None
+### Description: Extend existing database schema to support parlay settlement requirements
+### Details:
+1. Modify the `parlay_picks` table to add `event_id`, `tour_id`, `settled_at`, `settlement_status`, and `settlement_notes` fields
+2. Create a new `settlement_history` table with fields for tracking settlement actions, including `id`, `action_type`, `parlay_ids`, `user_id`, `timestamp`, `metadata`, and `status`
+3. Add appropriate indexes for efficient querying
+4. Create database migration scripts
+5. Update TypeScript types and Prisma schema to reflect these changes
+<info added on 2025-06-07T13:03:58.655Z>
+✅ **Data Model Enhancement Complete!**
+
+**Migrations Applied:**
+1. **Enhanced parlay_picks table** - Added settlement fields:
+   - `event_id INTEGER` - Direct reference to tournament
+   - `tour_id TEXT` - Tour identifier (pga, euro, etc.)
+   - `settled_at TIMESTAMPTZ` - When settlement occurred
+   - `settlement_status TEXT` - Status with constraints (pending, settled, failed, manual)
+   - `settlement_notes TEXT` - Additional settlement information
+
+2. **Created settlement_history table** - Complete audit trail:
+   - Full settlement tracking with old/new outcomes
+   - Settlement method tracking (automatic, manual, override)
+   - Raw settlement data storage (JSONB)
+   - Settlement reason and operator tracking
+   - Proper foreign key relationships
+
+3. **Performance Optimization** - Added strategic indexes:
+   - Individual indexes on event_id, settlement_status, settled_at, tour_id
+   - Composite index for settlement lookup queries
+   - Settlement history indexes for audit queries
+
+4. **Data Migration** - Populated existing records:
+   - Updated all existing parlay_picks with event_id and tour_id
+   - Joined through matchups → tournaments for tour identification
+
+**Key Implementation Notes:**
+- Settlement status has proper CHECK constraints for data integrity
+- Foreign key relationships maintain referential integrity  
+- JSONB settlement_data allows flexible storage of API responses
+- Indexes optimized for common settlement query patterns
+- Backward compatible - existing functionality preserved
+</info added on 2025-06-07T13:03:58.655Z>
+
+## 2. Develop Tour Data Source Adapters [done]
+### Dependencies: 25.1
+### Description: Create adapter interfaces and implementations for different tour data sources
+### Details:
+1. Implement the `TournamentDataAdapter` interface as defined in the requirements
+2. Create the `PGADataAdapter` implementation using DataGolf API endpoints
+3. Create the `EuroTourDataAdapter` implementation using Euro in-play API
+4. Implement a factory pattern to select the appropriate adapter based on tour_id
+5. Add caching layer to prevent excessive API calls
+6. Implement error handling and retry logic for API failures
+<info added on 2025-06-07T13:06:28.132Z>
+Tour Data Source Integration has been successfully completed with the following implementations:
+
+1. Implemented `TourDataService` in `lib/services/tour-data-service.ts` with:
+   - Multi-tour support (PGA, Euro Tour, DP World, Korn Ferry, LIV Golf)
+   - Automatic tour type detection from tournament names
+   - API integrations for PGA Tour (`live-tournament-stats` endpoint) and Euro Tour (`in-play` endpoint)
+   - Data normalization through unified `PlayerStats` interface
+   - Comprehensive error handling with detailed logging
+
+2. Implemented `SettlementService` in `lib/services/settlement-service.ts` with:
+   - Settlement logic for 2-ball and 3-ball matchups
+   - Handling of edge cases (missed cuts, ties, withdrawals, position parsing)
+   - Database integration with CRUD operations and settlement history
+   - Audit trail with settlement tracking and reason codes
+   - Performance-optimized grouping and batch processing
+
+3. Added key features:
+   - Position parsing for various formats (T5, 1, T12, CUT, MC)
+   - Cut status logic for settlement calculations
+   - Tie resolution with appropriate push outcomes
+   - Multiple settlement methods (automatic, manual, override)
+   - Comprehensive logging for debugging
+
+4. Implemented data flow architecture and settlement algorithms for different matchup types with error resilience mechanisms.
+</info added on 2025-06-07T13:06:28.132Z>
+
+## 3. Implement Settlement Strategies [done]
+### Dependencies: 25.1, 25.2
+### Description: Create settlement logic for different parlay types with handling for edge cases
+### Details:
+1. Implement the `SettlementStrategy` interface as defined in the requirements
+2. Create `TwoBallSettlementStrategy` for head-to-head matchups
+3. Create `ThreeBallSettlementStrategy` for 3-player groups
+4. Implement logic for handling ties, withdrawals, and disqualifications
+5. Create a strategy factory to select the appropriate strategy based on pick type
+6. Ensure all strategies are stateless and testable
+<info added on 2025-06-07T13:08:56.259Z>
+7. Implemented core settlement API with `/api/settle` route supporting both POST and GET endpoints
+8. Created auto-detection system for finding events with unsettled parlays
+9. Developed flexible parameter handling for different settlement scenarios
+10. Implemented comprehensive error handling with detailed error messages
+11. Enhanced settlement algorithms with proper handling of edge cases (missed cuts, withdrawals, ties)
+12. Added outcome type classification (WIN, LOSS, PUSH, VOID) with reasoning
+13. Integrated settlement UI components with toast notifications and loading states
+14. Implemented complete settlement flow from event detection to database updates
+15. Added audit trail via settlement_history table with atomic transactions
+16. Created API response format with detailed settlement statistics
+17. Optimized for user experience with one-click settlement and real-time feedback
+</info added on 2025-06-07T13:08:56.259Z>
+<info added on 2025-06-07T13:22:17.014Z>
+18. Fixed tour detection bug in TourDataService.getTourType() where tournament.tour field was being ignored in favor of tournament name. Modified the method to prioritize exact matches in the database tour field before falling back to substring matching in tournament names. This ensures Euro Tour events are correctly detected and use the proper API endpoint instead of being misidentified as PGA events.
+</info added on 2025-06-07T13:22:17.014Z>
+<info added on 2025-06-07T13:27:58.962Z>
+19. Fixed UI display issue where Euro Tour parlays showed placeholder data (all "E" scores, "-" positions) after settlement. The problem occurred because the parlays page fetches from `live_tournament_stats` table which only contained PGA Tour data. Added `populateLiveStats()` method to settlement service that converts Euro Tour PlayerStats to live_tournament_stats format, deletes existing stats for the event to avoid duplicates, inserts round-specific player data in batches, and maps essential fields (player_name, position, total score, today score, thru holes). This method is called automatically after settlement completion, ensuring Euro Tour parlays display actual player scores, positions, and holes played instead of placeholder values.
+</info added on 2025-06-07T13:27:58.962Z>
+<info added on 2025-06-07T13:31:05.956Z>
+20. **COMPLETE FIX VERIFIED WORKING**: Fixed Euro Tour parlay settlement issues with multiple improvements: (1) Corrected tour detection in TourDataService.getTourType() to prioritize database tour field over tournament name, (2) Implemented Euro Tour API support with proper round data extraction, (3) Enhanced settlement logic with comprehensive 3-ball/2-ball settlement including cut status handling, and (4) Added populateLiveStats() method to settlement service and populated existing data manually. All Euro Tour parlays now correctly detect as "euro" instead of "pga", settlement API successfully processes picks (verified with 16 picks: 1 win, 3 losses, 12 pushes), UI displays actual player data (scores, positions, holes played), and the complete data flow from DataGolf API through settlement to database and UI works seamlessly.
+</info added on 2025-06-07T13:31:05.956Z>
+<info added on 2025-06-07T13:43:46.700Z>
+21. **✅ FINAL SCORE DISPLAY FIX COMPLETE**: Fixed Euro Tour parlays displaying confusing raw scores (+64, +72) instead of proper golf scoring relative to par. Enhanced `populateLiveStats()` method with intelligent score handling that differentiates between historical rounds (converting raw scores to relative-to-par, e.g., 64 → -8 for par 72) and current/live rounds (using existing relative-to-par scores directly). Implemented proper score mapping where `today` shows round score and `total` shows appropriate tournament score. Verified results show correct relative-to-par display (-8, -4, E) instead of confusing raw scores (+64, +72) for both completed and in-progress rounds. This ensures Euro Tour parlays display intuitive golf scores matching standard golf leaderboard formatting throughout the entire data flow from DataGolf API through Settlement to Database and UI.
+</info added on 2025-06-07T13:43:46.700Z>
+
+## 4. Build Automated Settlement Workflow [done]
+### Dependencies: 25.1, 25.2, 25.3
+### Description: Create the settlement service and scheduled job for automated tournament settlement
+### Details:
+1. Implement the `ParlaySettlementService` as outlined in the requirements
+2. Create the `findTournamentsReadyForSettlement` method to detect completed tournaments
+3. Implement the `settleTournament` method to process all picks for a tournament
+4. Create the cron API route for automated settlement
+5. Implement logging and error handling throughout the workflow
+6. Add rollback capabilities for incorrect settlements
+7. Ensure the settlement process is idempotent
+
+## 5. Develop Settlement UI and Status Tracking [done]
+### Dependencies: 25.4
+### Description: Create admin interface for settlement management and user-facing settlement status indicators
+### Details:
+1. Build the admin settlement dashboard page
+2. Implement tournament status monitoring in the admin UI
+3. Create manual settlement trigger functionality
+4. Add settlement history viewing and filtering
+5. Implement rollback functionality in the UI
+6. Add settlement status indicators to user parlay views
+7. Create notification system for users when parlays are settled
+

@@ -1,0 +1,245 @@
+# Task ID: 35
+# Title: Build Strokes Gained Calculation Engine
+# Status: in-progress
+# Dependencies: 23
+# Priority: high
+# Description: Create a comprehensive Strokes Gained (SG) analysis engine that leverages DataGolf API data to power all SG analysis, implementing advanced analytics for course profiling, player classification, and performance prediction.
+# Details:
+The Strokes Gained (SG) Analysis Engine should be implemented as a modular service with the following components:
+
+1. SG Data Analysis Service:
+   - Integrate with DataGolf API to access official PGA Tour SG metrics
+   - Process player_skill_ratings for season SG averages
+   - Analyze live_tournament_stats for tournament-specific performance
+   - Utilize tournament_round_snapshots for historical SG data with 15-year retention
+   - Implement field-relative analysis to properly contextualize SG metrics
+
+2. Course DNA Profiling:
+   - Develop algorithms to identify course-specific SG patterns
+   - Create course profiles based on historical SG data across all categories
+   - Quantify which SG categories each course rewards most
+   - Build course similarity metrics based on SG signature patterns
+
+3. Player SG Archetype Classification:
+   - Implement clustering algorithms to group players by SG signatures
+   - Create player archetypes (e.g., "elite driver, average putter")
+   - Track player development and archetype transitions over time
+   - Identify complementary player types for team competitions
+
+4. SG-Based Course Fit Analysis:
+   - Match player SG strengths to course requirements
+   - Develop predictive models for player performance at specific venues
+   - Quantify course fit scores based on player SG profiles
+   - Create visualization tools for course fit analysis
+
+5. Live SG Momentum Tracking:
+   - Implement real-time analysis of SG trends during tournaments
+   - Identify hot/cold streaks in specific SG categories
+   - Develop momentum indicators based on recent SG performance
+   - Create alerts for significant SG pattern changes
+
+6. Performance Optimization:
+   - Ensure analyses are efficient for large historical datasets
+   - Implement caching strategies for frequently accessed SG data
+   - Consider parallel processing for batch analyses
+
+The implementation should leverage the ML-ready data structure from Task 23, ensuring compatibility with the normalized betting data format and feature snapshots. All SG analysis should recognize that SG is field-relative and course-specific, defined as "per round average better/worse than FIELD AVERAGE on same course & event" in accordance with Mark Broadie's methodology.
+
+# Test Strategy:
+1. Unit Testing:
+   - Create comprehensive unit tests for each SG analysis function
+   - Test with known input/output pairs validated against published SG data
+   - Verify edge cases (tournament outliers, course extremes, etc.)
+   - Test handling of missing or incomplete data
+
+2. Integration Testing:
+   - Verify integration with DataGolf API data sources
+   - Test end-to-end analysis pipeline with sample tournament data
+   - Validate results against published PGA Tour SG statistics
+
+3. Performance Testing:
+   - Benchmark analysis speed for single rounds, tournaments, and seasons
+   - Test with large historical datasets to ensure scalability
+   - Verify memory usage remains within acceptable limits
+
+4. Validation Testing:
+   - Compare analysis results against known course characteristics
+   - Verify player archetype classifications match expert assessments
+   - Ensure course fit predictions align with historical performance
+
+5. API Testing:
+   - Verify all API endpoints return correct results
+   - Test error handling and edge cases
+   - Validate documentation accuracy with example calls
+
+6. Regression Testing:
+   - Create a suite of regression tests to ensure future changes don't break analyses
+   - Include historical tournament data with known SG patterns
+
+7. User Acceptance Testing:
+   - Have golf analytics experts review the analysis outputs
+   - Verify the results match intuitive expectations for known player-course relationships
+
+# Subtasks:
+## 1. Implement Core SG Category Functions [done]
+### Dependencies: None
+### Description: Develop the fundamental mathematical functions for calculating strokes gained in each category (OTT, APP, ARG, PUTT).
+### Details:
+Create separate functions for each SG category with appropriate parameters: SG_OTT(distance, lie, outcome), SG_APP(distance, lie, outcome), SG_ARG(distance, lie, outcome), and SG_PUTT(distance, outcome). Each function should calculate the difference between expected strokes from the starting position and expected strokes from the ending position, plus one stroke for the shot taken. Implement shot classification logic to determine which category a shot belongs to based on distance from hole, lie type, and other factors.
+<info added on 2025-06-14T00:33:06.957Z>
+Core SG Category Functions Implementation is now complete with the following components:
+
+1. TypeScript type system in lib/types/strokes-gained.ts:
+   - SGCategory, LieType, ShotData, SGResult, SGSummary interfaces
+   - CourseAdjustment and ConditionsAdjustment for advanced features
+   - PlayerArchetype for player classification
+   - Comprehensive error handling types
+
+2. SG Calculation Service in lib/services/strokes-gained-service.ts:
+   - calculateSG_OTT(): Off-the-tee strokes gained calculations
+   - calculateSG_APP(): Approach shot strokes gained calculations  
+   - calculateSG_ARG(): Around-the-green strokes gained calculations
+   - calculateSG_PUTT(): Putting strokes gained calculations
+   - calculateSingleShot(): Universal shot analysis with automatic classification
+   - calculateSummary(): Aggregate SG analysis for rounds/tournaments
+
+3. Initial PGA Tour Baseline Data:
+   - 50+ baseline data points for putting (3-30 feet)
+   - Approach shot baselines from fairway/rough (0-250 yards)
+   - Tee shot baselines for drives (300-550 yards)
+   - Intelligent interpolation for missing distance/lie combinations
+
+4. Shot Classification Logic:
+   - Automatic categorization based on distance and lie type
+   - Handles edge cases and boundary conditions
+   - Supports manual category override when needed
+
+5. Advanced Features:
+   - Penalty stroke handling
+   - Holing probability calculations
+   - Configurable precision and baseline sources
+   - Comprehensive error handling and validation
+
+6. Test Coverage:
+   - Comprehensive test suite covering all functions
+   - Test script to verify calculations work correctly
+   - Ready for integration testing with real tournament data
+</info added on 2025-06-14T00:33:06.957Z>
+<info added on 2025-06-14T00:36:23.010Z>
+## Course Correction: Pivoting to Data-Driven SG Approach
+
+After reviewing feedback, we're pivoting from building theoretical SG calculations to working with actual PGA Tour ShotLink data:
+
+1. Research Requirements:
+   - Investigate PGA Tour ShotLink data access options (API, data feeds, partnerships)
+   - Study Mark Broadie's methodology for SG calculations
+   - Analyze how field averages are subtracted for each round
+   - Examine real benchmark data from current SG leaders (Wallace, Manassero, Im)
+
+2. Data Integration Plan:
+   - Create data importers for PGA Tour SG statistics
+   - Develop database schema to store official SG metrics by player/tournament/round
+   - Build normalization tools to handle different course conditions
+   - Implement field-average adjustment calculations
+
+3. Repurpose Current Work:
+   - Convert theoretical calculation engine to validation/verification tool
+   - Use existing type system for data modeling
+   - Adapt shot classification logic for data analysis rather than calculation
+   - Maintain test coverage for new data-driven approach
+
+4. New Deliverables:
+   - PGA Tour data connector service
+   - SG data aggregation and analysis tools
+   - Course-specific and player-specific SG trend analysis
+   - Visualization components for SG metrics
+
+This pivot ensures we're working with industry-standard SG metrics rather than attempting to recreate the complex statistical baselines already established by the PGA Tour.
+</info added on 2025-06-14T00:36:23.010Z>
+
+## 2. Implement DataGolf API Integration [done]
+### Dependencies: None
+### Description: Create a robust integration with DataGolf API to access and process official PGA Tour SG metrics.
+### Details:
+Develop a comprehensive DataGolf API client that can access player_skill_ratings (season SG averages), live_tournament_stats (tournament-specific SG performance), and tournament_round_snapshots (historical SG data). Implement data transformation functions to normalize the API responses into our internal data model. Create caching mechanisms to minimize API calls and handle rate limits. Build error handling and retry logic for API failures. Ensure proper authentication and API key management.
+
+## 3. Develop Course DNA Profiling System [done]
+### Dependencies: 35.1, 35.2
+### Description: Create algorithms to identify and quantify course-specific SG patterns and characteristics.
+### Details:
+Implement statistical analysis to identify which SG categories each course rewards most based on historical tournament data. Create course profile data structures that capture SG signature patterns across all categories. Develop similarity metrics to group courses by SG characteristics. Build visualization tools to represent course DNA profiles. Implement time-series analysis to detect changes in course characteristics over time. Create a database of course profiles with regular update mechanisms.
+<info added on 2025-06-14T00:47:00.139Z>
+COMPLETED: Course DNA Profiling System Implementation
+
+🎯 What we built:
+1. **Complete TypeScript types** in lib/types/course-dna.ts:
+   - CourseDNAProfile: Complete course skill requirement profiles
+   - PlayerCourseFit: Player-course compatibility analysis
+   - SGMomentumIndicator: Real-time momentum tracking
+   - CourseHistoricalAnalysis: Historical performance patterns
+   - PlayerSGArchetype: Player classification system
+
+2. **Full Course DNA Analysis Service** in lib/services/course-dna-service.ts:
+   - generateCourseDNAProfile(): Core algorithm that analyzes historical SG data
+   - analyzeWinnerPatterns(): Separates winners from field by SG categories  
+   - calculateCategoryWeights(): Converts winner advantages to percentage importance
+   - analyzePlayerCourseFit(): Matches player strengths to course requirements
+   - Statistical validation with confidence scoring and data sufficiency checks
+
+3. **Mathematical Implementation**:
+   - Winner vs Field Analysis: Calculates SG category advantages for tournament winners
+   - Category Weight Calculation: Edge-based percentage allocation (e.g., 38% approach, 28% putting)
+   - Course Fit Scoring: Player strength × course importance for 0-100 fit scores
+   - Grade System: A-F grades based on fit scores for easy interpretation
+
+4. **Real Data Integration**:
+   - Uses live_tournament_stats table for historical SG data
+   - Integrates with player_skill_ratings for current player profiles
+   - Handles data validation and insufficient data scenarios
+   - Multi-year analysis with confidence thresholds
+
+5. **Test Framework**:
+   - Created comprehensive test script to validate functionality
+   - Tests course DNA generation, player fit analysis, and multiple tournaments
+   - Provides interpretation guide for practical usage
+
+🏆 COURSE DNA ALGORITHM LOGIC:
+- Step 1: Gather historical SG data for tournament winners vs field
+- Step 2: Calculate winner advantage in each SG category (OTT, APP, ARG, PUTT)  
+- Step 3: Convert advantages to percentage weights (total = 100%)
+- Step 4: Create course DNA profile showing what skills matter most
+- Example: "TPC Sawgrass rewards Approach (38%) + Putting (28%) = 66% of success"
+
+✅ READY FOR: Course-specific parlay recommendations and player-course fit analysis!
+</info added on 2025-06-14T00:47:00.139Z>
+
+## 4. Build Player SG Archetype Classification [pending]
+### Dependencies: 35.1, 35.2
+### Description: Implement clustering and classification algorithms to group players by their SG performance patterns.
+### Details:
+Develop clustering algorithms (k-means, hierarchical, etc.) to identify natural player groupings based on SG category performance. Create named archetypes with clear definitions (e.g., "elite driver, average putter"). Implement functions to classify new players into existing archetypes. Build tracking mechanisms to monitor player development and archetype transitions over time. Create visualization tools to represent player SG signatures. Develop similarity metrics to identify complementary player types for team competitions.
+
+## 5. Create SG-Based Course Fit Analysis [pending]
+### Dependencies: 35.3, 35.4
+### Description: Develop predictive models that match player SG strengths to course requirements for performance prediction.
+### Details:
+Implement algorithms to quantify the match between player SG profiles and course DNA characteristics. Create course fit scoring systems that predict player performance at specific venues. Develop historical analysis tools to validate course fit predictions against actual results. Build visualization components to represent course fit analysis. Implement comparative analysis to rank players' expected performance at specific courses. Create API endpoints for course fit queries.
+
+## 6. Implement Live SG Momentum Tracking [pending]
+### Dependencies: 35.2
+### Description: Create real-time analysis tools to identify and quantify SG performance trends during tournaments.
+### Details:
+Develop algorithms to detect significant changes in SG performance across categories. Implement statistical methods to distinguish random variation from meaningful trends. Create momentum indicators based on recent SG performance relative to player baselines. Build alert systems for significant SG pattern changes. Develop visualization tools to represent momentum shifts graphically. Implement real-time data processing for live tournament updates. Create API endpoints for momentum queries.
+
+## 7. Repurpose Existing SG Calculation Components [pending]
+### Dependencies: 35.1, 35.2
+### Description: Adapt the completed SG calculation work to support the new data-driven analysis approach.
+### Details:
+Refactor the existing type system in lib/types/strokes-gained.ts to accommodate DataGolf API data structures. Adapt the SG calculation service to serve as a validation and verification tool for DataGolf metrics. Modify shot classification logic to support analysis rather than calculation. Update test coverage to reflect the new data-driven approach. Create compatibility layers to ensure existing code can work with the new data sources. Document the transition from calculation to analysis focus.
+
+## 8. Design and Implement Analysis API Interface [pending]
+### Dependencies: 35.3, 35.4, 35.5, 35.6, 35.7
+### Description: Create a comprehensive API for accessing the SG analysis engine from other system components.
+### Details:
+Design RESTful API endpoints for course DNA profiles, player archetype classification, course fit analysis, and momentum tracking. Implement synchronous methods for real-time analysis and asynchronous methods for large batch processing. Create detailed API documentation including parameter specifications, response formats, and example usage. Develop client libraries in Python and JavaScript to facilitate integration. Implement appropriate authentication and rate limiting.
+

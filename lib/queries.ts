@@ -24,7 +24,7 @@ export function useActiveEvents() {
       const today = new Date().toISOString().split('T')[0]
       
       const { data, error } = await supabase
-        .from('tournaments')
+        .from('tournaments_v2')
         .select('event_id, event_name, start_date, end_date')
         .lte('start_date', today) // Started before or on today
         .gte('end_date', today)   // Ends after or on today
@@ -45,7 +45,7 @@ export function useUpcomingEvent() {
       const supabase = getSupabase()
       const today = new Date().toISOString().split('T')[0]
       const { data, error } = await supabase
-        .from('tournaments')
+        .from('tournaments_v2')
         .select('event_id, event_name, start_date, end_date')
         .gt('start_date', today)
         .order('start_date', { ascending: true })
@@ -64,7 +64,7 @@ export function useLastCompletedEvent() {
       const supabase = getSupabase()
       const today = new Date().toISOString().split('T')[0]
       const { data, error } = await supabase
-        .from('tournaments')
+        .from('tournaments_v2')
         .select('event_id, event_name, start_date, end_date')
         .lt('end_date', today)
         .order('end_date', { ascending: false })

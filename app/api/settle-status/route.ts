@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
 
     // Get events from tournaments table
     const { data: tournaments, error: tournamentsError } = await supabase
-      .from('tournaments')
+      .from('tournaments_v2')
       .select('event_id, event_name, tour')
 
     if (tournamentsError) {

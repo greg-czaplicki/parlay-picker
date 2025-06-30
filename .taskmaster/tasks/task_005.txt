@@ -1,0 +1,130 @@
+# Task ID: 5
+# Title: Implement Server Components for Data-Heavy Pages
+# Status: pending
+# Dependencies: 1, 2
+# Priority: medium
+# Description: Identify and convert applicable components to server components to improve performance by moving data fetching to the server.
+# Details:
+1. Identify components that are primarily data-fetching and rendering
+2. Convert these components to server components (.server.js or using Next.js 13+ conventions)
+3. Move data fetching logic from client to server components
+4. Set up proper boundaries between server and client components
+5. Implement Suspense boundaries for loading states
+6. Add error boundaries for failed data fetching
+
+Example implementation:
+```typescript
+// src/app/tournaments/[id]/page.tsx (Next.js 13+ server component)
+import { Suspense } from 'react';
+import { getTournamentById } from '@/lib/api/tournaments';
+import { getMatchupsForTournament } from '@/lib/api/matchups';
+import TournamentHeader from './TournamentHeader';
+import MatchupList from './MatchupList';
+import MatchupFilters from './MatchupFilters.client'; // Client component
+import ErrorBoundary from '@/components/ErrorBoundary.client';
+import Loading from '@/components/Loading';
+
+export async function generateMetadata({ params }) {
+  const tournament = await getTournamentById(params.id);
+  return {
+    title: `${tournament.name} | Golf Parlay Picker`,
+  };
+}
+
+export default async function TournamentPage({ params }) {
+  const tournament = await getTournamentById(params.id);
+  const matchups = await getMatchupsForTournament(params.id);
+  
+  return (
+    <div className="container mx-auto py-8">
+      <TournamentHeader tournament={tournament} />
+      
+      <MatchupFilters clientOnly /> {/* Client component for interactive filters */}
+      
+      <ErrorBoundary fallback={<div>Error loading matchups</div>}>
+        <Suspense fallback={<Loading />}>
+          <MatchupList matchups={matchups} />
+        </Suspense>
+      </ErrorBoundary>
+    </div>
+  );
+}
+
+// src/app/tournaments/[id]/MatchupFilters.client.tsx
+'use client';
+
+import { useState } from 'react';
+import { useParlay } from '@/contexts/ParlayContext';
+
+export default function MatchupFilters() {
+  const { activeFilter, setActiveFilter } = useParlay();
+  
+  return (
+    <div className="filter-container">
+      <h3>Strategy Filters</h3>
+      <div className="filter-buttons">
+        <button 
+          className={activeFilter === 'balanced' ? 'active' : ''}
+          onClick={() => setActiveFilter('balanced')}
+        >
+          Balanced
+        </button>
+        {/* Other filter buttons */}
+      </div>
+    </div>
+  );
+}
+```
+
+# Test Strategy:
+1. Create integration tests for server components
+2. Test server component data fetching with mock API responses
+3. Verify proper rendering of server components with different data
+4. Test Suspense boundaries and loading states
+5. Verify error boundaries catch and display errors correctly
+6. Test interaction between server and client components
+7. Measure performance improvements using Lighthouse or similar tools
+
+# Subtasks:
+## 1. Component Analysis for Server/Client Split [pending]
+### Dependencies: None
+### Description: Analyze existing components to determine which should be server components vs. client components
+### Details:
+Review all components in the application and categorize them based on their data needs, interactivity requirements, and state management. Create a document mapping each component to its proposed type (server or client) with justification.
+
+## 2. Server/Client Boundary Design [pending]
+### Dependencies: 5.1
+### Description: Design clear boundaries between server and client components with proper interfaces
+### Details:
+Create architectural diagrams showing component relationships, data flow, and server/client boundaries. Define patterns for passing data across boundaries and establish conventions for 'use client' directives.
+
+## 3. Data Fetching Migration [pending]
+### Dependencies: 5.2
+### Description: Refactor data fetching logic to leverage server components for direct data access
+### Details:
+Convert existing data fetching methods (like useEffect, SWR, or Redux) to server component patterns. Implement server-side data fetching with proper caching strategies and revalidation approaches.
+
+## 4. Suspense Integration [pending]
+### Dependencies: 5.3
+### Description: Implement React Suspense for loading states in server components
+### Details:
+Add Suspense boundaries at appropriate locations in the component tree. Create loading UI components for different sections of the application. Ensure proper fallback rendering during data loading.
+
+## 5. Error Boundary Implementation [pending]
+### Dependencies: 5.3, 5.4
+### Description: Add error boundaries to handle failures in server components
+### Details:
+Implement error boundary components at strategic locations. Create error UI components with appropriate recovery options. Ensure proper error logging and reporting for server component failures.
+
+## 6. Performance Testing [pending]
+### Dependencies: 5.3, 5.4, 5.5
+### Description: Measure and optimize performance of server components implementation
+### Details:
+Set up metrics for server rendering time, Time to First Byte (TTFB), and client-side hydration. Compare performance before and after server components implementation. Identify and resolve bottlenecks in rendering or data fetching.
+
+## 7. Progressive Enhancement Implementation [pending]
+### Dependencies: 5.2, 5.3, 5.6
+### Description: Ensure application works without JavaScript and progressively enhances with client hydration
+### Details:
+Test application functionality without JavaScript enabled. Implement progressive enhancement patterns for forms and interactive elements. Ensure critical paths work in a non-JavaScript environment while enhancing experience with client hydration.
+
