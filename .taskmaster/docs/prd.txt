@@ -1,0 +1,158 @@
+# Golf Parlay Picker - Filter System Enhancement PRD
+
+## Project Overview
+Enhance the existing golf parlay picker filter system by implementing and improving strategic player selection filters. The system currently has a well-architected filter framework with SG Heavy fully implemented, but needs additional sophisticated filters for comprehensive player analysis.
+
+## Background
+The current filter system includes:
+- ✅ SG Heavy (fully implemented)
+- ✅ Heavy Favorites (fully implemented) 
+- ✅ SG Category Leaders (fully implemented)
+- ⚠️ SG Value (basic implementation - needs enhancement)
+- ⚠️ Balanced (basic implementation - needs enhancement)
+
+## Goals
+1. Enhance existing basic filter implementations with sophisticated algorithms
+2. Implement new strategic filters leveraging existing data services
+3. Maintain consistency with established filter architecture patterns
+4. Provide comprehensive player selection strategies for different scenarios
+
+## Success Criteria
+- All filters follow the established FilterInterface pattern
+- Filters integrate seamlessly with existing UI components
+- Each filter provides meaningful player differentiation
+- Filters leverage existing data services (SG stats, course DNA, player archetypes)
+- Performance is optimized for real-time filtering
+
+## Technical Requirements
+
+### Priority 1: Enhanced Existing Filters
+
+#### SG Value Filter Enhancement
+- **Current State**: Basic implementation exists
+- **Requirements**:
+  - Calculate SG performance percentiles vs field
+  - Compare performance to implied probability from betting odds  
+  - Weight recent vs historical performance appropriately
+  - Factor in course fit and conditions
+  - Implement value score algorithm (performance exceeds market expectations)
+  - Add configurable options for time periods and weighting factors
+
+#### Balanced Filter Enhancement  
+- **Current State**: Basic implementation exists
+- **Requirements**:
+  - Calculate percentile ranks across all SG categories (OTT, APP, ARG, PUTT)
+  - Implement minimum threshold requirements (e.g., 40th percentile minimum)
+  - Add bonus scoring for excellence (70th+ percentile categories)
+  - Penalize severe weaknesses (below 20th percentile)
+  - Create comprehensive balance scoring algorithm
+  - Add configuration options for threshold adjustments
+
+### Priority 2: New Strategic Filters
+
+#### Player Archetype Filter
+- **Requirements**:
+  - Leverage existing player archetype classification system
+  - Filter by playing styles: bombers, scramblers, putters, iron specialists
+  - Integrate with existing archetype service
+  - Provide clear archetype-based selection options
+  - Support multiple archetype selection
+
+#### Momentum Filter
+- **Requirements**:
+  - Track SG performance trends over configurable periods (4-8 rounds)
+  - Implement recency weighting for recent rounds
+  - Calculate momentum slopes and trend analysis
+  - Factor in strength of field adjustments
+  - Identify positive/negative momentum patterns
+  - Return players with strongest momentum indicators
+
+#### Course Fit Filter  
+- **Requirements**:
+  - Integrate with existing course DNA analysis system
+  - Match player strengths to course characteristics
+  - Analyze historical performance on similar course types
+  - Factor in weather and course conditions
+  - Calculate course fit scores based on multiple factors
+  - Support course-specific optimization
+
+### Priority 3: Advanced Analysis Filters
+
+#### Form/Consistency Filter
+- **Requirements**:
+  - Analyze recent tournament results and performance patterns
+  - Calculate consistency metrics using statistical measures
+  - Implement trend analysis over configurable periods
+  - Weight performance by field strength and course similarity
+  - Provide form-based player rankings
+
+#### Weather Filter
+- **Requirements**:
+  - Analyze historical performance under various weather conditions
+  - Factor in forecasted weather for upcoming tournaments
+  - Adjust SG statistics for weather impacts
+  - Support weather-specific player optimization
+  - Integrate with weather data sources
+
+## Implementation Guidelines
+
+### Architecture Consistency
+- All filters must implement the FilterInterface from /filters/types.ts
+- Register filters in /filters/initFilters.ts using registerCoreFilters()
+- Follow established naming conventions and file structure
+- Maintain singleton FilterService pattern
+
+### Data Integration
+- Leverage existing services: SG stats, course DNA, player archetypes
+- Ensure efficient data access and caching
+- Minimize redundant data fetching
+- Maintain data consistency across filters
+
+### UI Integration  
+- Filters should work seamlessly with existing FilterPanel component
+- Support both compact and expanded configuration modes
+- Provide clear tooltips and descriptions
+- Add configuration options appropriate for each filter type
+
+### Performance Requirements
+- All filters must execute within 2 seconds for typical datasets
+- Implement efficient algorithms with appropriate time complexity
+- Cache expensive calculations where appropriate
+- Optimize for real-time user interaction
+
+## Testing Requirements
+- Unit tests for each filter implementation
+- Integration tests with existing filter system
+- Performance benchmarking for large datasets
+- UI component testing for filter configurations
+
+## Documentation
+- Update filter documentation with new implementations
+- Provide clear descriptions of each filter's purpose and algorithm
+- Document configuration options and use cases
+- Include examples of optimal filter combinations
+
+## Delivery Phases
+
+### Phase 1: Enhanced Existing Filters
+- SG Value filter enhancement
+- Balanced filter enhancement  
+- Testing and integration
+
+### Phase 2: Core Strategic Filters
+- Player Archetype filter implementation
+- Momentum filter implementation
+- Course Fit filter implementation
+
+### Phase 3: Advanced Analysis
+- Form/Consistency filter implementation
+- Weather filter implementation
+- Comprehensive testing and optimization
+
+## Dependencies
+- Existing filter framework and services
+- SG statistics data service
+- Course DNA analysis system
+- Player archetype classification
+- Betting odds data integration
+- Weather data sources (for weather filter)

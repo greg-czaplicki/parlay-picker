@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseClient } from '@/lib/api-utils'
 import { TournamentNameResolver } from '@/lib/services/tournament-name-resolver'
 
+// Force this route to be dynamic and bypass edge caching
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 const DATA_GOLF_API_KEY = process.env.DATAGOLF_API_KEY
 const INGEST_SECRET = process.env.INGEST_SECRET // Set this in your env for security
 
