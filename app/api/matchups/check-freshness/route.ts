@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+// Force this route to be dynamic and bypass edge caching
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+export const revalidate = 0
+
 const DATA_GOLF_API_KEY = process.env.DATAGOLF_API_KEY
 
 function getDG3BallURL(tour: string = 'pga') {
@@ -29,8 +34,22 @@ export async function GET(req: NextRequest) {
 
   try {
     const metadata = await fetchDGMetadata(getDG3BallURL(tour))
-    return NextResponse.json(metadata)
+    const response = NextResponse.json(metadata)
+    
+    // Set cache headers to prevent caching
+    response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
+    response.headers.set('Pragma', 'no-cache')
+    response.headers.set('Expires', '0')
+    
+    return response
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Unknown error' }, { status: 500 })
+    const errorResponse = NextResponse.json({ error: err.message || 'Unknown error' }, { status: 500 })
+    
+    // Set cache headers on error response too
+    errorResponse.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
+    errorResponse.headers.set('Pragma', 'no-cache')
+    errorResponse.headers.set('Expires', '0')
+    
+    return errorResponse
   }
 } 

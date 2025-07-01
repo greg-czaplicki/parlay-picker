@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseClient } from '@/lib/api-utils'
 
+// Force this route to be dynamic and bypass edge caching
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+export const revalidate = 0
+
 export async function GET(req: NextRequest) {
   try {
     const supabase = createSupabaseClient()
@@ -29,13 +34,20 @@ export async function GET(req: NextRequest) {
     const updatedAt = new Date(lastUpdated)
     const minutesAgo = Math.floor((now.getTime() - updatedAt.getTime()) / (1000 * 60))
     
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       lastUpdated,
       minutesAgo,
       isRecent: minutesAgo <= 5, // Consider "current" if updated within 5 minutes
       formattedTime: updatedAt.toLocaleString()
     })
+    
+    // Set cache headers to prevent caching
+    response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
+    response.headers.set('Pragma', 'no-cache')
+    response.headers.set('Expires', '0')
+    
+    return response
     
   } catch (error: any) {
     console.error('Error getting last updated time:', error)

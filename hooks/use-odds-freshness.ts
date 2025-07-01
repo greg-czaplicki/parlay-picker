@@ -18,7 +18,14 @@ export function useOddsFreshness() {
   return useQuery({
     queryKey: queryKeys.oddsFreshness(),
     queryFn: async (): Promise<OddsFreshnessResponse> => {
-      const response = await fetch('/api/matchups/last-updated')
+      // Add cache-busting timestamp to bypass any CDN/edge caching
+      const timestamp = Date.now()
+      const response = await fetch(`/api/matchups/last-updated?_t=${timestamp}`, {
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
+      })
       if (!response.ok) {
         throw new Error(`Failed to fetch odds freshness: ${response.statusText}`)
       }
