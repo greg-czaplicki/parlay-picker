@@ -39,9 +39,9 @@ export interface SettlementResult {
 
 // Parlay pick from database
 interface ParlayPick {
-  uuid: string
-  parlay_id: string
-  matchup_id: string
+  uuid: string | number // Can be string for compatibility or number from v2
+  parlay_id: string | number
+  matchup_id: string | number
   pick: number // 1, 2, or 3 (position in matchup)
   picked_player_name?: string
   picked_player_dg_id?: number
@@ -151,9 +151,9 @@ export class SettlementService {
    */
   private async getUnsettledPicks(eventId: number): Promise<ParlayPick[]> {
     const { data, error } = await this.supabase
-      .from('parlay_picks')
+      .from('parlay_picks_v2')
       .select(`
-        uuid,
+        id,
         parlay_id,
         matchup_id,
         pick,
@@ -161,10 +161,9 @@ export class SettlementService {
         picked_player_dg_id,
         pick_outcome,
         event_id,
-        tour_id,
         settlement_status,
-        parlays!inner(round_num),
-        matchups!inner(round_num)
+        parlays_v2!inner(round_num),
+        matchups_v2!inner(round_num)
       `)
       .eq('event_id', eventId)
       .in('settlement_status', ['pending'])
@@ -173,12 +172,13 @@ export class SettlementService {
       throw new Error(`Failed to fetch parlay picks: ${error.message}`)
     }
 
-    // Transform the data to include round_num
+    // Transform the data to include round_num and map id to uuid for compatibility
     const picks = (data || []).map((pick: any) => ({
       ...pick,
-      round_num: pick.parlays?.round_num || pick.matchups?.round_num,
-      parlays: undefined, // Remove the joined data 
-      matchups: undefined
+      uuid: pick.id, // Map id to uuid for compatibility with existing interface
+      round_num: pick.parlays_v2?.round_num || pick.matchups_v2?.round_num,
+      parlays_v2: undefined, // Remove the joined data 
+      matchups_v2: undefined
     }))
 
     const rounds = [...new Set(picks.map(p => p.round_num).filter(Boolean))]
@@ -546,14 +546,14 @@ export class SettlementService {
     // Update parlay_picks table
     for (const pick of settledPicks) {
       await this.supabase
-        .from('parlay_picks')
+        .from('parlay_picks_v2')
         .update({
           pick_outcome: pick.new_outcome,
           settlement_status: 'settled',
           settled_at: now,
           settlement_notes: pick.settlement_reason
         })
-        .eq('uuid', pick.pick_id)
+        .eq('id', pick.pick_id)
 
       // Insert settlement history record
       await this.supabase
@@ -591,19 +591,19 @@ export class SettlementService {
     try {
       // Get all parlays for this event that don't have an outcome yet
       const { data: parlays } = await this.supabase
-        .from('parlays')
+        .from('parlays_v2')
         .select(`
-          uuid,
+          id,
           amount,
           total_odds,
           potential_payout,
-          parlay_picks!inner(
-            uuid,
+          parlay_picks_v2!inner(
+            id,
             pick_outcome,
             settlement_status
           )
         `)
-        .eq('parlay_picks.event_id', eventId)
+        .eq('parlay_picks_v2.event_id', eventId)
         .is('outcome', null)
 
       if (!parlays || parlays.length === 0) {
@@ -612,7 +612,7 @@ export class SettlementService {
 
       // Process each parlay
       for (const parlay of parlays) {
-        const picks = parlay.parlay_picks || []
+        const picks = parlay.parlay_picks_v2 || []
         
         // Check if all picks are settled
         const allSettled = picks.every((pick: any) => 
@@ -669,15 +669,15 @@ export class SettlementService {
         // Update parlay outcome if determined
         if (parlayOutcome) {
           await this.supabase
-            .from('parlays')
+            .from('parlays_v2')
             .update({
               outcome: parlayOutcome,
               actual_payout: actualPayout,
               payout_amount: actualPayout.toFixed(2)
             })
-            .eq('uuid', parlay.uuid)
+            .eq('id', parlay.id)
 
-          logger.info(`Updated parlay ${parlay.uuid} outcome to ${parlayOutcome} with payout ${actualPayout}`)
+          logger.info(`Updated parlay ${parlay.id} outcome to ${parlayOutcome} with payout ${actualPayout}`)
         }
       }
     } catch (error) {
