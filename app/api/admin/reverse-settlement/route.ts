@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     
     // First, get the parlay details to verify it exists
     const { data: parlay, error: parlayError } = await supabase
-      .from('parlays')
+      .from('parlays_v2')
       .select('uuid, status, event_id, round_num')
       .eq('uuid', parlayId)
       .single()
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
 
     // Reset the parlay status to pending
     const { error: parlayUpdateError } = await supabase
-      .from('parlays')
+      .from('parlays_v2')
       .update({
         status: 'pending',
         outcome: null,
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
 
     // Reset all picks to unsettled
     const { error: picksUpdateError } = await supabase
-      .from('parlay_picks')
+      .from('parlay_picks_v2')
       .update({
         settlement_status: 'unsettled',
         pick_outcome: null,
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
 
     // Get the count of updated picks
     const { data: picks, error: countError } = await supabase
-      .from('parlay_picks')
+      .from('parlay_picks_v2')
       .select('uuid')
       .eq('parlay_id', parlayId)
 

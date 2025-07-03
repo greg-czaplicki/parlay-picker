@@ -81,7 +81,7 @@ export const formatTeeTime = (teeTime: string | null): { localTime: string; east
 
 export const formatPlayerPosition = (
   playerId: string | null,
-  teetime: string | null,
+  tee_time: string | null,
   playerStatsMap: Record<string, PlayerStat>
 ): { position: string; score: string } => {
   if (!playerId) return { position: "-", score: "" };

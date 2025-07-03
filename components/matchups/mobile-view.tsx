@@ -30,7 +30,7 @@ export function MobileView({
   return (
     <div className="md:hidden space-y-4">
       {matchups.map((matchup) => {
-        if (!matchup.uuid) return null;
+        if (!matchup.id) return null;
 
         const players: PlayerData[] = isSupabase3BallMatchupRow(matchup) ? [
           {
@@ -39,7 +39,7 @@ export function MobileView({
             name: matchup.player1_name,
             odds: matchup.odds1,
             dgOdds: matchup.dg_odds1,
-            teetime: matchup.teetime
+            tee_time: matchup.tee_time
           },
           {
             id: "p2",
@@ -47,7 +47,7 @@ export function MobileView({
             name: matchup.player2_name,
             odds: matchup.odds2,
             dgOdds: matchup.dg_odds2,
-            teetime: matchup.teetime
+            tee_time: matchup.tee_time
           },
           {
             id: "p3",
@@ -55,7 +55,7 @@ export function MobileView({
             name: matchup.player3_name || "",
             odds: matchup.odds3,
             dgOdds: matchup.dg_odds3,
-            teetime: matchup.teetime
+            tee_time: matchup.tee_time
           }
         ].filter(p => p.dg_id !== 0) : [
           {
@@ -64,7 +64,7 @@ export function MobileView({
             name: matchup.player1_name,
             odds: matchup.odds1,
             dgOdds: matchup.dg_odds1,
-            teetime: matchup.teetime
+            tee_time: matchup.tee_time
           },
           {
             id: "p2",
@@ -72,21 +72,21 @@ export function MobileView({
             name: matchup.player2_name,
             odds: matchup.odds2,
             dgOdds: matchup.dg_odds2,
-            teetime: matchup.teetime
+            tee_time: matchup.tee_time
           }
         ];
 
-        const { localTime } = formatTeeTime(matchup.teetime || null);
+        const { localTime } = formatTeeTime(matchup.tee_time || null);
 
         return (
-          <Card key={matchup.uuid} className="overflow-hidden">
+          <Card key={matchup.id} className="overflow-hidden">
             <CardContent className="p-4">
               <div className="space-y-4">
                 {players.map((player, idx) => {
                   const playerStatus = getPlayerStatus(formatPlayerName(player.name));
                   const positionData = formatPlayerPosition(
                     player.dg_id.toString(),
-                    matchup.teetime || null,
+                    matchup.tee_time || null,
                     playerStatsMap
                   );
 

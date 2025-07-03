@@ -12,7 +12,7 @@ export interface BetSnapshot {
   
   // Matchup data at bet time
   matchup: {
-    uuid: string;
+    id: number;
     type: '2ball' | '3ball';
     event_id: number;
     round_num: number;
@@ -98,9 +98,9 @@ export class SnapshotService {
       
       // 1. Get matchup data
       const { data: matchup, error: matchupError } = await this.supabase
-        .from('matchups')
+        .from('matchups_v2')
         .select('*')
-        .eq('uuid', matchupId)
+        .eq('id', matchupId)
         .single();
         
       if (matchupError || !matchup) {
@@ -266,7 +266,7 @@ export class SnapshotService {
       round_num: matchup.round_num,
       event_name: matchup.event_name || null,
       matchup: {
-        uuid: matchup.uuid,
+        id: matchup.id,
         type: matchup.type,
         event_id: matchup.event_id,
         round_num: matchup.round_num,

@@ -208,16 +208,16 @@ export class SettlementService {
    * Settle picks for a single matchup
    */
   private async settleMatchup(
-    matchupId: string, 
+    matchupId: number, 
     picks: ParlayPick[], 
     playerStats: PlayerStats[],
     method: SettlementMethod
   ): Promise<PickSettlementResult[]> {
     // Get matchup details
     const { data: matchup } = await this.supabase
-      .from('matchups')
+      .from('matchups_v2')
       .select('*')
-      .eq('uuid', matchupId)
+      .eq('id', matchupId)
       .single()
 
     if (!matchup) {

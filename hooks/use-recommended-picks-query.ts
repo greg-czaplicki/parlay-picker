@@ -70,6 +70,7 @@ export function useRecommendedPicksQuery(
     queryKey: [
       ...queryKeys.recommendedPicks.byEventAndType(eventId ?? 0, matchupType),
       roundNum ?? 'allRounds',
+      'v2-schema', // Add cache busting for V2 schema
     ],
     enabled: !!eventId,
     queryFn: async () => {
@@ -77,7 +78,16 @@ export function useRecommendedPicksQuery(
         ? `/api/matchups?type=${matchupType}&event_id=${eventId}`
         : `/api/matchups?type=${matchupType}`;
       if (roundNum) endpoint += `&round_num=${roundNum}`;
-      const response = await fetch(endpoint);
+      
+      // Add cache busting
+      endpoint += `&_t=${Date.now()}`;
+      
+      const response = await fetch(endpoint, {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
       if (!response.ok) throw new Error(await response.text());
       const data = await response.json();
       return data.matchups || [];
@@ -106,7 +116,7 @@ export function useRecommendedPicksQuery(
             valueRating: 0,
             confidenceScore: 0,
             isRecommended: false,
-            matchupId: apiMatchup.uuid,
+            matchupId: apiMatchup.id,
             eventName: apiMatchup.event_name,
             roundNum: apiMatchup.round_num
           },
@@ -118,7 +128,7 @@ export function useRecommendedPicksQuery(
             valueRating: 0,
             confidenceScore: 0,
             isRecommended: false,
-            matchupId: apiMatchup.uuid,
+            matchupId: apiMatchup.id,
             eventName: apiMatchup.event_name,
             roundNum: apiMatchup.round_num
           },
@@ -130,7 +140,7 @@ export function useRecommendedPicksQuery(
             valueRating: 0,
             confidenceScore: 0,
             isRecommended: false,
-            matchupId: apiMatchup.uuid,
+            matchupId: apiMatchup.id,
             eventName: apiMatchup.event_name,
             roundNum: apiMatchup.round_num
           }
@@ -147,7 +157,7 @@ export function useRecommendedPicksQuery(
             valueRating: 0,
             confidenceScore: 0,
             isRecommended: false,
-            matchupId: apiMatchup.uuid,
+            matchupId: apiMatchup.id,
             eventName: apiMatchup.event_name,
             roundNum: apiMatchup.round_num
           },
@@ -159,7 +169,7 @@ export function useRecommendedPicksQuery(
             valueRating: 0,
             confidenceScore: 0,
             isRecommended: false,
-            matchupId: apiMatchup.uuid,
+            matchupId: apiMatchup.id,
             eventName: apiMatchup.event_name,
             roundNum: apiMatchup.round_num
           }

@@ -20,9 +20,9 @@ export async function POST(req: NextRequest) {
   let matchupData = []
   if (pickMatchupIds.length > 0) {
     const { data: matchupsData, error: matchupsError } = await supabase
-      .from('matchups')
+      .from('matchups_v2')
       .select('*')
-      .in('uuid', pickMatchupIds)
+      .in('id', pickMatchupIds)
     if (matchupsError) return NextResponse.json({ error: matchupsError.message }, { status: 400 })
     matchupData = matchupsData || []
   }
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   const picksToInsert = []
   
   for (const pick of picks) {
-    const matchup = matchupData.find((m: any) => m.uuid === pick.matchup_id)
+    const matchup = matchupData.find((m: any) => m.id === pick.matchup_id)
     if (!matchup) {
       return NextResponse.json({ error: `Matchup not found: ${pick.matchup_id}` }, { status: 400 })
     }
@@ -110,9 +110,9 @@ export async function POST(req: NextRequest) {
   const calculatedPayout = Math.round(defaultStake * totalDecimalOdds)
   const firstRound = matchupData[0]?.round_num || round_num || 1
   
-  // Insert parlay with calculated values
+  // Insert parlay with calculated values into V2 table
   const { data: parlay, error: parlayError } = await supabase
-    .from('parlays')
+    .from('parlays_v2')
     .insert([
       {
         user_id,
@@ -129,12 +129,12 @@ export async function POST(req: NextRequest) {
     .single()
   if (parlayError) return NextResponse.json({ error: parlayError.message }, { status: 400 })
   
-  // Insert picks with snapshot data
+  // Insert picks with snapshot data into V2 table
   const picksWithParlayId = picksToInsert.map(pick => ({
     ...pick,
-    parlay_id: parlay.uuid,
+    parlay_id: parlay.id, // Use integer ID from V2 table
   }))
-  const { error: picksError } = await supabase.from('parlay_picks').insert(picksWithParlayId)
+  const { error: picksError } = await supabase.from('parlay_picks_v2').insert(picksWithParlayId)
   if (picksError) return NextResponse.json({ error: picksError.message }, { status: 400 })
   
   return NextResponse.json({ parlay })
@@ -159,20 +159,20 @@ export async function GET(req: NextRequest) {
     return response
   }
   
-  // Fetch parlays with stored calculated values
+  // Fetch parlays with stored calculated values from V2 table
   const { data: parlays, error: parlaysError } = await supabase
-    .from('parlays')
+    .from('parlays_v2')
     .select('*')
     .eq('user_id', user_id)
     .order('created_at', { ascending: false })
   if (parlaysError) return NextResponse.json({ error: parlaysError.message }, { status: 400 })
   
-  // Fetch picks with stored snapshot data
-  const parlayIds = parlays.map((p: any) => p.uuid)
+  // Fetch picks with stored snapshot data from V2 table
+  const parlayIds = parlays.map((p: any) => p.id)
   let picks = []
   if (parlayIds.length > 0) {
     const { data: picksData, error: picksError } = await supabase
-      .from('parlay_picks')
+      .from('parlay_picks_v2')
       .select('*')
       .in('parlay_id', parlayIds)
     if (picksError) return NextResponse.json({ error: picksError.message }, { status: 400 })
@@ -184,9 +184,9 @@ export async function GET(req: NextRequest) {
   let matchups: any[] = []
   if (matchupIds.length > 0) {
     const { data: matchupsData, error: matchupsError } = await supabase
-      .from('matchups')
-      .select('uuid, type, round_num, event_id, player1_name, player2_name, player3_name, player1_dg_id, player2_dg_id, player3_dg_id, odds1, odds2, odds3, tee_time')
-      .in('uuid', matchupIds)
+      .from('matchups_v2')
+      .select('id, type, round_num, event_id, player1_name, player2_name, player3_name, player1_dg_id, player2_dg_id, player3_dg_id, odds1, odds2, odds3, tee_time')
+      .in('id', matchupIds)
     if (matchupsError) return NextResponse.json({ error: matchupsError.message }, { status: 400 })
     matchups = matchupsData || []
   }
@@ -294,20 +294,20 @@ export async function GET(req: NextRequest) {
 
   // Build parlays with picks using stored data + live stats overlay
   const parlaysWithDetails = await Promise.all(parlays.map(async (parlay: any) => {
-    const parlayPicks = picks.filter((pick: any) => pick.parlay_id === parlay.uuid)
+    const parlayPicks = picks.filter((pick: any) => pick.parlay_id === parlay.id)
     
     // Get tournament name from the first matchup's event_id
     let tournamentName = 'Unknown Tournament'
     if (parlayPicks.length > 0) {
       const firstPick = parlayPicks[0]
-      const firstMatchup = matchups.find((m: any) => String(m.uuid) === String(firstPick.matchup_id))
+      const firstMatchup = matchups.find((m: any) => String(m.id) === String(firstPick.matchup_id))
       if (firstMatchup?.event_id && tournamentsByEventId[firstMatchup.event_id]) {
         tournamentName = tournamentsByEventId[firstMatchup.event_id]
       }
     }
     
     const picksWithDetails = await Promise.all(parlayPicks.map(async (pick: any) => {
-      const matchup = matchups.find((m: any) => String(m.uuid) === String(pick.matchup_id))
+      const matchup = matchups.find((m: any) => String(m.id) === String(pick.matchup_id))
       
       // Use the parlay's round number for historical data, not the matchup's current round
       const displayRound = parlay.round_num || matchup?.round_num || 1

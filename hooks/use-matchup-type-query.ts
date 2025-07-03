@@ -16,8 +16,8 @@ export function useMatchupTypeQuery(eventId: number | null) {
       const supabase = createBrowserClient();
       // Check for 3-ball matchups
       const { data: threeBall, error: err3 } = await supabase
-        .from('matchups')
-        .select('uuid')
+        .from('matchups_v2')
+        .select('id')
         .eq('event_id', eventId)
         .eq('type', '3ball')
         .limit(1);
@@ -25,8 +25,8 @@ export function useMatchupTypeQuery(eventId: number | null) {
       if (threeBall && threeBall.length > 0) return '3ball';
       // Check for 2-ball matchups
       const { data: twoBall, error: err2 } = await supabase
-        .from('matchups')
-        .select('uuid')
+        .from('matchups_v2')
+        .select('id')
         .eq('event_id', eventId)
         .eq('type', '2ball')
         .limit(1);

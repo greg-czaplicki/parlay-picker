@@ -155,7 +155,7 @@ export function useFilteredPlayers(
               valueRating: 0,
               confidenceScore: 0,
               isRecommended: false,
-              matchupId: matchup.uuid,
+              matchupId: matchup.id,
               eventName: matchup.event_name,
               roundNum: matchup.round_num
             },
@@ -183,7 +183,7 @@ export function useFilteredPlayers(
               valueRating: 0,
               confidenceScore: 0,
               isRecommended: false,
-              matchupId: matchup.uuid,
+              matchupId: matchup.id,
               eventName: matchup.event_name,
               roundNum: matchup.round_num
             },
@@ -211,7 +211,7 @@ export function useFilteredPlayers(
               valueRating: 0,
               confidenceScore: 0,
               isRecommended: false,
-              matchupId: matchup.uuid,
+              matchupId: matchup.id,
               eventName: matchup.event_name,
               roundNum: matchup.round_num
             }
@@ -254,7 +254,7 @@ export function useFilteredPlayers(
               valueRating: 0,
               confidenceScore: 0,
               isRecommended: false,
-              matchupId: matchup.uuid,
+              matchupId: matchup.id,
               eventName: matchup.event_name,
               roundNum: matchup.round_num
             },
@@ -282,7 +282,7 @@ export function useFilteredPlayers(
               valueRating: 0,
               confidenceScore: 0,
               isRecommended: false,
-              matchupId: matchup.uuid,
+              matchupId: matchup.id,
               eventName: matchup.event_name,
               roundNum: matchup.round_num
             }

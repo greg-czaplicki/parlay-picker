@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   // Handle checkOnly requests separately (no need for SG data)
   if (checkOnly) {
     const baseCountQuery = supabase
-      .from('latest_matchups')
+      .from('matchups_v2')
       .select('*', { count: 'exact', head: true })
 
     const countQuery = type ? baseCountQuery.eq('type', type) : baseCountQuery
@@ -42,9 +42,9 @@ export async function GET(req: NextRequest) {
   try {
     // 1. Fetch base matchup data
     const baseQuery = supabase
-      .from('latest_matchups')
+      .from('matchups_v2')
       .select(`
-        uuid,
+        id,
         event_id,
         round_num,
         type,
@@ -61,10 +61,7 @@ export async function GET(req: NextRequest) {
         dg_odds2,
         dg_odds3,
         start_hole,
-        teetime,
         tee_time,
-        player1_teetime,
-        player2_teetime,
         player1_tee_time,
         player2_tee_time,
         created_at
@@ -89,9 +86,34 @@ export async function GET(req: NextRequest) {
       return response
     }
 
-    // 2. Extract unique player IDs from matchups
+    // 2. Add event names to matchups
+    const eventIds = [...new Set(matchupsData.map(m => m.event_id))]
+    let tournamentNames: { [key: number]: string } = {}
+    
+    if (eventIds.length > 0) {
+      const { data: tournamentsData } = await supabase
+        .from('tournaments_v2')
+        .select('event_id, event_name')
+        .in('event_id', eventIds)
+      
+      if (tournamentsData) {
+        tournamentsData.forEach(t => {
+          if (t.event_id && t.event_name) {
+            tournamentNames[t.event_id] = t.event_name
+          }
+        })
+      }
+    }
+
+    // Add event_name to matchups
+    const matchupsWithEvents = matchupsData.map(matchup => ({
+      ...matchup,
+      event_name: tournamentNames[matchup.event_id] || `Event ${matchup.event_id}`
+    }))
+
+    // 3. Extract unique player IDs from matchups
     const playerIds = Array.from(new Set(
-      matchupsData.flatMap(matchup => [
+      matchupsWithEvents.flatMap(matchup => [
         matchup.player1_dg_id,
         matchup.player2_dg_id,
         matchup.player3_dg_id
@@ -99,7 +121,7 @@ export async function GET(req: NextRequest) {
     ))
 
     if (playerIds.length === 0) {
-      return NextResponse.json({ matchups: matchupsData })
+      return NextResponse.json({ matchups: matchupsWithEvents })
     }
 
     // 3a. Fetch DataGolf season-long SG data from player_skill_ratings
@@ -222,7 +244,7 @@ export async function GET(req: NextRequest) {
     }
 
     // 5. Enhance matchup data with SG stats
-    const enhancedMatchups = matchupsData.map(matchup => {
+    const enhancedMatchups = matchupsWithEvents.map(matchup => {
       // Helper function to get player SG data
       const getPlayerSGData = (dgId: number) => {
         const dgSeasonData = dgSeasonSgMap.get(dgId) || {}
@@ -289,7 +311,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required matchup fields' }, { status: 400 })
     }
   }
-  const { error } = await supabase.from('matchups').insert(body)
+  const { error } = await supabase.from('matchups_v2').insert(body)
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ success: true })
 } 

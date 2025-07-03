@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 
     // Get basic parlay picks info
     const { data: allPicks, error: allPicksError } = await supabase
-      .from('parlay_picks')
+      .from('parlay_picks_v2')
       .select('uuid, settlement_status, event_id, pick_outcome')
 
     if (allPicksError) {
@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
 
     // Get unsettled picks
     const { data: pendingPicks, error: pendingError } = await supabase
-      .from('parlay_picks')
+      .from('parlay_picks_v2')
       .select('uuid, event_id, settlement_status')
       .eq('settlement_status', 'pending')
 

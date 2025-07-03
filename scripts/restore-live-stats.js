@@ -34,7 +34,7 @@ async function restoreLiveStats() {
 
     // Get required rounds for each tournament
     const { data: requiredRounds, error: roundsError } = await supabase
-      .from('matchups')
+      .from('matchups_v2')
       .select(`
         event_id,
         round_num,

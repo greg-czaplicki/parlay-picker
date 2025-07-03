@@ -31,12 +31,12 @@ export function PlayerActions({
   const handleAddSelection = () => {
     onAddSelection({
       id: player.id,
-      matchupId: matchup.uuid,
+      matchupId: matchup.id,
       name: player.name,
       odds: player.odds,
       dgOdds: player.dgOdds,
       dg_id: player.dg_id,
-      teetime: player.teetime
+      tee_time: player.tee_time
     });
   };
 

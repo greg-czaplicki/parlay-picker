@@ -118,7 +118,7 @@ async function findCompletedRoundsWithUnsettledParlays(supabase: any): Promise<C
 
   // Get all unsettled picks grouped by event and round
   const { data: unsettledPicks, error: picksError } = await supabase
-    .from('parlay_picks')
+    .from('parlay_picks_v2')
     .select('event_id, parlay_id')
     .eq('settlement_status', 'pending')
 
@@ -153,7 +153,7 @@ async function findCompletedRoundsWithUnsettledParlays(supabase: any): Promise<C
     // Get all parlays for this event to determine which rounds have unsettled picks
     const eventPicks = unsettledPicks.filter(p => p.event_id === eventId);
     const { data: parlays } = await supabase
-      .from('parlays')
+      .from('parlays_v2')
       .select('round_num')
       .in('uuid', eventPicks.map(p => p.parlay_id));
     

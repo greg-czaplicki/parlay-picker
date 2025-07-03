@@ -87,14 +87,14 @@ export default function Dashboard({
     
     // Handle both 3ball and 2ball matchups
     if (matchup.type === '3ball') {
-      players.push({ name: matchup.player1_name, matchupId: matchup.uuid })
-      players.push({ name: matchup.player2_name, matchupId: matchup.uuid })
+      players.push({ name: matchup.player1_name, matchupId: matchup.id })
+      players.push({ name: matchup.player2_name, matchupId: matchup.id })
       if (matchup.player3_name) {
-        players.push({ name: matchup.player3_name, matchupId: matchup.uuid })
+        players.push({ name: matchup.player3_name, matchupId: matchup.id })
       }
     } else if (matchup.type === '2ball') {
-      players.push({ name: matchup.player1_name, matchupId: matchup.uuid })
-      players.push({ name: matchup.player2_name, matchupId: matchup.uuid })
+      players.push({ name: matchup.player1_name, matchupId: matchup.id })
+      players.push({ name: matchup.player2_name, matchupId: matchup.id })
     }
     
     return players

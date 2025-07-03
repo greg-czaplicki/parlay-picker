@@ -122,7 +122,7 @@ async function getEventsWithUnsettledParlays(supabase: any) {
   
   // Get unsettled parlay picks with their matchup event_ids
   const { data: pickData, error: pickError } = await supabase
-    .from('parlay_picks')
+    .from('parlay_picks_v2')
     .select(`
       event_id,
       matchups!inner(event_id)
@@ -198,7 +198,7 @@ export async function GET(request: NextRequest) {
     if (eventId) {
       // Get settlement status for specific event
       const { data, error } = await supabase
-        .from('parlay_picks')
+        .from('parlay_picks_v2')
         .select(`
           uuid,
           settlement_status,

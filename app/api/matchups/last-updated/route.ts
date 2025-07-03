@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
     
     // Get the most recent matchup update time
     const { data, error } = await supabase
-      .from('matchups')
+      .from('matchups_v2')
       .select('created_at')
       .order('created_at', { ascending: false })
       .limit(1)

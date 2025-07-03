@@ -340,19 +340,19 @@ export async function GET(request: NextRequest) {
       if (includeOutcomes && processedData.length > 0) {
         const pickIds = processedData.map(s => s.parlay_pick_id)
         const { data: pickOutcomes } = await supabase
-          .from('parlay_picks')
+          .from('parlay_picks_v2')
           .select(`
-            uuid,
+            id,
             outcome,
             parlays!inner(outcome, payout_amount)
           `)
-          .in('uuid', pickIds)
+          .in('id', pickIds)
 
         // Create outcome lookup
         const outcomeMap = new Map()
         pickOutcomes?.forEach((pick: any) => {
           const parlay = Array.isArray(pick.parlays) ? pick.parlays[0] : pick.parlays
-          outcomeMap.set(pick.uuid, {
+          outcomeMap.set(pick.id, {
             pick_outcome: pick.outcome,
             parlay_outcome: parlay?.outcome,
             parlay_payout: parlay?.payout_amount
@@ -428,24 +428,24 @@ export async function GET(request: NextRequest) {
       // Get outcomes for these picks
       const pickIds = snapshotsWithPicks.map(s => s.parlay_pick_id)
       const { data: pickOutcomes } = await supabase
-        .from('parlay_picks')
+        .from('parlay_picks_v2')
         .select(`
-          uuid,
+          id,
           outcome,
           picked_player_dg_id,
           parlays!inner(outcome, payout_amount)
         `)
-        .in('uuid', pickIds)
+        .in('id', pickIds)
         .not('outcome', 'is', null)
 
       // Filter to only snapshots with outcomes
       const snapshotsWithOutcomes = snapshotsWithPicks.filter(snapshot => 
-        pickOutcomes?.some(pick => pick.uuid === snapshot.parlay_pick_id)
+        pickOutcomes?.some(pick => pick.id === snapshot.parlay_pick_id)
       )
 
       // Process for ML training
       const mlTrainingData = snapshotsWithOutcomes.map(snapshot => {
-        const pickData = pickOutcomes?.find(pick => pick.uuid === snapshot.parlay_pick_id)
+        const pickData = pickOutcomes?.find(pick => pick.id === snapshot.parlay_pick_id)
         const flatSnapshot = flattenSnapshotForML(snapshot.snapshot)
         
         return {

@@ -61,7 +61,7 @@ export default function ParlaySummary({ selections, userId = '00000000-0000-0000
       }
       
       return {
-        matchup_id: s.matchupId,
+        matchup_id: s.matchupId, // Now expecting number instead of string
         picked_player_dg_id: playerDgId!,  // Use non-null assertion since we validate below
         picked_player_name: s.player,
       };

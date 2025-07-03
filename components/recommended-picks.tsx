@@ -630,7 +630,7 @@ export function RecommendedPicksContent({
                                 group: `Event ${eventId || 'Unknown'}`,
                                 player: player.name,
                                 odds: player.odds,
-                                matchupId: String(player.matchupId),
+                                matchupId: player.matchupId,
                                 eventName: player.eventName || '',
                                 roundNum: player.roundNum || roundNum || 1,
                                 valueRating: player.valueRating || 7.5,

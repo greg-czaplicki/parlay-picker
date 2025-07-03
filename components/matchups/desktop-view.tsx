@@ -49,7 +49,7 @@ export function DesktopView({
         </TableHeader>
         <TableBody>
           {matchups.map((matchup) => {
-            if (!matchup.uuid) return null;
+            if (!matchup.id) return null;
 
             const players: PlayerData[] = isSupabase3BallMatchupRow(matchup) ? [
               {
@@ -58,7 +58,7 @@ export function DesktopView({
                 name: matchup.player1_name,
                 odds: matchup.odds1,
                 dgOdds: matchup.dg_odds1,
-                teetime: matchup.teetime || null,
+                tee_time: matchup.tee_time || null,
                 stats: playerStatsMap[matchup.player1_dg_id.toString()]
               },
               {
@@ -67,7 +67,7 @@ export function DesktopView({
                 name: matchup.player2_name,
                 odds: matchup.odds2,
                 dgOdds: matchup.dg_odds2,
-                teetime: matchup.teetime || null,
+                tee_time: matchup.tee_time || null,
                 stats: playerStatsMap[matchup.player2_dg_id.toString()]
               },
               {
@@ -76,7 +76,7 @@ export function DesktopView({
                 name: matchup.player3_name || "",
                 odds: matchup.odds3,
                 dgOdds: matchup.dg_odds3,
-                teetime: matchup.teetime || null,
+                tee_time: matchup.tee_time || null,
                 stats: playerStatsMap[matchup.player3_dg_id?.toString() || ""]
               }
             ].filter(p => p.dg_id !== 0) : [
@@ -86,7 +86,7 @@ export function DesktopView({
                 name: matchup.player1_name,
                 odds: matchup.odds1,
                 dgOdds: matchup.dg_odds1,
-                teetime: matchup.teetime || null,
+                tee_time: matchup.tee_time || null,
                 stats: playerStatsMap[matchup.player1_dg_id.toString()]
               },
               {
@@ -95,24 +95,24 @@ export function DesktopView({
                 name: matchup.player2_name,
                 odds: matchup.odds2,
                 dgOdds: matchup.dg_odds2,
-                teetime: matchup.teetime || null,
+                tee_time: matchup.tee_time || null,
                 stats: playerStatsMap[matchup.player2_dg_id.toString()]
               }
             ];
 
-            const { localTime } = formatTeeTime(matchup.teetime || null);
+            const { localTime } = formatTeeTime(matchup.tee_time || null);
 
             return players.map((player, idx) => {
               const playerStatus = getPlayerStatus(formatPlayerName(player.name));
               const positionData = formatPlayerPosition(
                 player.dg_id.toString(),
-                matchup.teetime || null,
+                matchup.tee_time || null,
                 playerStatsMap
               );
 
               return (
                 <TableRow
-                  key={`${matchup.uuid}-${idx}`}
+                  key={`${matchup.id}-${idx}`}
                   className={`
                     ${playerStatus.status === "used" ? "bg-yellow-50/10" : ""}
                     ${playerStatus.status === "current" ? "bg-primary/5" : ""}

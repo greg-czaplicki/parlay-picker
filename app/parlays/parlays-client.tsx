@@ -201,7 +201,7 @@ export default function ParlaysClient() {
     }));
     const status: 'likely' | 'close' | 'unlikely' = parlay.is_settled ? 'close' : 'likely';
     return {
-      parlayId: parlay.uuid,
+      parlayId: parlay.id,
       amount: Number(parlay.amount) || 0,
       odds: Number(parlay.odds) || 0,
       payout: Number(parlay.payout) || 0,
@@ -391,7 +391,7 @@ export default function ParlaysClient() {
                 if (!cardProps) return null;
                 return (
                   <div
-                    key={parlay.uuid}
+                    key={parlay.id}
                     className="glass-card hover:glass-hover transition-all duration-300"
                   >
                     {/* Mobile-Optimized Header */}
@@ -631,7 +631,7 @@ export default function ParlaysClient() {
                 if (!cardProps) return null;
                 return (
                   <div
-                    key={parlay.uuid}
+                    key={parlay.id}
                     className="glass-card opacity-75 transition-all duration-300"
                   >
                     {/* Mobile-Optimized Header */}

@@ -103,7 +103,7 @@ export interface Matchup {
 
 // Interface for Parlays table
 export interface Parlay {
-    uuid: string; // Primary key is UUID, not number
+    id: number; // Primary key is integer
     user_id: string;
     created_at: string;
     // ML fields - using proper ENUM types
@@ -113,9 +113,9 @@ export interface Parlay {
 
 // Interface for ParlayPicks table 
 export interface ParlayPick {
-    uuid: string; // Primary key is UUID
-    parlay_id: string; // Foreign key to parlays.uuid
-    matchup_id: string; // Foreign key to matchups.uuid
+    id: number; // Primary key is integer
+    parlay_id: number; // Foreign key to parlays.id
+    matchup_id: number; // Foreign key to matchups.id
     pick: number; // Player position (1, 2, or 3)
     created_at: string;
     // ML fields - using proper ENUM types
@@ -205,7 +205,7 @@ export async function getMatchups(matchupType: string, bookmaker?: string): Prom
     let matchupsError: any = null;
     // Unified query for both 2ball and 3ball
     const response = await supabase
-      .from('matchups')
+      .from('matchups_v2')
       .select('*')
       .eq('type', matchupType)
       .order('created_at', { ascending: false });
@@ -364,7 +364,7 @@ export async function findPlayerMatchup(playerName: string): Promise<{ matchup: 
     try {
         // Search for 3ball matchups first
         const { data: matchups, error: matchupError } = await supabase
-            .from('matchups')
+            .from('matchups_v2')
             .select('*')
             .or(patterns.map(p => `player1_name.ilike."${p}",player2_name.ilike."${p}",player3_name.ilike."${p}"`).join(","))
             .eq('type', '3ball')
@@ -374,7 +374,7 @@ export async function findPlayerMatchup(playerName: string): Promise<{ matchup: 
         if (!matchup && !matchupError) {
             // Try 2ball matchups
             const { data: twoBallMatchups, error: twoBallError } = await supabase
-                .from('matchups')
+                .from('matchups_v2')
                 .select('*')
                 .or(patterns.map(p => `player1_name.ilike."${p}",player2_name.ilike."${p}"`).join(","))
                 .eq('type', '2ball')
@@ -492,7 +492,7 @@ export async function createParlay(name?: string): Promise<{ parlay: Parlay | nu
     try {
         // TODO: Add user_id if auth is implemented
         const { data, error } = await supabase
-            .from('parlays')
+            .from('parlays_v2')
             .insert([{ 
                 name: name /* , user_id: userId */,
                 outcome: 'push',
@@ -548,7 +548,7 @@ export async function getParlaysAndPicks(): Promise<{ parlays: ParlayWithPicks[]
         // TODO: Add user filter if auth is implemented e.g., .eq('user_id', userId)
         // Use Supabase join query, aliasing the joined table to match the interface
         const { data, error } = await supabase
-            .from('parlays')
+            .from('parlays_v2')
             .select(`
                 *,
                 picks:parlay_picks (*)
@@ -583,7 +583,7 @@ export async function getParlaysAndPicks(): Promise<{ parlays: ParlayWithPicks[]
  * @param pickData - Object containing the pick details, including parlay_id.
  * @returns An object containing the newly added pick or an error message.
  */
-export async function addParlayPick(pickData: Omit<ParlayPick, 'uuid' | 'created_at'>): Promise<{ pick: ParlayPick | null; error?: string }> {
+export async function addParlayPick(pickData: Omit<ParlayPick, 'id' | 'created_at'>): Promise<{ pick: ParlayPick | null; error?: string }> {
     logger.info("[addParlayPick] Adding pick:", pickData);
     if (!pickData.parlay_id) {
          return { pick: null, error: "parlay_id is required to add a pick." };
@@ -591,7 +591,7 @@ export async function addParlayPick(pickData: Omit<ParlayPick, 'uuid' | 'created
     const supabase = createServerClient();
     try {
         const { data, error } = await supabase
-            .from('parlay_picks')
+            .from('parlay_picks_v2')
             .insert([{
                 parlay_id: pickData.parlay_id,
                 matchup_id: pickData.matchup_id,
@@ -612,7 +612,7 @@ export async function addParlayPick(pickData: Omit<ParlayPick, 'uuid' | 'created
         // FEATURE SNAPSHOTTING: Capture comprehensive snapshot at bet time
         try {
             const snapshotResult = await snapshotService.captureSnapshot(
-                data.uuid,           // parlay_pick_id
+                data.id,           // parlay_pick_id
                 pickData.matchup_id, // matchup_id
                 pickData.pick        // picked_player_position (1, 2, or 3)
             );
@@ -621,14 +621,14 @@ export async function addParlayPick(pickData: Omit<ParlayPick, 'uuid' | 'created
                 logger.warn("[addParlayPick] Failed to capture snapshot:", snapshotResult.error);
                 // Don't fail the pick creation, just log the warning
             } else {
-                logger.info("[addParlayPick] Successfully captured feature snapshot for pick:", data.uuid);
+                logger.info("[addParlayPick] Successfully captured feature snapshot for pick:", data.id);
             }
         } catch (snapshotError) {
             logger.error("[addParlayPick] Unexpected error during snapshot capture:", snapshotError);
             // Don't fail the pick creation for snapshot errors
         }
         
-        logger.info("[addParlayPick] Successfully added pick ID:", data?.uuid);
+        logger.info("[addParlayPick] Successfully added pick ID:", data?.id);
         return { pick: data as ParlayPick };
     } catch (error) {
         logger.error("[addParlayPick] Error:", error);
@@ -647,7 +647,7 @@ export async function removeParlayPick(pickId: number): Promise<{ success: boole
     try {
         // TODO: Add user filter if auth is implemented e.g., .eq('user_id', userId)
         const { error } = await supabase
-            .from('parlay_picks')
+            .from('parlay_picks_v2')
             .delete()
             .eq('id', pickId);
 
@@ -703,9 +703,9 @@ export async function batchLoadParlayPicksData(
             
             // 1. Get the matchup data for this pick
             const { data: matchupData, error: matchupError } = await supabase
-                .from('matchups')
+                .from('matchups_v2')
                 .select('*')
-                .eq('uuid', pick.matchup_id)
+                .eq('id', pick.matchup_id)
                 .single();
                 
             if (matchupError) {
@@ -762,7 +762,7 @@ export async function deleteParlay(parlayId: number): Promise<{ success: boolean
     try {
         // TODO: Add user filter if auth is implemented e.g., .eq('user_id', userId)
         const { error } = await supabase
-            .from('parlays')
+            .from('parlays_v2')
             .delete()
             .eq('id', parlayId);
 

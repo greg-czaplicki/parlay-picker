@@ -137,7 +137,7 @@ interface Player {
   name: string;
   odds: number | null | undefined;
   dgOdds: number | null | undefined;
-  teetime: string | null;
+  tee_time: string | null;
 }
 
 export default function MatchupsTable({ 
@@ -438,8 +438,8 @@ export default function MatchupsTable({
     return false;
   }).sort((a, b) => {
     // Sort by tee time first for both 2ball and 3ball matchups (earliest first)
-    const aTeeTime = a.teetime ? new Date(a.teetime).getTime() : Infinity;
-    const bTeeTime = b.teetime ? new Date(b.teetime).getTime() : Infinity;
+    const aTeeTime = a.tee_time ? new Date(a.tee_time).getTime() : Infinity;
+    const bTeeTime = b.tee_time ? new Date(b.tee_time).getTime() : Infinity;
     
     if (aTeeTime !== bTeeTime) {
       return aTeeTime - bTeeTime;
@@ -633,7 +633,7 @@ export default function MatchupsTable({
                   </TableHeader>
                   <TableBody>
                     {filteredMatchups.map((matchup, matchupIndex) => {
-                      if (!matchup.uuid) return null;
+                      if (!matchup.id) return null;
 
                       const players = isSupabaseMatchupRow(matchup) ? [
                         {
@@ -642,7 +642,7 @@ export default function MatchupsTable({
                           name: matchup.player1_name || '',
                           odds: matchup.odds1,
                           dgOdds: matchup.dg_odds1,
-                          teetime: matchup.teetime || null
+                          tee_time: matchup.tee_time || null
                         },
                         {
                           id: 'p2',
@@ -650,7 +650,7 @@ export default function MatchupsTable({
                           name: matchup.player2_name || '',
                           odds: matchup.odds2,
                           dgOdds: matchup.dg_odds2,
-                          teetime: matchup.teetime || null
+                          tee_time: matchup.tee_time || null
                         },
                         {
                           id: 'p3',
@@ -658,7 +658,7 @@ export default function MatchupsTable({
                           name: matchup.player3_name || '',
                           odds: matchup.odds3,
                           dgOdds: matchup.dg_odds3,
-                          teetime: matchup.teetime || null
+                          tee_time: matchup.tee_time || null
                         }
                       ].filter(p => p.dg_id !== null && p.name).sort((a, b) => {
                         // Sort by odds (lowest first, since that's the favorite)
@@ -672,7 +672,7 @@ export default function MatchupsTable({
                           name: matchup.player1_name || '',
                           odds: matchup.odds1,
                           dgOdds: matchup.dg_odds1,
-                          teetime: isSupabaseMatchupRow2Ball(matchup) ? matchup.player1_teetime || matchup.teetime || null : matchup.teetime || null
+                          tee_time: isSupabaseMatchupRow2Ball(matchup) ? matchup.player1_tee_time || matchup.tee_time || null : matchup.tee_time || null
                         },
                         {
                           id: 'p2',
@@ -680,7 +680,7 @@ export default function MatchupsTable({
                           name: matchup.player2_name || '',
                           odds: matchup.odds2,
                           dgOdds: matchup.dg_odds2,
-                          teetime: isSupabaseMatchupRow2Ball(matchup) ? matchup.player2_teetime || matchup.teetime || null : matchup.teetime || null
+                          tee_time: isSupabaseMatchupRow2Ball(matchup) ? matchup.player2_tee_time || matchup.tee_time || null : matchup.tee_time || null
                         }
                       ].sort((a, b) => {
                         // Sort by odds (lowest first, since that's the favorite)
@@ -689,10 +689,10 @@ export default function MatchupsTable({
                         return aOdds - bOdds;
                       });
 
-                      const { localTime: groupTeeTime } = formatTeeTime(matchup.teetime || null);
+                      const { localTime: groupTeeTime } = formatTeeTime(matchup.tee_time || null);
 
                       return (
-                        <React.Fragment key={matchup.uuid}>
+                        <React.Fragment key={matchup.id}>
                           {/* Add a group header row */}
                           <TableRow className="bg-gray-900/60">
                             <TableCell colSpan={6} className="py-2">
@@ -709,8 +709,8 @@ export default function MatchupsTable({
                           {players.map((player: Player, idx: number) => {
                             const playerName = formatPlayerName(player.name);
                             const playerStatus = getPlayerStatus(playerName);
-                            const positionData = formatPlayerPosition(String(player.dg_id), player.teetime);
-                            const { localTime: playerTeeTime } = formatTeeTime(player.teetime);
+                            const positionData = formatPlayerPosition(String(player.dg_id), player.tee_time);
+                            const { localTime: playerTeeTime } = formatTeeTime(player.tee_time);
 
                             // Check if this player has a significant odds gap (only for favorites)
                             const isOddsGapHighlight = (() => {
@@ -796,7 +796,7 @@ export default function MatchupsTable({
 
                             return (
                               <TableRow 
-                                key={`${matchup.uuid}-${player.id}`}
+                                key={`${matchup.id}-${player.id}`}
                                 className={`
                                   ${idx === players.length - 1 ? 'border-b-8 border-b-gray-900' : 'border-b border-b-gray-800'}
                                   ${playerStatus.status === 'used' ? 'bg-yellow-50/5' : ''}
@@ -848,7 +848,7 @@ export default function MatchupsTable({
                                       className="h-6 w-6 p-0" 
                                       onClick={() => {
                                         if (typeof player.dg_id !== 'number') return;
-                                        removeSelection(`${player.dg_id}-${matchup.uuid}`);
+                                        removeSelection(`${player.dg_id}-${matchup.id}`);
                                       }}
                                     >
                                       <CheckCircle className="text-green-400" size={16} />
@@ -865,12 +865,12 @@ export default function MatchupsTable({
                                       onClick={() => {
                                         if (typeof player.dg_id !== 'number') return;
                                         addSelection({
-                                          id: `${player.dg_id}-${matchup.uuid}`,
+                                          id: `${player.dg_id}-${matchup.id}`,
                                           matchupType,
                                           group: `Event ${eventId || 'Unknown'}`,
                                           player: playerName,
                                           odds: Number(player.odds) || 0,
-                                          matchupId: matchup.uuid,
+                                          matchupId: matchup.id,
                                           eventName: matchup.event_name || '',
                                           roundNum: matchup.round_num || 0,
                                           valueRating: 7.5,
@@ -895,7 +895,7 @@ export default function MatchupsTable({
               {/* Mobile Card View */}
               <div className="md:hidden space-y-8">
                 {filteredMatchups.map((matchup, matchupIndex) => {
-                  if (!matchup.uuid) return null;
+                  if (!matchup.id) return null;
 
                   const players = isSupabaseMatchupRow(matchup) ? [
                     {
@@ -904,7 +904,7 @@ export default function MatchupsTable({
                       name: matchup.player1_name || '',
                       odds: matchup.odds1,
                       dgOdds: matchup.dg_odds1,
-                      teetime: matchup.teetime || null
+                      tee_time: matchup.tee_time || null
                     },
                     {
                       id: 'p2',
@@ -912,7 +912,7 @@ export default function MatchupsTable({
                       name: matchup.player2_name || '',
                       odds: matchup.odds2,
                       dgOdds: matchup.dg_odds2,
-                      teetime: matchup.teetime || null
+                      tee_time: matchup.tee_time || null
                     },
                     {
                       id: 'p3',
@@ -920,7 +920,7 @@ export default function MatchupsTable({
                       name: matchup.player3_name || '',
                       odds: matchup.odds3,
                       dgOdds: matchup.dg_odds3,
-                      teetime: matchup.teetime || null
+                      tee_time: matchup.tee_time || null
                     }
                   ].filter(p => p.dg_id !== null && p.name).sort((a, b) => {
                     // Sort by odds (lowest first, since that's the favorite)
@@ -934,7 +934,7 @@ export default function MatchupsTable({
                       name: matchup.player1_name || '',
                       odds: matchup.odds1,
                       dgOdds: matchup.dg_odds1,
-                      teetime: isSupabaseMatchupRow2Ball(matchup) ? matchup.player1_teetime || matchup.teetime || null : matchup.teetime || null
+                      tee_time: isSupabaseMatchupRow2Ball(matchup) ? matchup.player1_tee_time || matchup.tee_time || null : matchup.tee_time || null
                     },
                     {
                       id: 'p2',
@@ -942,7 +942,7 @@ export default function MatchupsTable({
                       name: matchup.player2_name || '',
                       odds: matchup.odds2,
                       dgOdds: matchup.dg_odds2,
-                      teetime: isSupabaseMatchupRow2Ball(matchup) ? matchup.player2_teetime || matchup.teetime || null : matchup.teetime || null
+                      tee_time: isSupabaseMatchupRow2Ball(matchup) ? matchup.player2_tee_time || matchup.tee_time || null : matchup.tee_time || null
                     }
                   ].sort((a, b) => {
                     // Sort by odds (lowest first, since that's the favorite)
@@ -953,10 +953,10 @@ export default function MatchupsTable({
 
                   // Get the group tee time (for 3-ball) or earliest tee time (for 2-ball)
                   const groupTeeTime = isSupabaseMatchupRow(matchup) 
-                    ? formatTeeTime(matchup.teetime || null).localTime
+                    ? formatTeeTime(matchup.tee_time || null).localTime
                     : formatTeeTime(
                         players.reduce((earliest, p) => {
-                          const teetime = p.teetime || null;
+                          const teetime = p.tee_time || null;
                           if (!earliest) return teetime;
                           if (!teetime) return earliest;
                           return new Date(teetime) < new Date(earliest) ? teetime : earliest;
@@ -964,7 +964,7 @@ export default function MatchupsTable({
                       ).localTime;
 
                   return (
-                    <div key={matchup.uuid} className="space-y-2">
+                    <div key={matchup.id} className="space-y-2">
                       <div className="px-2">
                         <span className="text-sm font-medium text-primary/80">
                           {matchupType === "3ball" ? "3-Ball Group" : "2-Ball Match"} {matchupIndex + 1}
@@ -984,8 +984,8 @@ export default function MatchupsTable({
                           {players.map((player: Player, idx: number) => {
                             const playerName = formatPlayerName(player.name);
                             const playerStatus = getPlayerStatus(playerName);
-                            const positionData = formatPlayerPosition(String(player.dg_id), player.teetime);
-                            const { localTime: playerTeeTime } = formatTeeTime(player.teetime);
+                            const positionData = formatPlayerPosition(String(player.dg_id), player.tee_time);
+                            const { localTime: playerTeeTime } = formatTeeTime(player.tee_time);
 
                             // Check if this player has a significant odds gap (only for favorites)
                             const isOddsGapHighlight = (() => {
@@ -1071,7 +1071,7 @@ export default function MatchupsTable({
 
                             return (
                               <div 
-                                key={`${matchup.uuid}-${player.id}`}
+                                key={`${matchup.id}-${player.id}`}
                                 className={`
                                   ${idx === players.length - 1 ? 'border-b-8 border-b-gray-900' : 'border-b border-b-gray-800'}
                                   ${playerStatus.status === 'used' ? 'bg-yellow-50/5' : ''}
@@ -1113,7 +1113,7 @@ export default function MatchupsTable({
                                       className="h-8 w-8" 
                                       onClick={() => {
                                         if (typeof player.dg_id !== 'number') return;
-                                        removeSelection(`${player.dg_id}-${matchup.uuid}`);
+                                        removeSelection(`${player.dg_id}-${matchup.id}`);
                                       }}
                                     >
                                       <CheckCircle className="text-green-400" size={16} />
@@ -1130,12 +1130,12 @@ export default function MatchupsTable({
                                       onClick={() => {
                                         if (typeof player.dg_id !== 'number') return;
                                         addSelection({
-                                          id: `${player.dg_id}-${matchup.uuid}`,
+                                          id: `${player.dg_id}-${matchup.id}`,
                                           matchupType,
                                           group: `Event ${eventId || 'Unknown'}`,
                                           player: playerName,
                                           odds: Number(player.odds) || 0,
-                                          matchupId: matchup.uuid,
+                                          matchupId: matchup.id,
                                           eventName: matchup.event_name || '',
                                           roundNum: matchup.round_num || 0,
                                           valueRating: 7.5,

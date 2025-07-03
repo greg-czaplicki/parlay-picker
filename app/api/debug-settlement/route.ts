@@ -36,9 +36,9 @@ export async function GET(request: NextRequest) {
 
     // Get unsettled parlay picks with detailed info
     const { data: pickData, error: pickError } = await supabase
-      .from('parlay_picks')
+      .from('parlay_picks_v2')
       .select(`
-        uuid,
+        id,
         parlay_id,
         matchup_id,
         pick,
@@ -47,9 +47,9 @@ export async function GET(request: NextRequest) {
         pick_outcome,
         event_id,
         settlement_status,
-        parlays!inner(round_num, uuid),
+        parlays!inner(round_num, id),
         matchups!inner(
-          uuid,
+          id,
           round_num,
           type,
           player1_dg_id,
@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
 
     // Process picks data
     const picks = (pickData || []).map((pick: any) => ({
-      pick_id: pick.uuid,
+      pick_id: pick.id,
       parlay_round: pick.parlays?.round_num,
       matchup_round: pick.matchups?.round_num,
       matchup_type: pick.matchups?.type,

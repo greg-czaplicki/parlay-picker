@@ -5,6 +5,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/query-keys'
+import { MatchupRow } from '@/types/matchups'
 
 // Interface for SG data attached to each player in a matchup
 export interface PlayerSGData {
@@ -32,29 +33,8 @@ export interface PlayerSGData {
   roundNum?: string | null;
 }
 
-export interface MatchupRow {
-  uuid: string;
-  event_id: string;
-  event_name?: string;
-  round_num: number;
-  created_at: string;
-  player1_dg_id: number;
-  player1_name: string;
-  player2_dg_id: number;
-  player2_name: string;
-  player3_dg_id?: number | null;
-  player3_name?: string | null;
-  odds1: number | null;
-  odds2: number | null;
-  odds3?: number | null;
-  dg_odds1?: number | null;
-  dg_odds2?: number | null;
-  dg_odds3?: number | null;
-  start_hole?: number | null;
-  teetime?: string | null;
-  tee_time?: string | null;
-  type: string;
-  
+// Enhanced MatchupRow with SG data
+export interface EnhancedMatchupRow extends MatchupRow {
   // Enhanced SG data (added by API enhancement)
   player1_sg_data?: PlayerSGData;
   player2_sg_data?: PlayerSGData;
@@ -65,7 +45,7 @@ export interface MatchupRow {
 }
 
 interface UseMatchupsQueryResult {
-  data: MatchupRow[] | undefined;
+  data: EnhancedMatchupRow[] | undefined;
   isLoading: boolean;
   isError: boolean;
   error: Error | null;
@@ -73,10 +53,11 @@ interface UseMatchupsQueryResult {
 }
 
 export function useMatchupsQuery(eventId: number | null, matchupType: "2ball" | "3ball", roundNum?: number | null): UseMatchupsQueryResult {
-  const query = useQuery<MatchupRow[], Error>({
+  const query = useQuery<EnhancedMatchupRow[], Error>({
     queryKey: [
       ...queryKeys.matchups.byEventAndType(eventId ?? 0, matchupType),
       roundNum ?? 'allRounds',
+      'v2-schema', // Add this to bust cache with old UUID data
     ],
     enabled: !!eventId,
     staleTime: 30 * 1000, // Reduced from 2 minutes to 30 seconds for faster updates
@@ -111,7 +92,7 @@ export function useMatchupsQuery(eventId: number | null, matchupType: "2ball" | 
       
       if (!response.ok) throw new Error(await response.text());
       const data = await response.json();
-      let matchupsData: MatchupRow[] = [];
+      let matchupsData: EnhancedMatchupRow[] = [];
       if (data && data.matchups && Array.isArray(data.matchups)) {
         matchupsData = data.matchups;
       }

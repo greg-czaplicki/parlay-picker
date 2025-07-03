@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
   // TODO: Add authentication and input validation
   const pick = await req.json()
   const { data, error } = await supabase
-    .from('parlay_picks')
+    .from('parlay_picks_v2')
     .insert([pick])
     .select()
     .single()
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
   if (data && pick.matchup_id && pick.pick) {
     try {
       const snapshotResult = await snapshotService.captureSnapshot(
-        data.uuid,        // parlay_pick_id
+        data.id,        // parlay_pick_id
         pick.matchup_id,  // matchup_id
         pick.pick         // picked_player_position (1, 2, or 3)
       );
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
         logger.warn("[POST /api/parlay-picks] Failed to capture snapshot:", snapshotResult.error);
         // Don't fail the response, just log the warning
       } else {
-        logger.info("[POST /api/parlay-picks] Successfully captured feature snapshot for pick:", data.uuid);
+        logger.info("[POST /api/parlay-picks] Successfully captured feature snapshot for pick:", data.id);
       }
     } catch (snapshotError) {
       logger.error("[POST /api/parlay-picks] Unexpected error during snapshot capture:", snapshotError);
@@ -46,7 +46,7 @@ export async function PATCH(req: NextRequest) {
   // TODO: Add authentication and input validation
   const { id, ...fields } = await req.json()
   const { data, error } = await supabase
-    .from('parlay_picks')
+    .from('parlay_picks_v2')
     .update(fields)
     .eq('id', id)
     .select()
@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
   // TODO: Add authentication, filter by parlay_id
   const { searchParams } = new URL(req.url)
   const parlay_id = searchParams.get('parlay_id')
-  let query = supabase.from('parlay_picks').select('*')
+  let query = supabase.from('parlay_picks_v2').select('*')
   if (parlay_id) query = query.eq('parlay_id', parlay_id)
   const { data, error } = await query.order('created_at', { ascending: false })
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })

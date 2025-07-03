@@ -9,7 +9,7 @@ export function useCurrentRoundForEvent(eventId: number | null) {
       if (!eventId) throw new Error('No eventId provided');
       const supabase = createBrowserClient();
       const { data, error } = await supabase
-        .from('matchups')
+        .from('matchups_v2')
         .select('round_num')
         .eq('event_id', eventId)
         .order('round_num', { ascending: false })
