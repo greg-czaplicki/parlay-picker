@@ -111,7 +111,7 @@ function findPairing(pairings: any[], playerIds: number[]) {
   return null;
 }
 
-function transformMatchups(matchups: any[], pairings: any[], type: '2ball' | '3ball', event_id: number, round_num: number, created_at: string, dgIdToUuid: Record<number, string>, teeTimeMap: Record<number, { teetime: string | null, start_hole: number }>) {
+function transformMatchups(matchups: any[], pairings: any[], type: '2ball' | '3ball', event_id: number, round_num: number, created_at: string, teeTimeMap: Record<number, { teetime: string | null, start_hole: number }>) {
   // Debug: Log the first few 2-ball matchups' odds structure
   if (type === '2ball' && matchups.length > 0) {
     console.log(`\n=== 2-BALL ODDS DEBUG (${type}) ===`);
@@ -155,18 +155,15 @@ function transformMatchups(matchups: any[], pairings: any[], type: '2ball' | '3b
       start_hole = pairing?.start_hole ?? start_hole;
     }
     
-    // For 2-ball matchups, also store individual player tee times
+    // For v2 schema, we only need dg_ids, not UUIDs
     const record: any = {
       event_id,
       round_num,
       type,
-      player1_id: dgIdToUuid[m.p1_dg_id] ?? null,
       player1_dg_id: m.p1_dg_id,
       player1_name: m.p1_player_name,
-      player2_id: dgIdToUuid[m.p2_dg_id] ?? null,
       player2_dg_id: m.p2_dg_id,
       player2_name: m.p2_player_name,
-      player3_id: type === '3ball' ? (dgIdToUuid[m.p3_dg_id] ?? null) : null,
       player3_dg_id: type === '3ball' ? m.p3_dg_id : null,
       player3_name: type === '3ball' ? m.p3_player_name : null,
       odds1: m.odds?.fanduel?.p1 ?? m.odds?.draftkings?.p1 ?? null,
@@ -176,15 +173,12 @@ function transformMatchups(matchups: any[], pairings: any[], type: '2ball' | '3b
       dg_odds2: m.odds?.datagolf?.p2 ?? null,
       dg_odds3: type === '3ball' ? (m.odds?.datagolf?.p3 ?? null) : null,
       start_hole: start_hole,
-      teetime: teetime,
       tee_time: teetime ? new Date(teetime).toISOString() : null,
       created_at,
     };
 
     // For 2-ball matchups, store individual player tee times
     if (type === '2ball') {
-      record.player1_teetime = player1TeeTime?.teetime ?? null;
-      record.player2_teetime = player2TeeTime?.teetime ?? null;
       record.player1_tee_time = player1TeeTime?.teetime ? new Date(player1TeeTime.teetime).toISOString() : null;
       record.player2_tee_time = player2TeeTime?.teetime ? new Date(player2TeeTime.teetime).toISOString() : null;
     }
@@ -199,8 +193,8 @@ async function updateExistingTeetimes(supabase: any, event_id: number, round_num
   
   // Get all existing matchups for this event/round
   const { data: existingMatchups, error: fetchError } = await supabase
-    .from('matchups')
-    .select('id, player1_dg_id, player2_dg_id, player3_dg_id, teetime, type')
+    .from('matchups_v2')
+    .select('id, player1_dg_id, player2_dg_id, player3_dg_id, tee_time, type')
     .eq('event_id', event_id)
     .eq('round_num', round_num);
     
@@ -227,19 +221,20 @@ async function updateExistingTeetimes(supabase: any, event_id: number, round_num
     let newTeetime = player1TeeTime?.teetime || player2TeeTime?.teetime || player3TeeTime?.teetime;
     let start_hole = player1TeeTime?.start_hole || player2TeeTime?.start_hole || player3TeeTime?.start_hole || 1;
     
+    // Convert existing tee_time back to string for comparison
+    const existingTeetime = matchup.tee_time ? new Date(matchup.tee_time).toISOString() : null;
+    const newTeetimeISO = newTeetime ? new Date(newTeetime).toISOString() : null;
+    
     // Only update if the tee time has changed
-    if (newTeetime !== matchup.teetime) {
+    if (newTeetimeISO !== existingTeetime) {
       const updateRecord: any = {
         id: matchup.id,
-        teetime: newTeetime,
-        tee_time: newTeetime ? new Date(newTeetime).toISOString() : null,
+        tee_time: newTeetimeISO,
         start_hole: start_hole
       };
 
       // For 2-ball matchups, also update individual player tee times
       if (matchup.type === '2ball') {
-        updateRecord.player1_teetime = player1TeeTime?.teetime ?? null;
-        updateRecord.player2_teetime = player2TeeTime?.teetime ?? null;
         updateRecord.player1_tee_time = player1TeeTime?.teetime ? new Date(player1TeeTime.teetime).toISOString() : null;
         updateRecord.player2_tee_time = player2TeeTime?.teetime ? new Date(player2TeeTime.teetime).toISOString() : null;
       }
@@ -260,21 +255,18 @@ async function updateExistingTeetimes(supabase: any, event_id: number, round_num
     
     for (const update of updates) {
       const updateFields: any = {
-        teetime: update.teetime,
         tee_time: update.tee_time,
         start_hole: update.start_hole
       };
 
       // Include individual player tee times if they exist in the update record
-      if (update.player1_teetime !== undefined) {
-        updateFields.player1_teetime = update.player1_teetime;
-        updateFields.player2_teetime = update.player2_teetime;
+      if (update.player1_tee_time !== undefined) {
         updateFields.player1_tee_time = update.player1_tee_time;
         updateFields.player2_tee_time = update.player2_tee_time;
       }
 
       const { error: updateError } = await supabase
-        .from('matchups')
+        .from('matchups_v2')
         .update(updateFields)
         .eq('id', update.id);
         
@@ -455,32 +447,14 @@ export async function POST(req: NextRequest) {
     }
     // --- END NEW ---
 
-    // Gather all unique DG_IDs from both 2ball and 3ball matchups
-    const allDgIds = [
-      ...new Set([
-        ...matchList3.flatMap((m: any) => [m.p1_dg_id, m.p2_dg_id, m.p3_dg_id]),
-        ...matchList2.flatMap((m: any) => [m.p1_dg_id, m.p2_dg_id]),
-      ].filter(Boolean))
-    ];
-    // Fetch UUIDs for all DG_IDs
-    const { data: playerRows, error: playerError } = await supabase
-      .from('players_v2')
-      .select('uuid, dg_id')
-      .in('dg_id', allDgIds);
-    if (playerError) {
-      throw new Error(`Could not fetch player UUIDs: ${playerError.message}`);
-    }
-    const dgIdToUuid: Record<number, string> = {};
-    (playerRows ?? []).forEach((row: any) => {
-      if (row.dg_id && row.uuid) dgIdToUuid[Number(row.dg_id)] = row.uuid;
-    });
+    // No need to fetch UUIDs anymore - v2 schema uses dg_id as primary identifier
 
     // Create tee time maps for each round
     const teeTimeMap3 = createTeeTimeMap(dgField, round_num_3);
     const teeTimeMap2 = createTeeTimeMap(dgField, round_num_2);
 
-    const matchups3 = transformMatchups(matchList3, dgModel.pairings, '3ball', event_id, round_num_3, created_at_3, dgIdToUuid, teeTimeMap3);
-    const matchups2 = transformMatchups(matchList2, dgModel.pairings, '2ball', event_id, round_num_2, created_at_2, dgIdToUuid, teeTimeMap2);
+    const matchups3 = transformMatchups(matchList3, dgModel.pairings, '3ball', event_id, round_num_3, created_at_3, teeTimeMap3);
+    const matchups2 = transformMatchups(matchList2, dgModel.pairings, '2ball', event_id, round_num_2, created_at_2, teeTimeMap2);
     
     // Insert into matchups table
     const allMatchups = [...matchups3, ...matchups2]
@@ -489,9 +463,10 @@ export async function POST(req: NextRequest) {
     }
     // Debug log: show first object to be inserted
     console.log('Sample matchup to insert:', JSON.stringify(allMatchups[0], null, 2))
-    const { error } = await supabase.from('matchups').insert(allMatchups)
+    const { error } = await supabase.from('matchups_v2').insert(allMatchups)
     if (error) {
       console.error('Supabase insert error:', error)
+      throw new Error(`Failed to insert matchups: ${error.message}`)
     }
     // Debug info
     const sampleMain = matchups3[0]
