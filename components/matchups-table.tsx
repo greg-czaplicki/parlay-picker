@@ -347,8 +347,22 @@ export default function MatchupsTable({
     );
   });
   
-  // Flatten all picks from active parlays only
-  const allParlayPicks = activeParlays.flatMap((parlay: any) => parlay.picks || []);
+  // Flatten all picks from active parlays only (for conflict detection)
+  const allParlayPicks = activeParlays.flatMap((parlay: any) => 
+    (parlay.picks || []).map((pick: any) => ({
+      ...pick,
+      parlay_round_num: parlay.round_num  // Include round number from parent parlay
+    }))
+  );
+
+  // Flatten all picks from ALL parlays (for round indicator)
+  const allHistoricalPicks = (allParlays ?? []).flatMap((parlay: any) => 
+    (parlay.picks || []).map((pick: any) => ({
+      ...pick,
+      parlay_round_num: parlay.round_num  // Include round number from parent parlay
+    }))
+  );
+
   
   // Helper to check if a player is in the current parlay
   const isPlayerInCurrentParlay = (playerName: string) => {
@@ -374,7 +388,9 @@ export default function MatchupsTable({
   // Helper to get player status for visual indicators
   const getPlayerStatus = (playerName: string) => {
     const inCurrent = isPlayerInCurrentParlay(playerName);
-    const inSubmitted = allParlayPicks.some((pick: any) => {
+    
+    // Check active parlays for conflicts
+    const usedInActiveParlay = allParlayPicks.find((pick: any) => {
       const pickPlayerName = (pick.picked_player_name || '');
       const checkPlayerName = playerName;
       
@@ -386,10 +402,40 @@ export default function MatchupsTable({
       return matches;
     });
     
+    // Check ALL parlays for round indicator
+    const usedInAnyParlay = allHistoricalPicks.find((pick: any) => {
+      const pickPlayerName = (pick.picked_player_name || '');
+      const checkPlayerName = playerName;
+      
+      // Format both names the same way for comparison
+      const formattedPickName = formatPlayerName(pickPlayerName).toLowerCase();
+      const formattedCheckName = formatPlayerName(checkPlayerName).toLowerCase();
+      
+      const matches = formattedPickName === formattedCheckName;
+      
+      
+      return matches;
+    });
+    
     if (inCurrent) {
       return { status: 'current', label: 'In current parlay' };
-    } else if (inSubmitted) {
-      return { status: 'used', label: 'Already used in a parlay' };
+    } else if (usedInActiveParlay) {
+      const roundNum = usedInActiveParlay.parlay_round_num || 1;
+      return { 
+        status: 'used', 
+        label: `Already used in Round ${roundNum}`,
+        roundNum: roundNum
+      };
+    } else if (usedInAnyParlay) {
+      const roundNum = usedInAnyParlay.parlay_round_num || 1;
+      const result = { 
+        status: 'available', 
+        label: 'Available',
+        roundNum: roundNum
+      };
+      
+      
+      return result;
     } else {
       return { status: 'available', label: 'Available' };
     }
@@ -811,6 +857,11 @@ export default function MatchupsTable({
                                       highlightText(playerName) : 
                                       playerName
                                     }
+                                    {playerStatus.roundNum && (
+                                      <span className="text-xs px-1 py-0.5 rounded bg-gray-700/50 text-gray-300 font-mono">
+                                        R{playerStatus.roundNum}
+                                      </span>
+                                    )}
                                     {playerStatus.status !== 'available' && (
                                       <Tooltip>
                                         <TooltipTrigger asChild>
@@ -1089,6 +1140,11 @@ export default function MatchupsTable({
                                         playerName
                                       }
                                     </span>
+                                    {playerStatus.roundNum && (
+                                      <span className="text-xs px-1 py-0.5 rounded bg-gray-700/50 text-gray-300 font-mono">
+                                        R{playerStatus.roundNum}
+                                      </span>
+                                    )}
                                     {playerStatus.status !== 'available' && (
                                       <Tooltip>
                                         <TooltipTrigger asChild>
