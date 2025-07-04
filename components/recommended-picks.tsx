@@ -549,11 +549,6 @@ export function RecommendedPicksContent({
                               {(() => {
                                 const calculatedValue = (player as any).season_sg_total_calculated;
                                 const rawValue = player.season_sg_total;
-                                console.log(`[Season SG Display] ${player.name}:`, {
-                                  calculated: calculatedValue,
-                                  raw: rawValue,
-                                  dgSeason: (player as any).dgSeasonSgTotal
-                                });
                                 return (calculatedValue ?? rawValue)?.toFixed(2) ?? 'N/A';
                               })()}
                             </div>

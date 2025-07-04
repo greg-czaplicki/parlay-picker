@@ -102,10 +102,6 @@ export function useMatchupsQuery(eventId: number | null, matchupType: "2ball" | 
         filtered = matchupsData.filter((m: any) => Number(m.event_id) === eventIdNum);
       }
       
-      // Log SG data enhancement info
-      const sgEnhanced = filtered.filter(m => m.sg_data_enhanced);
-      console.log(`✅ Fetched ${filtered.length} matchups (${sgEnhanced.length} with SG data) for event ${eventId}`);
-      
       return filtered;
     },
   });
