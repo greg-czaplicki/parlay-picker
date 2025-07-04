@@ -125,7 +125,7 @@ async function getEventsWithUnsettledParlays(supabase: any) {
     .from('parlay_picks_v2')
     .select(`
       event_id,
-      matchups!inner(event_id)
+      matchups_v2!inner(event_id)
     `)
     .eq('settlement_status', 'pending')
 
@@ -139,7 +139,7 @@ async function getEventsWithUnsettledParlays(supabase: any) {
   // Get unique event IDs from both direct event_id and matchup.event_id
   const eventIds = [...new Set((pickData || []).map((p: any) => {
     // Use direct event_id if available, otherwise use matchup.event_id
-    return p.event_id || p.matchups?.event_id
+    return p.event_id || p.matchups_v2?.event_id
   }).filter(Boolean))]
   
   logger.info(`Unique event IDs with unsettled picks: ${eventIds.join(', ')}`)

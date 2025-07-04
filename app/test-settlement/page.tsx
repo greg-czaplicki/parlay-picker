@@ -44,8 +44,8 @@ export default function TestSettlement() {
   }
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Settlement Test Page</h1>
+    <div className="p-8 max-w-4xl mx-auto text-black">
+      <h1 className="text-2xl font-bold mb-6 text-white">Settlement Debug Page</h1>
       
       <div className="flex gap-4 mb-6">
         <button
