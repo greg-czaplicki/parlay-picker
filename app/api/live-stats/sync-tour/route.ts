@@ -118,7 +118,7 @@ function mapStatsToInsert(data: DataGolfLiveStatsResponse, timestamp: string): S
     scrambling: player.scrambling ?? null,
     position: player.position ?? null,
     thru: player.thru ?? null,
-    today: player.round ?? null,
+    today: player.today ?? null,
     total: player.total ?? null,
     data_golf_updated_at: timestamp,
   }));

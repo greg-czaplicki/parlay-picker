@@ -88,6 +88,29 @@ jobs:
             exit 1
           fi
 
+      - name: 🏌️ Live Tournament Stats Cleanup
+        run: |
+          echo "🏌️ Cleaning up stale live tournament stats..."
+          
+          response=$(curl -s -L -w "HTTPSTATUS:%{http_code}" \
+            -X POST "${{ env.APP_URL }}/api/live-stats/cleanup" \
+            -H "Content-Type: application/json" \
+            -H "User-Agent: GitHub-Actions-Maintenance/1.0" \
+            -d '{"action": "cleanup_stale", "days_threshold": 2}')
+          
+          http_code=$(echo $response | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+          content=$(echo $response | sed -e 's/HTTPSTATUS:.*//')
+          
+          if [ $http_code -eq 200 ]; then
+            cleaned_count=$(echo $content | jq -r '.cleaned_records // 0')
+            echo "✅ LIVE STATS CLEANUP:"
+            echo "   🗑️ Removed: $cleaned_count stale records"
+            echo "LIVE_STATS_CLEANED=$cleaned_count" >> $GITHUB_ENV
+          else
+            echo "❌ Live stats cleanup failed (HTTP $http_code)"
+            echo "$content"
+          fi
+
       - name: 📊 Retention Policy Status
         run: |
           echo "📊 Checking retention policy status..."
