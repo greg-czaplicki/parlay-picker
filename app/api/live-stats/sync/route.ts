@@ -66,7 +66,7 @@ if (!dataGolfApiKey) {
 }
 
 // Tours to sync
-const TOURS_TO_SYNC = ['pga', 'euro'];
+const TOURS_TO_SYNC = ['pga', 'euro', 'opp'];
 
 // Helper to fetch in-play predictions for a tour
 async function fetchInPlayPredictions(tour: string): Promise<any | null> {
@@ -97,9 +97,38 @@ async function fetchInPlayPredictions(tour: string): Promise<any | null> {
 }
 
 // Helper to map in-play predictions data to Supabase insert format
-function mapInPlayDataToInsert(players: any[], tournament: string, timestamp: string, eventId?: number): SupabaseLiveStat[] {
+async function mapInPlayDataToInsert(players: any[], tournament: string, timestamp: string, eventId?: number, supabase?: any): Promise<SupabaseLiveStat[]> {
   const allStats: SupabaseLiveStat[] = [];
   const uniqueKeys = new Set<string>(); // Track unique combinations to avoid duplicates
+
+  // Fetch existing SG data to preserve it during the upsert
+  let existingSgData: Map<string, any> = new Map();
+  if (supabase) {
+    try {
+      const { data: existingData, error } = await supabase
+        .from('live_tournament_stats')
+        .select('dg_id, round_num, sg_app, sg_ott, sg_putt, sg_arg, sg_t2g, sg_total')
+        .eq('event_name', tournament);
+      
+      if (!error && existingData) {
+        // Create a map keyed by dg_id-round_num for quick lookup
+        existingData.forEach((record: any) => {
+          const key = `${record.dg_id}-${record.round_num}`;
+          existingSgData.set(key, {
+            sg_app: record.sg_app,
+            sg_ott: record.sg_ott,
+            sg_putt: record.sg_putt,
+            sg_arg: record.sg_arg,
+            sg_t2g: record.sg_t2g,
+            sg_total: record.sg_total
+          });
+        });
+        logger.info(`Fetched existing SG data for ${existingSgData.size} records to preserve during update`);
+      }
+    } catch (err) {
+      logger.warn('Failed to fetch existing SG data, will proceed without preservation:', err);
+    }
+  }
 
   for (const player of players) {
     // 🔍 VALIDATION: Check if player has valid dg_id
@@ -121,12 +150,15 @@ function mapInPlayDataToInsert(players: any[], tournament: string, timestamp: st
     // Always add current round
     roundsToAdd.push(currentRound);
     
+    // Add event_avg for LIVE view support
+    roundsToAdd.push('event_avg');
+    
     // For players who have completed previous rounds, add historical data
-    if (player.score_history) {
+    if (player.R1 !== undefined || player.R2 !== undefined || player.R3 !== undefined || player.R4 !== undefined) {
       // If we have R1, R2, etc. scores, add those rounds
       for (let r = 1; r < parseInt(currentRound); r++) {
         const roundKey = `R${r}`;
-        if (player.score_history[roundKey] !== undefined) {
+        if (player[roundKey] !== undefined && player[roundKey] !== null) {
           roundsToAdd.push(r.toString());
         }
       }
@@ -139,16 +171,51 @@ function mapInPlayDataToInsert(players: any[], tournament: string, timestamp: st
       if (!uniqueKeys.has(uniqueKey)) {
         uniqueKeys.add(uniqueKey);
         
-        // Calculate round-specific scores
+        // Calculate round-specific scores and cumulative totals correctly
         let roundScore = 0;
-        if (roundNum === currentRound) {
-          // Current round - use today's score
+        let cumulativeTotal = 0;
+        
+        if (roundNum === 'event_avg') {
+          // Event average - use current tournament total and today's round score
           roundScore = player.today || 0;
-        } else if (player.score_history) {
-          // Historical round - use score from history
+          cumulativeTotal = player.current_score || player.total || 0;
+        } else if (roundNum === currentRound) {
+          // Current round - use today's score and current total
+          roundScore = player.today || 0;
+          cumulativeTotal = player.current_score || player.total || 0;
+        } else if (player.R1 !== undefined || player.R2 !== undefined || player.R3 !== undefined || player.R4 !== undefined) {
+          // Historical round - calculate from R1, R2, R3, etc. properties
           const roundKey = `R${roundNum}`;
-          roundScore = player.score_history[roundKey] || 0;
+          const absoluteRoundScore = player[roundKey];
+          
+          if (absoluteRoundScore !== null && absoluteRoundScore !== undefined) {
+            // Convert absolute score to relative-to-par (assuming par 70)
+            const par = 70;
+            roundScore = absoluteRoundScore - par;
+            
+            // Calculate cumulative total by summing all rounds up to this one
+            cumulativeTotal = 0;
+            for (let r = 1; r <= parseInt(roundNum); r++) {
+              const rKey = `R${r}`;
+              const roundAbsoluteScore = player[rKey];
+              if (roundAbsoluteScore !== null && roundAbsoluteScore !== undefined) {
+                cumulativeTotal += (roundAbsoluteScore - par);
+              }
+            }
+          } else {
+            // Round not yet played
+            roundScore = 0;
+            cumulativeTotal = 0;
+          }
+        } else {
+          // Fallback - no score history available
+          roundScore = 0;
+          cumulativeTotal = 0;
         }
+        
+        // Check if we have existing SG data for this player/round combination
+        const sgKey = `${player.dg_id}-${roundNum}`;
+        const existingSg = existingSgData.get(sgKey);
         
         allStats.push({
           dg_id: player.dg_id,
@@ -156,21 +223,22 @@ function mapInPlayDataToInsert(players: any[], tournament: string, timestamp: st
           event_name: tournament,
           course_name: player.course || '',
           round_num: roundNum,
-          sg_app: null, // In-play predictions don't include detailed stats
-          sg_ott: null,
-          sg_putt: null,
-          sg_arg: null,
-          sg_t2g: null,
-          sg_total: null,
+          // Use existing SG data if available, otherwise set to null
+          sg_app: existingSg?.sg_app ?? null,
+          sg_ott: existingSg?.sg_ott ?? null,
+          sg_putt: existingSg?.sg_putt ?? null,
+          sg_arg: existingSg?.sg_arg ?? null,
+          sg_t2g: existingSg?.sg_t2g ?? null,
+          sg_total: existingSg?.sg_total ?? null,
           accuracy: null,
           distance: null,
           gir: null,
           prox_fw: null,
           scrambling: null,
           position: player.current_pos || player.position || null,
-          thru: roundNum === currentRound ? (player.thru || 0) : 18, // Historical rounds are complete
-          today: roundScore,
-          total: player.current_score || player.total || 0,
+          thru: (roundNum === currentRound || roundNum === 'event_avg') ? (player.thru || 0) : 18, // Current round and event_avg show live thru, historical rounds are complete
+          today: roundScore, // Individual round score
+          total: cumulativeTotal, // Cumulative total through this round
           data_golf_updated_at: timestamp,
         });
       }
@@ -284,7 +352,7 @@ export async function GET(req?: NextRequest) {
           logger.warn(`No event_id found for tournament: ${eventName}`);
         }
 
-        const statsToInsert = mapInPlayDataToInsert(players, eventName, last_updated, eventId);
+        const statsToInsert = await mapInPlayDataToInsert(players, eventName, last_updated, eventId, supabase);
         
         logger.info(`Upserting ${statsToInsert.length} records for ${tour.toUpperCase()} tour (${eventName})`);
         
@@ -293,6 +361,7 @@ export async function GET(req?: NextRequest) {
           logger.info(`🔍 EURO DEBUG - Sample record for ${eventName}:`, JSON.stringify(statsToInsert[0], null, 2));
           logger.info(`🔍 EURO DEBUG - Total players: ${players.length}, Generated records: ${statsToInsert.length}`);
         }
+
 
         // Upsert on (dg_id, round_num, event_name)
         const { error } = await supabase

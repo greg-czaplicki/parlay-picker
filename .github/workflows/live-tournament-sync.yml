@@ -1,0 +1,72 @@
+name: Live Tournament Sync
+
+on:
+  schedule:
+    # Every 5 minutes during tournament hours (Thursday-Sunday, 11 AM - 1 AM UTC)
+    # This corresponds to 6 AM - 8 PM EST (tournament hours)
+    - cron: '*/5 11-23 * * 4-6'  # Thu-Sat 11:00-23:59 UTC
+    - cron: '*/5 0-1 * * 5-7'    # Fri-Sun 00:00-01:59 UTC (late evening EST)
+    - cron: '*/5 11-23 * * 0'    # Sunday 11:00-23:59 UTC
+    - cron: '*/5 0-1 * * 1'      # Monday 00:00-01:59 UTC (late Sunday EST)
+  
+  # Allow manual triggering for testing
+  workflow_dispatch:
+
+jobs:
+  sync-tournament-data:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Call Live Tournament Sync API
+      run: |
+        echo "🏌️ Triggering live tournament sync..."
+        
+        # Get current time info for logging
+        echo "Current UTC time: $(date -u)"
+        echo "Current EST time: $(TZ='America/New_York' date)"
+        
+        # Call the sync endpoint
+        response=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
+          -X GET \
+          -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+          -H "Content-Type: application/json" \
+          "${{ secrets.VERCEL_URL }}/api/cron/live-tournament-sync")
+        
+        # Extract HTTP status and body
+        http_status=$(echo "$response" | grep "HTTP_STATUS:" | cut -d: -f2)
+        body=$(echo "$response" | sed '/HTTP_STATUS:/d')
+        
+        echo "HTTP Status: $http_status"
+        echo "Response: $body"
+        
+        # Check if request was successful
+        if [ "$http_status" -eq 200 ]; then
+          echo "✅ Live tournament sync completed successfully"
+          
+          # Parse response to show summary
+          if echo "$body" | grep -q '"success":true'; then
+            echo "📊 Sync was successful"
+            
+            # Extract processed count if available
+            processed_count=$(echo "$body" | grep -o '"processedCount":[0-9]*' | cut -d: -f2)
+            if [ -n "$processed_count" ]; then
+              echo "📈 Processed $processed_count records"
+            fi
+            
+            # Extract events if available
+            events=$(echo "$body" | grep -o '"events":\[[^]]*\]')
+            if [ -n "$events" ]; then
+              echo "🏆 Events: $events"
+            fi
+          else
+            echo "⏭️ Sync was skipped (likely outside tournament hours or no active tournaments)"
+          fi
+        else
+          echo "❌ Live tournament sync failed with status $http_status"
+          echo "Response: $body"
+          exit 1
+        fi
+
+    - name: Log Completion
+      run: |
+        echo "🏁 Live tournament sync workflow completed at $(date -u)"

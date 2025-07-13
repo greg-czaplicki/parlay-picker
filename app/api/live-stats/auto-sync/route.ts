@@ -34,6 +34,30 @@ function isDuringTournamentHours(): boolean {
   return isTournamentDay && isTournamentHour
 }
 
+// For active tournaments, we need to try both PGA and OPP endpoints
+// since DataGolf doesn't clearly document which tournaments are on which endpoint
+function getRequiredApiTours(activeTournaments: any[]): ('pga' | 'opp')[] {
+  const tours: ('pga' | 'opp')[] = []
+  
+  // If we have any PGA tour events, try the PGA endpoint
+  if (activeTournaments.some(t => t.tour === 'pga')) {
+    tours.push('pga')
+  }
+  
+  // If we have any European tour events, try the OPP endpoint
+  if (activeTournaments.some(t => t.tour === 'euro')) {
+    tours.push('opp')
+  }
+  
+  // For PGA tour events, we also need to try OPP endpoint since some PGA events
+  // are actually "opposite field" events in DataGolf's classification
+  if (activeTournaments.some(t => t.tour === 'pga') && !tours.includes('opp')) {
+    tours.push('opp')
+  }
+  
+  return tours
+}
+
 // Helper to sync a specific tour
 async function syncTour(tour: 'pga' | 'opp'): Promise<{ success: boolean; count: number; error?: string }> {
   try {
@@ -72,17 +96,16 @@ export async function GET() {
     const isDuringHours = isDuringTournamentHours()
     logger.info(`Active tournaments found: ${activeTournaments.length}, During tournament hours: ${isDuringHours}`)
     
-    // Determine which tours to sync based on active tournaments
-    const toursToSync = new Set<'pga' | 'opp'>()
-    activeTournaments.forEach(tournament => {
-      if (tournament.tour === 'pga') toursToSync.add('pga')
-      if (tournament.tour === 'opp') toursToSync.add('opp')
-    })
+    // Determine which API endpoints to try based on active tournaments
+    const toursToSync = getRequiredApiTours(activeTournaments)
+    
+    logger.info('Active tournaments:', activeTournaments.map(t => ({ name: t.event_name, tour: t.tour })))
+    logger.info('API endpoints to try:', toursToSync)
     
     const results = []
     let totalProcessed = 0
     
-    // Sync each required tour
+    // Sync each required tour endpoint
     for (const tour of toursToSync) {
       const result = await syncTour(tour)
       results.push({

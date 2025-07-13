@@ -98,30 +98,71 @@ async function fetchLiveStats(tour: string, round: string): Promise<DataGolfLive
 }
 
 // Helper to map DataGolf player data to Supabase insert format
-function mapStatsToInsert(data: DataGolfLiveStatsResponse, timestamp: string): SupabaseLiveStat[] {
-  return (data.live_stats || []).map((player) => ({
-    dg_id: player.dg_id,
-    player_name: player.player_name,
-    event_name: data.event_name,
-    course_name: data.course_name,
-    round_num: data.stat_round,
-    sg_app: player.sg_app,
-    sg_ott: player.sg_ott,
-    sg_putt: player.sg_putt,
-    sg_arg: player.sg_arg ?? null,
-    sg_t2g: player.sg_t2g ?? null,
-    sg_total: player.sg_total ?? null,
-    accuracy: player.accuracy ?? null,
-    distance: player.distance ?? null,
-    gir: player.gir ?? null,
-    prox_fw: player.prox_fw ?? null,
-    scrambling: player.scrambling ?? null,
-    position: player.position ?? null,
-    thru: player.thru ?? null,
-    today: player.today ?? null,
-    total: player.total ?? null,
-    data_golf_updated_at: timestamp,
-  }));
+async function mapStatsToInsert(data: DataGolfLiveStatsResponse, timestamp: string, supabase?: any): Promise<SupabaseLiveStat[]> {
+  // Fetch existing round progression data to preserve it during SG updates
+  let existingProgressionData: Map<string, any> = new Map();
+  if (supabase) {
+    try {
+      const { data: existingData, error } = await supabase
+        .from('live_tournament_stats')
+        .select('dg_id, round_num, position, thru, today, total')
+        .eq('event_name', data.event_name);
+      
+      if (!error && existingData) {
+        // Create a map keyed by dg_id-round_num for quick lookup
+        existingData.forEach((record: any) => {
+          const key = `${record.dg_id}-${record.round_num}`;
+          existingProgressionData.set(key, {
+            position: record.position,
+            thru: record.thru,
+            today: record.today,
+            total: record.total
+          });
+        });
+        logger.info(`Fetched existing round progression data for ${existingProgressionData.size} records to preserve during SG update`);
+      }
+    } catch (err) {
+      logger.warn('Failed to fetch existing round progression data, will proceed without preservation:', err);
+    }
+  }
+
+  return (data.live_stats || []).map((player) => {
+    // Check if we have existing round progression data for this player/round combination
+    const progressionKey = `${player.dg_id}-${data.stat_round}`;
+    const existingProgression = existingProgressionData.get(progressionKey);
+    
+    return {
+      dg_id: player.dg_id,
+      player_name: player.player_name,
+      event_name: data.event_name,
+      course_name: data.course_name,
+      round_num: data.stat_round,
+      sg_app: player.sg_app,
+      sg_ott: player.sg_ott,
+      sg_putt: player.sg_putt,
+      sg_arg: player.sg_arg ?? null,
+      sg_t2g: player.sg_t2g ?? null,
+      sg_total: player.sg_total ?? null,
+      accuracy: player.accuracy ?? null,
+      distance: player.distance ?? null,
+      gir: player.gir ?? null,
+      prox_fw: player.prox_fw ?? null,
+      scrambling: player.scrambling ?? null,
+      // Preserve existing round progression data if available, otherwise use new data
+      position: existingProgression?.position ?? player.position ?? null,
+      thru: existingProgression?.thru ?? player.thru ?? null,
+      today: existingProgression?.today ?? player.today ?? null,
+      total: existingProgression?.total ?? player.total ?? null,
+      data_golf_updated_at: timestamp,
+    };
+  });
+}
+
+// Helper function to determine current tournament round
+function getCurrentTournamentRound(eventId: number): number {
+  // For now, assume Round 4 is current since both tournaments are in Round 4
+  // TODO: Implement dynamic round detection based on tournament dates/status
+  return 4;
 }
 
 // Replace legacy param validation with Zod and getQueryParams
@@ -133,11 +174,11 @@ export async function GET(request: Request) {
   logger.info(`Tour sync request received`, { tour });
   
   // Validate tour parameter
-  const tourSchema = z.enum(['pga', 'euro']);
+  const tourSchema = z.enum(['pga', 'euro', 'opp']);
   const validationResult = tourSchema.safeParse(tour);
   
   if (!validationResult.success) {
-    return handleApiError(`Invalid tour parameter: ${tour}. Must be 'pga' or 'euro'.`);
+    return handleApiError(`Invalid tour parameter: ${tour}. Must be 'pga', 'euro', or 'opp'.`);
   }
 
   const validatedTour = validationResult.data;
@@ -190,42 +231,26 @@ export async function GET(request: Request) {
         const currentRoundTimestamp = new Date(data.last_updated.replace(" UTC", "Z")).toISOString();
         lastSourceTimestamp = currentRoundTimestamp;
         fetchedEventName = data.event_name;
-        const statsToInsert = mapStatsToInsert(data, currentRoundTimestamp);
-          // Upsert on (dg_id, round_num, event_name)
-          const { error } = await supabase
-            .from("live_tournament_stats")
-            .upsert(statsToInsert, { onConflict: "dg_id,round_num,event_name" });
-          if (error) {
-            errors.push(`Upsert failed for round ${round}: ${error.message}`);
-            logger.error(`Upsert failed for round ${round}: ${error.message}`);
+        const statsToInsert = await mapStatsToInsert(data, currentRoundTimestamp, supabase);
+        
+        // Updated upsert - now preserves round progression data
+        const { error } = await supabase
+          .from("live_tournament_stats")
+          .upsert(statsToInsert, { onConflict: "dg_id,round_num,event_name" });
+          
+        if (error) {
+          errors.push(`Upsert failed for round ${round}: ${error.message}`);
+          logger.error(`Upsert failed for round ${round}: ${error.message}`);
         } else {
           totalInsertedCount += statsToInsert.length;
           logger.info(`Successfully synced ${statsToInsert.length} records for round ${round}`);
-
-          // 🎯 NEW: Check for snapshot triggers after successful sync
-          try {
-            // Skip event_avg round for snapshots
-            if (round !== 'event_avg') {
-              const triggerResult = await snapshotService.checkAndTriggerSnapshots(
-                data.event_name,
-                round,
-                currentRoundTimestamp
-              );
-              
-              if (triggerResult.triggered) {
-                logger.info(`📸 Snapshot triggered for ${data.event_name}, round ${round}`);
-              } else {
-                logger.debug(`No snapshot needed for ${data.event_name}, round ${round}: ${triggerResult.reason}`);
-              }
-            }
-          } catch (snapshotError) {
-            logger.warn(`Snapshot trigger check failed for ${data.event_name}, round ${round}:`, snapshotError);
-            // Don't fail the sync if snapshot triggers fail
-          }
         }
+
+        // TODO: Add snapshot triggers for round completion detection
+        
       } catch (err: any) {
         errors.push(err.message || String(err));
-          logger.error(`Error syncing round ${round}: ${err.message || String(err)}`);
+        logger.error(`Error syncing round ${round}: ${err.message || String(err)}`);
       }
     }
 

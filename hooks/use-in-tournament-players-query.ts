@@ -182,8 +182,40 @@ export function useInTournamentPlayersQuery({
       // Handle specific round requests (non-'live')
       const dbRound = round === 'latest' ? 'event_avg' : round
       
-      // For specific rounds (1, 2, 3, 4), we want the cumulative data through that round
-      // The database should store the cumulative total score for each round
+      // For historical rounds (1, 2, 3), use tournament snapshots which have correct historical data
+      // For current round (4) and event_avg, use live stats
+      const isHistoricalRound = /^[1-3]$/.test(dbRound)
+      
+      if (isHistoricalRound && eventName) {
+        console.log(`Fetching historical data for round ${dbRound} from snapshots`)
+        
+        // Query tournament snapshots for historical round data
+        // Get the latest snapshot for each player for this round
+        const { data: snapshotData, error: snapshotError } = await supabase
+          .from('latest_tournament_snapshots')
+          .select('dg_id, player_name, position, position_numeric, total_score as total, round_score as today, thru, snapshot_timestamp')
+          .eq('event_name', eventName)
+          .eq('round_num', dbRound)
+          .order('total_score', { ascending: true })
+        
+        if (snapshotError) {
+          console.warn(`Snapshot query failed for round ${dbRound}, falling back to live stats:`, snapshotError)
+          // Fall through to live stats query below
+        } else if (snapshotData && snapshotData.length > 0) {
+          console.log(`Found ${snapshotData.length} players in snapshots for round ${dbRound}`)
+          console.log(`Sample snapshot data for round ${dbRound}:`, {
+            player: snapshotData[0]?.player_name,
+            total: snapshotData[0]?.total,
+            today: snapshotData[0]?.today,
+            position: snapshotData[0]?.position
+          })
+          
+          return processRoundData(snapshotData, dbRound, eventName)
+        }
+      }
+      
+      // For current rounds (4, event_avg) or fallback, use live stats
+      console.log(`Fetching live data for round ${dbRound}`)
       let query = supabase
         .from('latest_live_tournament_stats_view')
         .select('*')
