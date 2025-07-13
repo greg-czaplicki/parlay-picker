@@ -355,13 +355,17 @@ export default function MatchupsTable({
     }))
   );
 
-  // Flatten all picks from ALL parlays (for round indicator)
+  // Flatten all picks from ALL parlays (for round indicator), but only for the current tournament
   const allHistoricalPicks = (allParlays ?? []).flatMap((parlay: any) => 
     (parlay.picks || []).map((pick: any) => ({
       ...pick,
       parlay_round_num: parlay.round_num  // Include round number from parent parlay
     }))
-  );
+  ).filter((pick: any) => {
+    // Only include picks from the current tournament (event_id)
+    // We need to check if the pick's event_id matches the current eventId
+    return pick.event_id === eventId;
+  });
 
   
   // Helper to check if a player is in the current parlay
