@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseClient } from '@/lib/api-utils'
 
+// Force this route to be dynamic and bypass edge caching
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+export const revalidate = 0
+
 // GET: Fetch matchups with enhanced SG data
 export async function GET(req: NextRequest) {
   const supabase = createSupabaseClient()

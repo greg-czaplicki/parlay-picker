@@ -182,6 +182,8 @@ export function useInTournamentPlayersQuery({
       // Handle specific round requests (non-'live')
       const dbRound = round === 'latest' ? 'event_avg' : round
       
+      // For specific rounds (1, 2, 3, 4), we want the cumulative data through that round
+      // The database should store the cumulative total score for each round
       let query = supabase
         .from('latest_live_tournament_stats_view')
         .select('*')
@@ -200,6 +202,18 @@ export function useInTournamentPlayersQuery({
       if (error) throw error
       
       const rawData = data || []
+      
+      // For specific round views, ensure we have cumulative data
+      console.log(`Fetched ${rawData.length} players for round ${dbRound}`)
+      if (rawData.length > 0) {
+        console.log(`Sample player data for round ${dbRound}:`, {
+          player: rawData[0]?.player_name,
+          total: rawData[0]?.total,
+          today: rawData[0]?.today,
+          round_num: rawData[0]?.round_num
+        })
+      }
+      
       return processRoundData(rawData, dbRound, eventName)
     },
   })
@@ -219,14 +233,20 @@ function processRoundData(data: any[], round: string, eventName: string | null):
   
   // Special handling for specific round views (Round 1, 2, 3, 4)
   if (isSpecificRound) {
-    console.log(`Processing specific round view: Round ${round}`)
+    console.log(`Processing specific round view: Round ${round} - showing cumulative score through round ${round}`)
     
-    // For specific round views, show how that round ended
-    // Use 'today' field (round score) as both the display score and ranking criteria
+    // For specific round views, show cumulative score through that round
+    // Keep the 'total' field as is (cumulative score) and use 'today' for round score
     processedData = processedData.map(player => {
+      let totalScore = player.total
       let roundScore = player.today
       
       // Handle raw score conversion if needed
+      if (totalScore !== null && isRawScore(totalScore)) {
+        console.log(`Converting raw total score for ${player.player_name}: ${totalScore} → ${convertToParScore(totalScore)}`)
+        totalScore = convertToParScore(totalScore)
+      }
+      
       if (roundScore !== null && isRawScore(roundScore)) {
         console.log(`Converting raw round score for ${player.player_name}: ${roundScore} → ${convertToParScore(roundScore)}`)
         roundScore = convertToParScore(roundScore)
@@ -234,14 +254,14 @@ function processRoundData(data: any[], round: string, eventName: string | null):
       
       return {
         ...player,
-        total: roundScore,        // Show round score as total for this view
-        today: roundScore,        // Round score
+        total: totalScore,        // Keep cumulative score through this round
+        today: roundScore,        // Individual round score
         position: null            // Will be recalculated below
       }
     })
     
-    // Always recalculate positions for specific rounds based on round scores
-    console.log(`Calculating Round ${round} leaderboard based on round scores`)
+    // Recalculate positions based on cumulative total score through this round
+    console.log(`Calculating Round ${round} leaderboard based on cumulative scores through round ${round}`)
     processedData = calculatePositions(processedData)
   } else {
     // For cumulative views (live, event_avg), use existing logic

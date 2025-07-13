@@ -17,13 +17,14 @@ export function ManualIngestButton({ className }: { className?: string }) {
     try {
       // Add cache-busting timestamp to bypass Vercel edge cache
       const timestamp = Date.now()
-      const response = await fetch(`/api/matchups/refresh?_t=${timestamp}`, {
+      const response = await fetch(`/api/matchups/refresh?_t=${timestamp}&_v=${Math.random()}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           // Force bypass cache with these headers
           'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache'
+          'Pragma': 'no-cache',
+          'X-Vercel-Skip-Cache': '1' // Vercel-specific header to skip edge cache
         }
       })
 
@@ -32,6 +33,11 @@ export function ManualIngestButton({ className }: { className?: string }) {
       }
 
       const result = await response.json()
+      
+      // Clear all cached data to ensure fresh fetch
+      queryClient.removeQueries({ queryKey: queryKeys.matchups.all() })
+      queryClient.removeQueries({ queryKey: queryKeys.recommendedPicks.all() })
+      queryClient.removeQueries({ queryKey: queryKeys.oddsFreshness() })
       
       // Invalidate all matchup and related queries to force refetch
       await Promise.all([
