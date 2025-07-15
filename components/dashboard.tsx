@@ -441,11 +441,11 @@ export default function Dashboard({
                 roundNum={currentRound}
                 showFilters={true}
                 compactFilters={false}
-                // Pass search-filtered shared data to prevent duplicate API calls
-                sharedMatchupsData={searchFilteredMatchups}
-                isLoading={isLoadingMatchups}
-                isError={isErrorMatchups}
-                error={errorMatchups}
+                // Let MatchupsTable handle its own data fetching for sportsbook filtering
+                // sharedMatchupsData={searchFilteredMatchups}
+                // isLoading={isLoadingMatchups}
+                // isError={isErrorMatchups}
+                // error={errorMatchups}
                 // Pass search props for highlighting
                 playerSearchTerm={playerSearchTerm}
                 highlightText={highlightText}

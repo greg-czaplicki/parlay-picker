@@ -100,7 +100,7 @@ export function DesktopView({
               }
             ];
 
-            const { localTime } = formatTeeTime(matchup.tee_time || null);
+            const { localTime, easternTime } = formatTeeTime(matchup.tee_time || null, matchup.event_name || "");
 
             return players.map((player, idx) => {
               const playerStatus = getPlayerStatus(formatPlayerName(player.name));
@@ -133,7 +133,12 @@ export function DesktopView({
                     <div>{positionData.position}</div>
                     <div className="text-muted-foreground text-sm">{positionData.score}</div>
                   </TableCell>
-                  <TableCell>{localTime}</TableCell>
+                  <TableCell>
+                    <div>{localTime}</div>
+                    {easternTime && (
+                      <div className="text-muted-foreground text-sm">{easternTime} ET</div>
+                    )}
+                  </TableCell>
                   <TableCell>{formatOdds(player.odds)}</TableCell>
                   <TableCell>{formatOdds(player.dgOdds)}</TableCell>
                   <TableCell></TableCell>

@@ -52,11 +52,12 @@ interface UseMatchupsQueryResult {
   lastUpdateTime: string | null;
 }
 
-export function useMatchupsQuery(eventId: number | null, matchupType: "2ball" | "3ball", roundNum?: number | null): UseMatchupsQueryResult {
+export function useMatchupsQuery(eventId: number | null, matchupType: "2ball" | "3ball", roundNum?: number | null, fanDuelOnly: boolean = true): UseMatchupsQueryResult {
   const query = useQuery<EnhancedMatchupRow[], Error>({
     queryKey: [
       ...queryKeys.matchups.byEventAndType(eventId ?? 0, matchupType),
       roundNum ?? 'allRounds',
+      fanDuelOnly ? 'fanDuelOnly' : 'allSportsbooks',
       'v2-schema', // Add this to bust cache with old UUID data
     ],
     enabled: !!eventId,
@@ -78,6 +79,7 @@ export function useMatchupsQuery(eventId: number | null, matchupType: "2ball" | 
         ? `/api/matchups?type=${matchupType}&event_id=${eventId}`
         : `/api/matchups?type=${matchupType}`;
       if (roundNum) endpoint += `&round_num=${roundNum}`;
+      if (fanDuelOnly) endpoint += `&fanDuelOnly=true`;
       
       // Add cache-busting parameter
       endpoint += cacheParam;

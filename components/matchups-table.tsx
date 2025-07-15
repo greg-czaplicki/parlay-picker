@@ -129,6 +129,8 @@ interface MatchupsTableProps {
   // Player search props for highlighting
   playerSearchTerm?: string;
   highlightText?: (text: string) => React.ReactNode;
+  // Sportsbook filtering
+  fanDuelOnly?: boolean;
 }
 
 interface Player {
@@ -149,17 +151,22 @@ export default function MatchupsTable({
   isError,
   error,
   playerSearchTerm,
-  highlightText
+  highlightText,
+  fanDuelOnly = true
 }: MatchupsTableProps) {
   // Odds gap filter state
   const [oddsGapThreshold, setOddsGapThreshold] = useState(0);
   const [showFiltersDialog, setShowFiltersDialog] = useState(false);
+  
+  // Sportsbook preference state
+  const [showFanDuelOnly, setShowFanDuelOnly] = useState(fanDuelOnly);
 
   // Use our matchups query directly, but only if shared data is not provided
   const { data: matchups, isLoading: matchupsLoading, isError: matchupsError, error: matchupsErrorDetails } = useMatchupsQuery(
     sharedMatchupsData ? null : eventId, 
     matchupType, 
-    roundNum
+    roundNum,
+    showFanDuelOnly
   );
 
   // Use shared data if provided, otherwise use query result
@@ -271,45 +278,31 @@ export default function MatchupsTable({
     return { position, score };
   };
 
-  // Format tee time - assume times are already in correct local tournament time
+  // Format tee time with timezone conversion and Eastern Time display
   const formatTeeTime = (teeTime: string | null): { localTime: string; easternDiff: string } => {
     if (!teeTime) return { localTime: "-", easternDiff: "" };
     
     try {
-      // Handle the teetime format which is simpler: "2025-06-12 08:02"
-      if (teeTime.includes(' ') && !teeTime.includes('T')) {
-        // This is the teetime format: "2025-06-12 08:02"
-        const timePart = teeTime.split(' ')[1]; // Get "08:02"
-        if (timePart) {
-          const [hours, minutes] = timePart.split(':').map(Number);
-          const localDate = new Date();
-          localDate.setHours(hours, minutes, 0, 0);
-          
-          const localTime = localDate.toLocaleTimeString('en-US', {
-            hour: 'numeric',
-            minute: '2-digit',
-            hour12: true
-          });
-          
-          return { localTime, easternDiff: "" };
-        }
-      }
+      // Handle UTC ISO format from the database
+      const utcDate = new Date(teeTime);
       
-      // Fallback for ISO format tee_time
-      const teeTimeDate = new Date(teeTime);
-      const hours = teeTimeDate.getUTCHours();
-      const minutes = teeTimeDate.getUTCMinutes();
-      
-      const localDate = new Date();
-      localDate.setHours(hours, minutes, 0, 0);
-      
-      const localTime = localDate.toLocaleTimeString('en-US', {
+      // Get tournament local time (BST for The Open Championship)
+      const localTime = utcDate.toLocaleString('en-US', {
+        timeZone: 'Europe/London', // The Open Championship
         hour: 'numeric',
         minute: '2-digit',
         hour12: true
       });
       
-      return { localTime, easternDiff: "" };
+      // Get Eastern time
+      const easternTime = utcDate.toLocaleString('en-US', {
+        timeZone: 'America/New_York',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      });
+      
+      return { localTime, easternDiff: easternTime };
     } catch (error) {
       return { localTime: "-", easternDiff: "" };
     }
@@ -739,7 +732,7 @@ export default function MatchupsTable({
                         return aOdds - bOdds;
                       });
 
-                      const { localTime: groupTeeTime } = formatTeeTime(matchup.tee_time || null);
+                      const { localTime: groupTeeTime, easternDiff: groupEasternTime } = formatTeeTime(matchup.tee_time || null);
 
                       return (
                         <React.Fragment key={matchup.id}>
@@ -752,6 +745,9 @@ export default function MatchupsTable({
                                 </span>
                                 <span className="text-xs px-2 py-0.5 rounded bg-gray-800">
                                   Tee Time: {groupTeeTime}
+                                  {groupEasternTime && (
+                                    <span className="text-muted-foreground ml-1">({groupEasternTime} ET)</span>
+                                  )}
                                 </span>
                               </div>
                             </TableCell>
@@ -760,7 +756,7 @@ export default function MatchupsTable({
                             const playerName = formatPlayerName(player.name);
                             const playerStatus = getPlayerStatus(playerName);
                             const positionData = formatPlayerPosition(String(player.dg_id), player.tee_time);
-                            const { localTime: playerTeeTime } = formatTeeTime(player.tee_time);
+                            const { localTime: playerTeeTime, easternDiff: playerEasternTime } = formatTeeTime(player.tee_time);
 
                             // Check if this player has a significant odds gap (only for favorites)
                             const isOddsGapHighlight = (() => {
@@ -884,7 +880,12 @@ export default function MatchupsTable({
                                     )}
                                   </div>
                                 </TableCell>
-                                <TableCell className="text-center">{playerTeeTime}</TableCell>
+                                <TableCell className="text-center">
+                                  <div>{playerTeeTime}</div>
+                                  {playerEasternTime && (
+                                    <div className="text-xs text-muted-foreground">{playerEasternTime} ET</div>
+                                  )}
+                                </TableCell>
                                 <TableCell className="text-center">
                                   <div>{positionData.position}</div>
                                   <div className="text-xs text-muted-foreground">{positionData.score}</div>
@@ -1040,7 +1041,7 @@ export default function MatchupsTable({
                             const playerName = formatPlayerName(player.name);
                             const playerStatus = getPlayerStatus(playerName);
                             const positionData = formatPlayerPosition(String(player.dg_id), player.tee_time);
-                            const { localTime: playerTeeTime } = formatTeeTime(player.tee_time);
+                            const { localTime: playerTeeTime, easternDiff: playerEasternTime } = formatTeeTime(player.tee_time);
 
                             // Check if this player has a significant odds gap (only for favorites)
                             const isOddsGapHighlight = (() => {

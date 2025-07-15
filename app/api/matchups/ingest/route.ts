@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseClient } from '@/lib/api-utils'
 import { TournamentNameResolver } from '@/lib/services/tournament-name-resolver'
+import { convertTournamentTimeToUTC } from '@/lib/timezone-utils'
 
 // Force this route to be dynamic and bypass edge caching
 export const dynamic = 'force-dynamic'
@@ -111,22 +112,41 @@ function findPairing(pairings: any[], playerIds: number[]) {
   return null;
 }
 
-function transformMatchups(matchups: any[], pairings: any[], type: '2ball' | '3ball', event_id: number, round_num: number, created_at: string, teeTimeMap: Record<number, { teetime: string | null, start_hole: number }>) {
-  // Debug: Log the first few 2-ball matchups' odds structure
-  if (type === '2ball' && matchups.length > 0) {
-    console.log(`\n=== 2-BALL ODDS DEBUG (${type}) ===`);
-    matchups.slice(0, 3).forEach((m, i) => {
-      console.log(`\nMatchup ${i + 1}: ${m.p1_player_name} vs ${m.p2_player_name}`);
-      console.log('Raw odds object:', JSON.stringify(m.odds, null, 2));
-      console.log('FanDuel p1:', m.odds?.fanduel?.p1);
-      console.log('FanDuel p2:', m.odds?.fanduel?.p2);
-      console.log('DraftKings p1:', m.odds?.draftkings?.p1);
-      console.log('DraftKings p2:', m.odds?.draftkings?.p2);
-    });
-    console.log('=== END 2-BALL ODDS DEBUG ===\n');
+// Helper function to get odds from available sportsbooks with priority order
+function getOddsWithFallback(oddsObj: any, player: 'p1' | 'p2' | 'p3'): { odds: number | null, sportsbook: string | null } {
+  if (!oddsObj) return { odds: null, sportsbook: null };
+  
+  // Priority order for sportsbooks
+  const priorityBooks = ['fanduel', 'draftkings', 'betmgm', 'caesars', 'bet365', 'pointsbet', 'unibet', 'betcris', 'betonline', 'bovada'];
+  
+  for (const book of priorityBooks) {
+    if (oddsObj[book]?.[player]) {
+      return { odds: oddsObj[book][player], sportsbook: book };
+    }
   }
+  
+  return { odds: null, sportsbook: null };
+}
 
-  return matchups.map(m => {
+// Helper function to check if matchup has FanDuel odds
+function hasFanDuelOdds(oddsObj: any, type: '2ball' | '3ball'): boolean {
+  if (!oddsObj?.fanduel) return false;
+  
+  const hasP1 = oddsObj.fanduel.p1 !== null && oddsObj.fanduel.p1 !== undefined;
+  const hasP2 = oddsObj.fanduel.p2 !== null && oddsObj.fanduel.p2 !== undefined;
+  const hasP3 = type === '3ball' ? (oddsObj.fanduel.p3 !== null && oddsObj.fanduel.p3 !== undefined) : true;
+  
+  return hasP1 && hasP2 && hasP3;
+}
+
+function transformMatchups(matchups: any[], pairings: any[], type: '2ball' | '3ball', event_id: number, round_num: number, created_at: string, teeTimeMap: Record<number, { teetime: string | null, start_hole: number }>, tournamentName: string, courseName?: string) {
+  // Track odds availability stats
+  let matchupsWithOdds = 0;
+  let matchupsWithoutOdds = 0;
+  let matchupsWithFanDuel = 0;
+  let matchupsWithoutFanDuel = 0;
+
+  const transformed = matchups.map(m => {
     const playerIds = type === '3ball'
       ? [m.p1_dg_id, m.p2_dg_id, m.p3_dg_id]
       : [m.p1_dg_id, m.p2_dg_id];
@@ -155,6 +175,31 @@ function transformMatchups(matchups: any[], pairings: any[], type: '2ball' | '3b
       start_hole = pairing?.start_hole ?? start_hole;
     }
     
+    // Check if this matchup has FanDuel odds
+    const hasFanDuel = hasFanDuelOdds(m.odds, type);
+    if (hasFanDuel) {
+      matchupsWithFanDuel++;
+    } else {
+      matchupsWithoutFanDuel++;
+    }
+    
+    // Prioritize FanDuel odds first
+    const fanDuelOdds1 = m.odds?.fanduel?.p1 ?? null;
+    const fanDuelOdds2 = m.odds?.fanduel?.p2 ?? null;
+    const fanDuelOdds3 = type === '3ball' ? (m.odds?.fanduel?.p3 ?? null) : null;
+    
+    // Get fallback odds for backup
+    const fallbackOdds1Result = getOddsWithFallback(m.odds, 'p1');
+    const fallbackOdds2Result = getOddsWithFallback(m.odds, 'p2');
+    const fallbackOdds3Result = type === '3ball' ? getOddsWithFallback(m.odds, 'p3') : { odds: null, sportsbook: null };
+    
+    // Track if this matchup has FanDuel odds vs any odds
+    if (fanDuelOdds1 || fanDuelOdds2 || fanDuelOdds3) {
+      matchupsWithOdds++;
+    } else {
+      matchupsWithoutOdds++;
+    }
+    
     // For v2 schema, we only need dg_ids, not UUIDs
     const record: any = {
       event_id,
@@ -166,29 +211,34 @@ function transformMatchups(matchups: any[], pairings: any[], type: '2ball' | '3b
       player2_name: m.p2_player_name,
       player3_dg_id: type === '3ball' ? m.p3_dg_id : null,
       player3_name: type === '3ball' ? m.p3_player_name : null,
-      odds1: m.odds?.fanduel?.p1 ?? m.odds?.draftkings?.p1 ?? null,
-      odds2: m.odds?.fanduel?.p2 ?? m.odds?.draftkings?.p2 ?? null,
-      odds3: type === '3ball' ? (m.odds?.fanduel?.p3 ?? m.odds?.draftkings?.p3 ?? null) : null,
+      odds1: fanDuelOdds1,
+      odds2: fanDuelOdds2,
+      odds3: fanDuelOdds3,
       dg_odds1: m.odds?.datagolf?.p1 ?? null,
       dg_odds2: m.odds?.datagolf?.p2 ?? null,
       dg_odds3: type === '3ball' ? (m.odds?.datagolf?.p3 ?? null) : null,
       start_hole: start_hole,
-      tee_time: teetime ? new Date(teetime).toISOString() : null,
+      tee_time: teetime ? convertTournamentTimeToUTC(teetime, tournamentName, courseName) : null,
       created_at,
     };
 
     // For 2-ball matchups, store individual player tee times
     if (type === '2ball') {
-      record.player1_tee_time = player1TeeTime?.teetime ? new Date(player1TeeTime.teetime).toISOString() : null;
-      record.player2_tee_time = player2TeeTime?.teetime ? new Date(player2TeeTime.teetime).toISOString() : null;
+      record.player1_tee_time = player1TeeTime?.teetime ? convertTournamentTimeToUTC(player1TeeTime.teetime, tournamentName, courseName) : null;
+      record.player2_tee_time = player2TeeTime?.teetime ? convertTournamentTimeToUTC(player2TeeTime.teetime, tournamentName, courseName) : null;
     }
 
     return record;
   });
+  
+  // Log odds availability statistics
+  console.log(`📊 ${type} matchups: ${matchupsWithFanDuel}/${transformed.length} have FanDuel odds, ${matchupsWithOdds}/${transformed.length} have any odds`);
+  
+  return transformed;
 }
 
 // New function to update tee times for existing matchups
-async function updateExistingTeetimes(supabase: any, event_id: number, round_num: number, teeTimeMap: Record<number, { teetime: string | null, start_hole: number }>) {
+async function updateExistingTeetimes(supabase: any, event_id: number, round_num: number, teeTimeMap: Record<number, { teetime: string | null, start_hole: number }>, tournamentName: string, courseName?: string) {
   console.log(`🔄 Updating tee times for existing matchups - Event ${event_id}, Round ${round_num}`);
   
   // Get all existing matchups for this event/round
@@ -223,7 +273,7 @@ async function updateExistingTeetimes(supabase: any, event_id: number, round_num
     
     // Convert existing tee_time back to string for comparison
     const existingTeetime = matchup.tee_time ? new Date(matchup.tee_time).toISOString() : null;
-    const newTeetimeISO = newTeetime ? new Date(newTeetime).toISOString() : null;
+    const newTeetimeISO = newTeetime ? convertTournamentTimeToUTC(newTeetime, tournamentName, courseName) : null;
     
     // Only update if the tee time has changed
     if (newTeetimeISO !== existingTeetime) {
@@ -235,8 +285,8 @@ async function updateExistingTeetimes(supabase: any, event_id: number, round_num
 
       // For 2-ball matchups, also update individual player tee times
       if (matchup.type === '2ball') {
-        updateRecord.player1_tee_time = player1TeeTime?.teetime ? new Date(player1TeeTime.teetime).toISOString() : null;
-        updateRecord.player2_tee_time = player2TeeTime?.teetime ? new Date(player2TeeTime.teetime).toISOString() : null;
+        updateRecord.player1_tee_time = player1TeeTime?.teetime ? convertTournamentTimeToUTC(player1TeeTime.teetime, tournamentName, courseName) : null;
+        updateRecord.player2_tee_time = player2TeeTime?.teetime ? convertTournamentTimeToUTC(player2TeeTime.teetime, tournamentName, courseName) : null;
       }
 
       updates.push(updateRecord);
@@ -335,7 +385,7 @@ export async function POST(req: NextRequest) {
           const teeTimeMap = createTeeTimeMap(dgField, currentRound);
           
           // Update existing matchups
-          const updateResult = await updateExistingTeetimes(supabase, event_id, currentRound, teeTimeMap);
+          const updateResult = await updateExistingTeetimes(supabase, event_id, currentRound, teeTimeMap, eventName);
           
           return NextResponse.json({
             inserted: 0,
@@ -453,8 +503,11 @@ export async function POST(req: NextRequest) {
     const teeTimeMap3 = createTeeTimeMap(dgField, round_num_3);
     const teeTimeMap2 = createTeeTimeMap(dgField, round_num_2);
 
-    const matchups3 = transformMatchups(matchList3, dgModel.pairings, '3ball', event_id, round_num_3, created_at_3, teeTimeMap3);
-    const matchups2 = transformMatchups(matchList2, dgModel.pairings, '2ball', event_id, round_num_2, created_at_2, teeTimeMap2);
+    // Get course name for timezone lookup
+    const courseName = tournamentMatch.course_name || undefined;
+    
+    const matchups3 = transformMatchups(matchList3, dgModel.pairings, '3ball', event_id, round_num_3, created_at_3, teeTimeMap3, eventName, courseName);
+    const matchups2 = transformMatchups(matchList2, dgModel.pairings, '2ball', event_id, round_num_2, created_at_2, teeTimeMap2, eventName, courseName);
     
     // Insert into matchups table
     const allMatchups = [...matchups3, ...matchups2]

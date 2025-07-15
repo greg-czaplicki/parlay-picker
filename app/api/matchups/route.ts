@@ -6,6 +6,15 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const revalidate = 0
 
+// Helper function to check if a matchup has FanDuel odds
+function hasValidFanDuelOdds(matchup: any): boolean {
+  const hasOdds1 = matchup.odds1 !== null && matchup.odds1 !== undefined;
+  const hasOdds2 = matchup.odds2 !== null && matchup.odds2 !== undefined;
+  const hasOdds3 = matchup.type === '3ball' ? (matchup.odds3 !== null && matchup.odds3 !== undefined) : true;
+  
+  return hasOdds1 && hasOdds2 && hasOdds3;
+}
+
 // GET: Fetch matchups with enhanced SG data
 export async function GET(req: NextRequest) {
   const supabase = createSupabaseClient()
@@ -14,6 +23,7 @@ export async function GET(req: NextRequest) {
   const event_id = searchParams.get('eventId') || searchParams.get('event_id')
   const round_num = searchParams.get('roundNum') || searchParams.get('round_num')
   const checkOnly = searchParams.get('checkOnly') === 'true'
+  const fanDuelOnly = searchParams.get('fanDuelOnly') === 'true'
   const bustCache = searchParams.get('_t') // Cache-busting timestamp
 
   // Handle checkOnly requests separately (no need for SG data)
@@ -91,8 +101,28 @@ export async function GET(req: NextRequest) {
       return response
     }
 
+    // Filter for FanDuel-only matchups if requested
+    let filteredMatchups = matchupsData;
+    if (fanDuelOnly) {
+      filteredMatchups = matchupsData.filter(hasValidFanDuelOdds);
+      console.log(`🎯 FanDuel filter: ${filteredMatchups.length}/${matchupsData.length} matchups have FanDuel odds`);
+      
+      // If no FanDuel matchups, return empty result
+      if (filteredMatchups.length === 0) {
+        const response = NextResponse.json({ matchups: [] })
+        
+        if (bustCache) {
+          response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
+          response.headers.set('Pragma', 'no-cache')
+          response.headers.set('Expires', '0')
+        }
+        
+        return response
+      }
+    }
+
     // 2. Add event names to matchups
-    const eventIds = [...new Set(matchupsData.map(m => m.event_id))]
+    const eventIds = [...new Set(filteredMatchups.map(m => m.event_id))]
     let tournamentNames: { [key: number]: string } = {}
     
     if (eventIds.length > 0) {
@@ -111,7 +141,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Add event_name to matchups
-    const matchupsWithEvents = matchupsData.map(matchup => ({
+    const matchupsWithEvents = filteredMatchups.map(matchup => ({
       ...matchup,
       event_name: tournamentNames[matchup.event_id] || `Event ${matchup.event_id}`
     }))

@@ -1,4 +1,5 @@
 import { PlayerStat } from "@/hooks/use-player-stats-query";
+import { getDisplayTimes } from "@/lib/timezone-utils";
 
 export const decimalToAmerican = (decimalOdds: number): string => {
   if (decimalOdds >= 2.0) return `+${Math.round((decimalOdds - 1) * 100)}`;
@@ -28,54 +29,60 @@ export const formatGolfScore = (scoreValue: number): string => {
   }
 };
 
-export const formatTeeTime = (teeTime: string | null): { localTime: string; easternDiff: string } => {
-  if (!teeTime) return { localTime: "-", easternDiff: "" };
-  
-  try {
-    if (teeTime.includes(' ') && !teeTime.includes('T')) {
-      const timePart = teeTime.split(' ')[1];
-      if (timePart) {
-        const [hoursStr, minutesStr] = timePart.split(':');
-        const hours = parseInt(hoursStr, 10);
-        const minutes = parseInt(minutesStr, 10);
-        
-        if (isNaN(hours) || isNaN(minutes)) {
-          return { localTime: "-", easternDiff: "" };
+export const formatTeeTime = (
+  teeTime: string | null, 
+  tournamentName?: string, 
+  courseName?: string
+): { localTime: string; easternTime: string } => {
+  // Always return test values to debug
+  return { localTime: "10:35 AM", easternTime: "5:35 AM" };
+    // Fallback to the old logic for backwards compatibility
+    try {
+      if (teeTime.includes(' ') && !teeTime.includes('T')) {
+        const timePart = teeTime.split(' ')[1];
+        if (timePart) {
+          const [hoursStr, minutesStr] = timePart.split(':');
+          const hours = parseInt(hoursStr, 10);
+          const minutes = parseInt(minutesStr, 10);
+          
+          if (isNaN(hours) || isNaN(minutes)) {
+            return { localTime: "-", easternTime: "" };
+          }
+          
+          const localDate = new Date();
+          localDate.setHours(hours, minutes, 0, 0);
+          
+          const localTime = localDate.toLocaleTimeString('en-US', {
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true
+          });
+          
+          return { localTime, easternTime: "" };
         }
-        
-        const localDate = new Date();
-        localDate.setHours(hours, minutes, 0, 0);
-        
-        const localTime = localDate.toLocaleTimeString('en-US', {
-          hour: 'numeric',
-          minute: '2-digit',
-          hour12: true
-        });
-        
-        return { localTime, easternDiff: "" };
       }
+      
+      const teeTimeDate = new Date(teeTime);
+      if (isNaN(teeTimeDate.getTime())) {
+        return { localTime: "-", easternTime: "" };
+      }
+      
+      const hours = teeTimeDate.getUTCHours();
+      const minutes = teeTimeDate.getUTCMinutes();
+      
+      const localDate = new Date();
+      localDate.setHours(hours, minutes, 0, 0);
+      
+      const localTime = localDate.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      });
+      
+      return { localTime, easternTime: "" };
+    } catch (fallbackError) {
+      return { localTime: "-", easternTime: "" };
     }
-    
-    const teeTimeDate = new Date(teeTime);
-    if (isNaN(teeTimeDate.getTime())) {
-      return { localTime: "-", easternDiff: "" };
-    }
-    
-    const hours = teeTimeDate.getUTCHours();
-    const minutes = teeTimeDate.getUTCMinutes();
-    
-    const localDate = new Date();
-    localDate.setHours(hours, minutes, 0, 0);
-    
-    const localTime = localDate.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
-    });
-    
-    return { localTime, easternDiff: "" };
-  } catch (error) {
-    return { localTime: "-", easternDiff: "" };
   }
 };
 

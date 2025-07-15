@@ -76,7 +76,7 @@ export function MobileView({
           }
         ];
 
-        const { localTime } = formatTeeTime(matchup.tee_time || null);
+        const { localTime, easternTime } = formatTeeTime(matchup.tee_time || null, matchup.event_name || "");
 
         return (
           <Card key={matchup.id} className="overflow-hidden">
@@ -118,6 +118,9 @@ export function MobileView({
                         <div>
                           <div className="text-muted-foreground text-xs mb-1">Tee Time</div>
                           <div className="font-medium">{localTime}</div>
+                          {easternTime && (
+                            <div className="text-muted-foreground text-xs">{easternTime} ET</div>
+                          )}
                         </div>
                       </div>
 
