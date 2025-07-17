@@ -13,6 +13,7 @@ export type ParlaySelection = {
   odds: number
   valueRating: number
   confidenceScore: number
+  teeTime?: string | null
 }
 
 interface ParlayContextType {
@@ -80,7 +81,7 @@ export function ParlayProvider({ children }: { children: ReactNode }) {
         selections.some(s => s.player.toLowerCase() === newSelection.player?.toLowerCase())) {
       return
     }
-    const updatedSelections = [...selections, {
+    const newSelectionWithDefaults = {
       id: newSelection.id,
       matchupType: newSelection.matchupType || "3ball",
       group: newSelection.group || "",
@@ -90,8 +91,23 @@ export function ParlayProvider({ children }: { children: ReactNode }) {
       confidenceScore: newSelection.confidenceScore || 75,
       matchupId: newSelection.matchupId,
       eventName: newSelection.eventName,
-      roundNum: newSelection.roundNum
-    } as ParlaySelection]
+      roundNum: newSelection.roundNum,
+      teeTime: newSelection.teeTime
+    } as ParlaySelection
+    
+    // Add the new selection and sort by tee time
+    const updatedSelections = [...selections, newSelectionWithDefaults].sort((a, b) => {
+      // If both have tee times, sort by tee time
+      if (a.teeTime && b.teeTime) {
+        return new Date(a.teeTime).getTime() - new Date(b.teeTime).getTime()
+      }
+      // If only one has a tee time, put it first
+      if (a.teeTime && !b.teeTime) return -1
+      if (!a.teeTime && b.teeTime) return 1
+      // If neither has a tee time, maintain original order
+      return 0
+    })
+    
     setSelections(updatedSelections)
     recalculate(updatedSelections, stake)
   }, [selections, stake])

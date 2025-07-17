@@ -6,6 +6,7 @@ interface TournamentMatch {
   event_name: string
   tour: string
   start_date: string
+  course_name?: string
   confidence: number
   match_type: 'exact' | 'fuzzy' | 'alias'
 }
@@ -49,6 +50,14 @@ export class TournamentNameResolver {
     if (fuzzyMatch) {
       logger.info(`Found fuzzy match for "${apiEventName}": "${fuzzyMatch.event_name}"`)
       return fuzzyMatch
+    }
+
+    // 4. Try cross-tour exact match (for tournaments that may be categorized differently)
+    // This handles cases like Barracuda Championship being in PGA tour but DataGolf sends it as OPP
+    const crossTourMatch = await this.findCrossTourMatch(apiEventName, startDate)
+    if (crossTourMatch) {
+      logger.warn(`Found cross-tour match for "${apiEventName}": "${crossTourMatch.event_name}" on ${crossTourMatch.tour} tour (requested ${tour})`)
+      return { ...crossTourMatch, confidence: 0.9, match_type: 'exact' }
     }
 
     logger.warn(`No tournament match found for "${apiEventName}"`)
@@ -107,7 +116,7 @@ export class TournamentNameResolver {
   ): Promise<Omit<TournamentMatch, 'confidence' | 'match_type'> | null> {
     let query = this.supabase
       .from('tournaments_v2')
-      .select('event_id, event_name, tour, start_date')
+      .select('event_id, event_name, tour, start_date, course_name')
       .eq('event_name', eventName)
 
     if (tour) query = query.eq('tour', tour)
@@ -128,7 +137,7 @@ export class TournamentNameResolver {
       .from('tournament_aliases')
       .select(`
         event_id,
-        tournaments!inner(event_name, tour, start_date, end_date)
+        tournaments!inner(event_name, tour, start_date, end_date, course_name)
       `)
       .eq('alias_name', eventName)
 
@@ -157,7 +166,8 @@ export class TournamentNameResolver {
       event_id: match.event_id,
       event_name: tournament.event_name,
       tour: tournament.tour,
-      start_date: tournament.start_date
+      start_date: tournament.start_date,
+      course_name: tournament.course_name
     }
   }
 
@@ -243,6 +253,26 @@ export class TournamentNameResolver {
     }
 
     return matrix[str2.length][str1.length]
+  }
+
+  private async findCrossTourMatch(
+    eventName: string,
+    startDate?: string
+  ): Promise<Omit<TournamentMatch, 'confidence' | 'match_type'> | null> {
+    // Look for exact match across all tours
+    let query = this.supabase
+      .from('tournaments_v2')
+      .select('event_id, event_name, tour, start_date, course_name')
+      .eq('event_name', eventName)
+
+    if (startDate) {
+      query = query.gte('start_date', startDate).lte('end_date', startDate)
+    }
+
+    const { data, error } = await query.limit(1).single()
+
+    if (error || !data) return null
+    return data
   }
 
   /**

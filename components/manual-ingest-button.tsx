@@ -59,15 +59,11 @@ export function ManualIngestButton({ className }: { className?: string }) {
       
       toast({
         title: "🎯 Odds Refreshed!",
-        description: `Updated ${result.inserted || 0} matchups from all tours`,
-        duration: 3000,
+        description: `Updated ${result.inserted || 0} matchups from all tours. Fresh odds are now available!`,
+        duration: 4000,
       })
 
-      // Optional: Still reload page as fallback for server component data
-      // But give the cache invalidation a moment to work first
-      setTimeout(() => {
-        window.location.reload()
-      }, 1000)
+      // No need to reload page - React Query cache invalidation handles the refresh
 
     } catch (error: any) {
       console.error('Manual ingest failed:', error)

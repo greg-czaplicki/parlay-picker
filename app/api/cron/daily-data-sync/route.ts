@@ -170,6 +170,40 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    // 6. Calculate player trends (daily update)
+    console.log('📈 Calculating player trends...')
+    try {
+      const trendsResponse = await fetch(`${baseUrl}/api/trends`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          recalculate: true,
+          period: 'last_10'
+        })
+      })
+
+      if (trendsResponse.ok) {
+        const trendsResult = await trendsResponse.json()
+        results.push({
+          task: 'calculate_trends',
+          success: true,
+          data: trendsResult
+        })
+        console.log('✅ Player trends calculated')
+      } else {
+        throw new Error(`Trends calculation failed: ${trendsResponse.statusText}`)
+      }
+    } catch (error: any) {
+      console.error('❌ Trends calculation failed:', error)
+      results.push({
+        task: 'calculate_trends',
+        success: false,
+        error: error.message
+      })
+    }
+
     const endTime = Date.now()
     const executionTime = endTime - startTime
     

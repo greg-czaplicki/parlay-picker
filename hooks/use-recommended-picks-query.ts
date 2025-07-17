@@ -44,6 +44,7 @@ export interface Player {
   total?: number | null;
   today?: number | null;
   thru?: number | null;
+  teeTime?: string | null;
   // Heavy favorites filter only:
   oddsGapToNext?: number;
   nextBestPlayer?: string;
@@ -118,7 +119,8 @@ export function useRecommendedPicksQuery(
             isRecommended: false,
             matchupId: apiMatchup.id,
             eventName: apiMatchup.event_name,
-            roundNum: apiMatchup.round_num
+            roundNum: apiMatchup.round_num,
+            teeTime: apiMatchup.tee_time || null
           },
           {
             dg_id: apiMatchup.player2_dg_id || 0,
@@ -130,7 +132,8 @@ export function useRecommendedPicksQuery(
             isRecommended: false,
             matchupId: apiMatchup.id,
             eventName: apiMatchup.event_name,
-            roundNum: apiMatchup.round_num
+            roundNum: apiMatchup.round_num,
+            teeTime: apiMatchup.tee_time || null
           },
           {
             dg_id: apiMatchup.player3_dg_id || 0,
@@ -142,7 +145,8 @@ export function useRecommendedPicksQuery(
             isRecommended: false,
             matchupId: apiMatchup.id,
             eventName: apiMatchup.event_name,
-            roundNum: apiMatchup.round_num
+            roundNum: apiMatchup.round_num,
+            teeTime: apiMatchup.tee_time || null
           }
         );
       } else {
@@ -159,7 +163,8 @@ export function useRecommendedPicksQuery(
             isRecommended: false,
             matchupId: apiMatchup.id,
             eventName: apiMatchup.event_name,
-            roundNum: apiMatchup.round_num
+            roundNum: apiMatchup.round_num,
+            teeTime: apiMatchup.tee_time || null
           },
           {
             dg_id: apiMatchup.player2_dg_id || 0,
@@ -171,7 +176,8 @@ export function useRecommendedPicksQuery(
             isRecommended: false,
             matchupId: apiMatchup.id,
             eventName: apiMatchup.event_name,
-            roundNum: apiMatchup.round_num
+            roundNum: apiMatchup.round_num,
+            teeTime: apiMatchup.tee_time || null
           }
         );
       }

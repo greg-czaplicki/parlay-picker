@@ -515,11 +515,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ inserted: 0, three_ball: 0, two_ball: 0, message: 'No matchups to insert' })
     }
     // Debug log: show first object to be inserted
-    console.log('Sample matchup to insert:', JSON.stringify(allMatchups[0], null, 2))
-    const { error } = await supabase.from('matchups_v2').insert(allMatchups)
+    console.log('Sample matchup to upsert:', JSON.stringify(allMatchups[0], null, 2))
+    
+    // Use upsert to handle updates of existing matchups (refresh scenario)
+    const { error } = await supabase
+      .from('matchups_v2')
+      .upsert(allMatchups, { 
+        onConflict: 'event_id,round_num,player1_dg_id,player2_dg_id,player3_dg_id',
+        ignoreDuplicates: false // We want to update existing records
+      })
+    
     if (error) {
-      console.error('Supabase insert error:', error)
-      throw new Error(`Failed to insert matchups: ${error.message}`)
+      console.error('Supabase upsert error:', error)
+      throw new Error(`Failed to upsert matchups: ${error.message}`)
     }
     // Debug info
     const sampleMain = matchups3[0]

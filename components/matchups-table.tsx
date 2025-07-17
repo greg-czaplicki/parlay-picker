@@ -930,7 +930,8 @@ export default function MatchupsTable({
                                           eventName: matchup.event_name || '',
                                           roundNum: matchup.round_num || 0,
                                           valueRating: 7.5,
-                                          confidenceScore: 75
+                                          confidenceScore: 75,
+                                          teeTime: matchup.tee_time || null
                                         });
                                       }}
                                     >
@@ -1200,7 +1201,8 @@ export default function MatchupsTable({
                                           eventName: matchup.event_name || '',
                                           roundNum: matchup.round_num || 0,
                                           valueRating: 7.5,
-                                          confidenceScore: 75
+                                          confidenceScore: 75,
+                                          teeTime: matchup.tee_time || null
                                         });
                                       }}
                                     >

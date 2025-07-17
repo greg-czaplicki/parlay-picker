@@ -629,7 +629,8 @@ export function RecommendedPicksContent({
                                 eventName: player.eventName || '',
                                 roundNum: player.roundNum || roundNum || 1,
                                 valueRating: player.valueRating || 7.5,
-                                confidenceScore: player.confidenceScore || 75
+                                confidenceScore: player.confidenceScore || 75,
+                                teeTime: player.teeTime || null
                               }
                               addToParlay(selection, playerId)
                             }}

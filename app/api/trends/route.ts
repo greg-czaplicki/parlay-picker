@@ -147,13 +147,13 @@ export async function POST(req: NextRequest) {
         
         // Get the most recent tournaments based on period
         const periodCount = period === 'last_3' ? 3 : period === 'last_5' ? 5 : 10;
-        const recentTournaments = sortedResults.slice(0, periodCount);
+        const recentResults = sortedResults.slice(0, periodCount);
 
-        if (recentTournaments.length >= 3) { // Need at least 3 tournaments for meaningful trends
+        if (recentResults.length >= 3) { // Need at least 3 tournaments for meaningful trends
           
           // Calculate top 10 streak
           let top10Streak = 0;
-          for (const tournament of recentTournaments) {
+          for (const tournament of recentResults) {
             if (tournament.final_position && tournament.final_position <= 10) {
               top10Streak++;
             } else {
@@ -162,11 +162,11 @@ export async function POST(req: NextRequest) {
           }
 
           // Calculate top 5 count in period
-          const top5Count = recentTournaments.filter(t => t.final_position && t.final_position <= 5).length;
+          const top5Count = recentResults.filter(t => t.final_position && t.final_position <= 5).length;
           
           // Calculate missed cut streak
           let missedCutStreak = 0;
-          for (const tournament of recentTournaments) {
+          for (const tournament of recentResults) {
             if (!tournament.made_cut) {
               missedCutStreak++;
             } else {
@@ -175,12 +175,12 @@ export async function POST(req: NextRequest) {
           }
 
           // Calculate sub-70 average tournaments
-          const sub70Tournaments = recentTournaments.filter(t => 
+          const sub70Tournaments = recentResults.filter(t => 
             t.total_score && t.rounds_completed === 4 && (t.total_score / 4) < 70
           ).length;
 
           // Calculate scoring average
-          const completedTournaments = recentTournaments.filter(t => t.total_score && t.rounds_completed === 4);
+          const completedTournaments = recentResults.filter(t => t.total_score && t.rounds_completed === 4);
           const avgScore = completedTournaments.length > 0 
             ? completedTournaments.reduce((sum, t) => sum + (t.total_score / 4), 0) / completedTournaments.length 
             : null;
@@ -199,7 +199,7 @@ export async function POST(req: NextRequest) {
               trend_value: top10Streak,
               trend_period: period,
               trend_category: category,
-              context_data: { recent_tournaments: recentTournaments.length },
+              context_data: { recent_tournaments: recentResults.length },
               valid_until: validUntil
             });
           }
@@ -212,7 +212,7 @@ export async function POST(req: NextRequest) {
               trend_value: top5Count,
               trend_period: period,
               trend_category: category,
-              context_data: { recent_tournaments: recentTournaments.length },
+              context_data: { recent_tournaments: recentResults.length },
               valid_until: validUntil
             });
           }
@@ -226,7 +226,7 @@ export async function POST(req: NextRequest) {
               trend_period: period,
               trend_category: category,
               context_data: { 
-                recent_tournaments: recentTournaments.length,
+                recent_tournaments: recentResults.length,
                 avg_score: avgScore ? Math.round(avgScore * 100) / 100 : null
               },
               valid_until: validUntil
@@ -241,7 +241,7 @@ export async function POST(req: NextRequest) {
               trend_value: missedCutStreak,
               trend_period: period,
               trend_category: 'cold',
-              context_data: { recent_tournaments: recentTournaments.length },
+              context_data: { recent_tournaments: recentResults.length },
               valid_until: validUntil
             });
           }
