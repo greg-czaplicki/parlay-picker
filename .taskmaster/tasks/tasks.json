@@ -465,11 +465,244 @@
             "testStrategy": "Perform end-to-end testing to verify the filter appears correctly in the UI and functions as expected when configured through the interface."
           }
         ]
+      },
+      {
+        "id": 59,
+        "title": "Design and Implement Courses_v2 Table Schema",
+        "description": "Create the courses_v2 table to store comprehensive course information including physical characteristics, design details, and difficulty factors.",
+        "details": "Create a new table `courses_v2` with the following columns:\n- `course_id` (Primary Key, UUID or SERIAL)\n- `course_name` (VARCHAR, NOT NULL)\n- `location` (VARCHAR, NOT NULL)\n- `country` (VARCHAR, NOT NULL)\n- `par` (SMALLINT, NOT NULL)\n- `yardage` (INTEGER, NOT NULL)\n- `course_rating` (DECIMAL(4,1))\n- `slope_rating` (SMALLINT)\n- `course_type` (VARCHAR, e.g., links, parkland, desert)\n- `elevation` (INTEGER, in feet)\n- `climate_zone` (VARCHAR)\n- `designer` (VARCHAR)\n- `year_built` (INTEGER)\n- `renovation_history` (JSONB)\n- `signature_holes` (JSONB array)\n- `difficulty_factors` (JSONB)\n- `created_at` (TIMESTAMP WITH TIME ZONE, DEFAULT NOW())\n- `updated_at` (TIMESTAMP WITH TIME ZONE, DEFAULT NOW())\n\nImplement appropriate indexes:\n- B-tree index on `course_name`\n- B-tree index on `location` and `country`\n\nAdd foreign key constraints where applicable (e.g., if there's a countries reference table).\n\nCreate a trigger to automatically update the `updated_at` timestamp on record modification.\n\nImplement data validation constraints:\n- `par` between 68 and 73\n- `yardage` between 6000 and 8000\n- `slope_rating` between 55 and 155\n\nUse PostgreSQL 14+ for JSONB support and performance optimizations.",
+        "testStrategy": "1. Unit tests for schema validation ensuring all constraints work properly\n2. Test insertion of sample course data with complete and partial information\n3. Verify JSON field storage and retrieval for `renovation_history`, `signature_holes`, and `difficulty_factors`\n4. Test update trigger functionality for `updated_at` field\n5. Performance test indexes with query execution plans\n6. Validate foreign key constraints if applicable\n7. Test data validation constraints with boundary values",
+        "priority": "high",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 60,
+        "title": "Implement Weather Conditions Table and Integration",
+        "description": "Create the weather_conditions table to track detailed weather data for each tournament round and implement an integration with a weather API service.",
+        "details": "Create a new table `weather_conditions` with the following columns:\n- `condition_id` (Primary Key, UUID or SERIAL)\n- `tournament_id` (Foreign Key to tournaments_v2, NOT NULL)\n- `round_number` (SMALLINT, NOT NULL)\n- `recorded_at` (TIMESTAMP WITH TIME ZONE, NOT NULL)\n- `temperature` (DECIMAL(5,2), in Fahrenheit)\n- `humidity` (DECIMAL(5,2), percentage)\n- `wind_speed` (DECIMAL(5,2), in mph)\n- `wind_direction` (VARCHAR, e.g., 'NE', 'SW')\n- `precipitation` (DECIMAL(5,2), in inches)\n- `visibility` (DECIMAL(5,2), in miles)\n- `pressure` (DECIMAL(6,2), in hPa)\n- `course_conditions` (JSONB, for firm/soft, fast/slow greens)\n- `created_at` (TIMESTAMP WITH TIME ZONE, DEFAULT NOW())\n\nImplement indexes:\n- Composite index on (tournament_id, round_number)\n- Index on recorded_at\n\nIntegration with Weather API:\n1. Set up OpenWeatherMap API or WeatherAPI.com integration (current industry standards)\n2. Create a scheduled job to fetch weather data for active tournaments\n3. Implement a data transformation layer to convert API responses to table schema\n4. Add error handling and retry logic for API failures\n5. Implement caching to respect API rate limits\n\nAdd data validation:\n- Temperature range checks (-20 to 120°F)\n- Humidity range (0-100%)\n- Wind speed non-negative\n\nConsider implementing a materialized view that joins weather data with tournament performance for analysis.",
+        "testStrategy": "1. Unit tests for schema validation\n2. Integration tests with mock weather API responses\n3. Test the scheduled job with various tournament scenarios\n4. Verify error handling with simulated API failures\n5. Test data transformation with edge cases (missing fields, unusual values)\n6. Performance testing for bulk data insertion\n7. Validate the materialized view refresh process\n8. Test data validation constraints",
+        "priority": "high",
+        "dependencies": [
+          59
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 61,
+        "title": "Create Player-Course History Tracking System",
+        "description": "Implement the player_course_history table to track historical performance of players on specific courses, enabling course-specific analysis and predictions.",
+        "details": "Create a new table `player_course_history` with the following columns:\n- `history_id` (Primary Key, UUID or SERIAL)\n- `dg_id` (Foreign Key to player table, NOT NULL)\n- `course_id` (Foreign Key to courses_v2, NOT NULL)\n- `tournament_id` (Foreign Key to tournaments_v2, NOT NULL)\n- `year` (INTEGER, NOT NULL)\n- `finish_position` (VARCHAR, to handle 'CUT', 'WD', 'DQ', etc.)\n- `total_score` (INTEGER)\n- `rounds_played` (SMALLINT)\n- `made_cut` (BOOLEAN)\n- `avg_score_per_round` (DECIMAL(5,2))\n- `best_round` (SMALLINT)\n- `worst_round` (SMALLINT)\n- `course_specific_stats` (JSONB, for driving accuracy, GIR, etc.)\n- `created_at` (TIMESTAMP WITH TIME ZONE, DEFAULT NOW())\n- `updated_at` (TIMESTAMP WITH TIME ZONE, DEFAULT NOW())\n\nImplement indexes:\n- Composite index on (dg_id, course_id)\n- Composite index on (course_id, year)\n- Composite index on (tournament_id, dg_id)\n\nCreate a unique constraint on (dg_id, tournament_id, year) to prevent duplicate entries.\n\nImplement a data population script that:\n1. Extracts historical tournament results from tournament_results_v2\n2. Maps tournaments to courses using the courses_v2 table\n3. Calculates course-specific statistics\n4. Populates the player_course_history table\n\nCreate a trigger to update player_course_history when new tournament results are added.\n\nImplement a stored procedure to calculate course fit scores based on player history and course characteristics.",
+        "testStrategy": "1. Unit tests for schema validation\n2. Test data population script with sample historical data\n3. Verify trigger functionality with new tournament result insertion\n4. Test the stored procedure for course fit calculation\n5. Performance testing for queries that analyze player history on specific courses\n6. Validate constraint enforcement\n7. Test edge cases like players with no history on a course\n8. Integration test with the existing tournament results pipeline",
+        "priority": "high",
+        "dependencies": [
+          59
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 62,
+        "title": "Implement Advanced Odds Tracking System",
+        "description": "Create the odds_history table to track betting odds from multiple sportsbooks over time, enabling line movement analysis and value bet identification.",
+        "details": "Create a new table `odds_history` with the following columns:\n- `odds_id` (Primary Key, UUID or SERIAL)\n- `dg_id` (Foreign Key to player table, NOT NULL)\n- `tournament_id` (Foreign Key to tournaments_v2, NOT NULL)\n- `round_number` (SMALLINT, NULL for outright bets)\n- `sportsbook` (VARCHAR, NOT NULL)\n- `bet_type` (VARCHAR, NOT NULL, e.g., 'outright', 'top5', 'top10', 'head2head')\n- `odds_decimal` (DECIMAL(10,2), NOT NULL)\n- `odds_american` (INTEGER, NOT NULL)\n- `recorded_at` (TIMESTAMP WITH TIME ZONE, NOT NULL)\n- `line_movement` (DECIMAL(10,2), change from previous odds)\n- `market_share` (DECIMAL(5,2), percentage if available)\n- `betting_volume` (DECIMAL(12,2), if available)\n- `created_at` (TIMESTAMP WITH TIME ZONE, DEFAULT NOW())\n\nImplement indexes:\n- Composite index on (tournament_id, dg_id, bet_type)\n- Composite index on (sportsbook, bet_type)\n- Index on recorded_at\n\nCreate a sportsbook integration service that:\n1. Connects to multiple sportsbook APIs (DraftKings, FanDuel, BetMGM, etc.)\n2. Implements rate limiting and request throttling\n3. Schedules regular odds collection (hourly for active tournaments)\n4. Transforms and normalizes odds data\n5. Calculates line movement\n\nImplement a materialized view for consensus odds that aggregates across sportsbooks.\n\nCreate a value bet detection algorithm that compares odds to model predictions.\n\nUse TimescaleDB extension for PostgreSQL to optimize time-series data storage and querying if dealing with large volumes of odds data.",
+        "testStrategy": "1. Unit tests for schema validation\n2. Integration tests with mock sportsbook API responses\n3. Test scheduled collection with various timing scenarios\n4. Verify line movement calculation\n5. Test consensus odds calculation\n6. Performance testing for high-frequency odds updates\n7. Test value bet detection with known scenarios\n8. Validate time-series query performance\n9. Test data retention and archiving strategies",
+        "priority": "high",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 63,
+        "title": "Design and Implement ML Training Datasets Infrastructure",
+        "description": "Create the ml_training_datasets table to store and version machine learning training data, enabling reproducible model training and evaluation.",
+        "details": "Create a new table `ml_training_datasets` with the following columns:\n- `dataset_id` (Primary Key, UUID or SERIAL)\n- `model_type` (VARCHAR, NOT NULL, e.g., 'performance_prediction', 'cut_prediction')\n- `feature_set` (JSONB, NOT NULL, list of features used)\n- `training_period_start` (DATE, NOT NULL)\n- `training_period_end` (DATE, NOT NULL)\n- `tournament_filter` (VARCHAR, e.g., 'majors', 'regular', 'all')\n- `player_filter_criteria` (JSONB)\n- `created_at` (TIMESTAMP WITH TIME ZONE, DEFAULT NOW())\n- `version` (VARCHAR, NOT NULL)\n- `dataset_path` (VARCHAR, path to stored dataset file)\n- `description` (TEXT)\n- `created_by` (VARCHAR)\n\nImplement indexes:\n- Index on model_type\n- Index on version\n- Composite index on (training_period_start, training_period_end)\n\nCreate a dataset generation service that:\n1. Extracts features from player_trends_v2, tournament_results_v2, player_course_history, and weather_conditions\n2. Applies specified filters and transformations\n3. Creates train/validation/test splits\n4. Stores the dataset in a standardized format (Parquet recommended for efficiency)\n5. Records metadata in the ml_training_datasets table\n\nImplement dataset versioning with semantic versioning (MAJOR.MINOR.PATCH).\n\nCreate a dataset validation service that checks for:\n- Feature completeness\n- Class balance for classification tasks\n- Outlier detection\n- Feature correlation analysis\n\nUse DVC (Data Version Control) or MLflow for dataset tracking and versioning.",
+        "testStrategy": "1. Unit tests for schema validation\n2. Test dataset generation with various filter combinations\n3. Verify train/validation/test splits maintain proper distribution\n4. Test dataset validation with intentionally corrupted data\n5. Verify versioning system\n6. Performance testing for large dataset generation\n7. Test integration with ML frameworks (scikit-learn, TensorFlow, PyTorch)\n8. Validate dataset storage and retrieval\n9. Test dataset metadata querying",
+        "priority": "medium",
+        "dependencies": [
+          61,
+          62
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 64,
+        "title": "Implement ML Model Predictions Storage System",
+        "description": "Create the ml_model_predictions table to store and track machine learning model predictions, enabling performance evaluation and comparison.",
+        "details": "Create a new table `ml_model_predictions` with the following columns:\n- `prediction_id` (Primary Key, UUID or SERIAL)\n- `model_version` (VARCHAR, NOT NULL)\n- `dg_id` (Foreign Key to player table, NOT NULL)\n- `tournament_id` (Foreign Key to tournaments_v2, NOT NULL)\n- `prediction_type` (VARCHAR, NOT NULL, e.g., 'finish_position', 'cut_probability')\n- `predicted_value` (DECIMAL(10,4), NOT NULL)\n- `confidence_score` (DECIMAL(5,4))\n- `feature_weights` (JSONB, importance of features for this prediction)\n- `actual_result` (DECIMAL(10,4))\n- `prediction_accuracy` (DECIMAL(10,4))\n- `created_at` (TIMESTAMP WITH TIME ZONE, DEFAULT NOW())\n\nImplement indexes:\n- Composite index on (tournament_id, dg_id)\n- Composite index on (model_version, prediction_type)\n- Index on created_at\n\nCreate a prediction service that:\n1. Loads trained models from a model registry\n2. Generates predictions for upcoming tournaments\n3. Stores predictions in the ml_model_predictions table\n4. Updates actual_result and prediction_accuracy when results are available\n\nImplement a model evaluation service that:\n1. Calculates performance metrics (MAE, RMSE, log loss, etc.)\n2. Compares model versions\n3. Generates performance reports\n\nCreate a prediction API endpoint that serves the latest predictions for frontend consumption.\n\nUse MLflow for model tracking and versioning, with model artifacts stored in S3 or equivalent cloud storage.",
+        "testStrategy": "1. Unit tests for schema validation\n2. Test prediction generation with sample models\n3. Verify accuracy calculation with known outcomes\n4. Test model comparison with controlled scenarios\n5. Performance testing for bulk prediction generation\n6. Test API endpoint with various query parameters\n7. Validate model versioning and tracking\n8. Test prediction updates with tournament results\n9. Integration test with the ML training pipeline",
+        "priority": "medium",
+        "dependencies": [
+          63
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 65,
+        "title": "Design and Implement Player Feature Vectors System",
+        "description": "Create the player_feature_vectors table to store comprehensive player features for machine learning and analysis, capturing form, course history, and situational factors.",
+        "details": "Create a new table `player_feature_vectors` with the following columns:\n- `feature_id` (Primary Key, UUID or SERIAL)\n- `dg_id` (Foreign Key to player table, NOT NULL)\n- `tournament_id` (Foreign Key to tournaments_v2, NOT NULL)\n- `as_of_date` (DATE, NOT NULL)\n- `recent_form_features` (JSONB, NOT NULL, last 5/10/20 tournament stats)\n- `course_history_features` (JSONB, performance on similar courses)\n- `situational_features` (JSONB, cut line pressure, weather adaptation)\n- `strokes_gained_trends` (JSONB, SG trajectory over time)\n- `fatigue_indicators` (JSONB, travel, consecutive weeks played)\n- `created_at` (TIMESTAMP WITH TIME ZONE, DEFAULT NOW())\n- `updated_at` (TIMESTAMP WITH TIME ZONE, DEFAULT NOW())\n\nImplement indexes:\n- Composite index on (dg_id, tournament_id)\n- Index on as_of_date\n\nCreate a feature engineering service that:\n1. Extracts raw data from tournament_results_v2, player_trends_v2, player_course_history\n2. Calculates rolling averages and trends\n3. Normalizes features for ML consumption\n4. Handles missing data with appropriate imputation strategies\n5. Updates feature vectors daily during tournament weeks\n\nImplement feature importance analysis to identify predictive features.\n\nCreate a feature store using Feast or similar technology for efficient feature serving.\n\nImplement feature versioning to track changes in feature calculation methodology.\n\nUse PostgreSQL JSONB operators for efficient querying of nested feature data.",
+        "testStrategy": "1. Unit tests for schema validation\n2. Test feature calculation with sample player data\n3. Verify feature normalization and scaling\n4. Test missing data imputation strategies\n5. Performance testing for feature generation pipeline\n6. Test feature versioning and tracking\n7. Validate JSONB query performance\n8. Test integration with ML model training\n9. Verify daily update process",
+        "priority": "medium",
+        "dependencies": [
+          61,
+          62
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 66,
+        "title": "Implement Betting Market Analysis System",
+        "description": "Create the betting_market_analysis table to store market efficiency metrics, overlay opportunities, and bias indicators for tournament betting markets.",
+        "details": "Create a new table `betting_market_analysis` with the following columns:\n- `analysis_id` (Primary Key, UUID or SERIAL)\n- `tournament_id` (Foreign Key to tournaments_v2, NOT NULL)\n- `analysis_date` (DATE, NOT NULL)\n- `market_efficiency_score` (DECIMAL(5,4))\n- `overlay_opportunities` (JSONB, players with value)\n- `market_bias_indicators` (JSONB, popularity vs performance)\n- `sharp_money_indicators` (JSONB)\n- `public_betting_percentage` (JSONB, by player if available)\n- `created_at` (TIMESTAMP WITH TIME ZONE, DEFAULT NOW())\n\nImplement indexes:\n- Composite index on (tournament_id, analysis_date)\n\nCreate a market analysis service that:\n1. Compares consensus odds from odds_history with model predictions\n2. Calculates market efficiency metrics using Kelly criterion\n3. Identifies overlay opportunities (positive expected value bets)\n4. Detects market biases (e.g., recency bias, name recognition bias)\n5. Tracks sharp money movement through line changes\n6. Runs daily during tournament weeks\n\nImplement a market efficiency dashboard for visualizing market analysis.\n\nCreate an alert system for significant market inefficiencies.\n\nUse statistical methods to detect significant line movements and sharp action.\n\nImplement the closing line value (CLV) calculation to measure betting performance.",
+        "testStrategy": "1. Unit tests for schema validation\n2. Test market efficiency calculation with controlled scenarios\n3. Verify overlay detection with known value opportunities\n4. Test bias detection with historical data\n5. Performance testing for analysis pipeline\n6. Test alert system with threshold violations\n7. Validate dashboard data accuracy\n8. Test CLV calculation with historical betting data\n9. Integration test with odds tracking system",
+        "priority": "medium",
+        "dependencies": [
+          62,
+          64
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 67,
+        "title": "Create Value Bet Tracking System",
+        "description": "Implement the value_bet_tracking table to identify, record, and evaluate betting opportunities with positive expected value based on model predictions and market odds.",
+        "details": "Create a new table `value_bet_tracking` with the following columns:\n- `bet_id` (Primary Key, UUID or SERIAL)\n- `dg_id` (Foreign Key to player table, NOT NULL)\n- `tournament_id` (Foreign Key to tournaments_v2, NOT NULL)\n- `bet_type` (VARCHAR, NOT NULL, e.g., 'outright', 'top5', 'top10')\n- `recommended_odds` (DECIMAL(10,2), NOT NULL, from model)\n- `actual_odds` (DECIMAL(10,2), NOT NULL, from market)\n- `edge_percentage` (DECIMAL(6,2), NOT NULL)\n- `kelly_criterion_size` (DECIMAL(5,4))\n- `confidence_level` (DECIMAL(5,4))\n- `outcome` (VARCHAR, e.g., 'win', 'loss', 'pending')\n- `profit_loss` (DECIMAL(10,2))\n- `model_version_used` (VARCHAR, NOT NULL)\n- `created_at` (TIMESTAMP WITH TIME ZONE, DEFAULT NOW())\n\nImplement indexes:\n- Composite index on (tournament_id, dg_id)\n- Index on bet_type\n- Index on outcome\n\nCreate a value bet identification service that:\n1. Compares model-generated fair odds with market odds\n2. Calculates edge percentage and Kelly criterion bet size\n3. Applies confidence adjustments based on model accuracy\n4. Records identified value bets\n5. Updates outcomes and profit/loss after tournament completion\n\nImplement a notification system for new value bets.\n\nCreate a performance dashboard for tracking value bet success rate and ROI.\n\nUse Bayesian methods to adjust confidence based on historical model performance.\n\nImplement bet correlation analysis to avoid overexposure to correlated outcomes.",
+        "testStrategy": "1. Unit tests for schema validation\n2. Test edge calculation with various odds scenarios\n3. Verify Kelly criterion calculation\n4. Test outcome determination with tournament results\n5. Performance testing for value bet identification\n6. Test notification system\n7. Validate dashboard metrics calculation\n8. Test confidence adjustment with historical performance\n9. Integration test with betting market analysis system",
+        "priority": "medium",
+        "dependencies": [
+          66
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 68,
+        "title": "Implement Bankroll Management System",
+        "description": "Create the bankroll_management table to track betting portfolio allocation, risk management rules, and performance metrics for systematic betting strategies.",
+        "details": "Create a new table `bankroll_management` with the following columns:\n- `session_id` (Primary Key, UUID or SERIAL)\n- `tournament_id` (Foreign Key to tournaments_v2, NOT NULL)\n- `total_bankroll` (DECIMAL(12,2), NOT NULL)\n- `risk_allocation` (JSONB, NOT NULL, percentage per bet type)\n- `diversification_rules` (JSONB, max per player, course, etc.)\n- `performance_tracking` (JSONB, ROI, Sharpe ratio, max drawdown)\n- `created_at` (TIMESTAMP WITH TIME ZONE, DEFAULT NOW())\n- `updated_at` (TIMESTAMP WITH TIME ZONE, DEFAULT NOW())\n\nImplement indexes:\n- Index on tournament_id\n\nCreate a bankroll management service that:\n1. Implements Kelly criterion or fractional Kelly for bet sizing\n2. Enforces diversification rules across players and bet types\n3. Tracks performance metrics including ROI, Sharpe ratio, and drawdown\n4. Provides optimal bet allocation based on value bet opportunities\n5. Adjusts risk based on confidence and historical performance\n\nImplement a portfolio optimization algorithm using modern portfolio theory.\n\nCreate a bankroll simulation tool to backtest strategies on historical data.\n\nImplement risk management alerts for excessive exposure or drawdown.\n\nUse Monte Carlo simulation to estimate bankroll growth and risk of ruin.",
+        "testStrategy": "1. Unit tests for schema validation\n2. Test bet allocation with various bankroll scenarios\n3. Verify diversification rule enforcement\n4. Test performance metric calculation\n5. Performance testing for portfolio optimization\n6. Test risk management alerts\n7. Validate backtest simulation results\n8. Test Monte Carlo simulation with different parameters\n9. Integration test with value bet tracking system",
+        "priority": "low",
+        "dependencies": [
+          67
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 69,
+        "title": "Design and Implement AI Insights System",
+        "description": "Create the ai_insights table to store LLM-generated narratives and insights about players, tournaments, and betting opportunities.",
+        "details": "Create a new table `ai_insights` with the following columns:\n- `insight_id` (Primary Key, UUID or SERIAL)\n- `tournament_id` (Foreign Key to tournaments_v2)\n- `dg_id` (Foreign Key to player table, NULL for tournament-level insights)\n- `insight_type` (VARCHAR, NOT NULL, e.g., 'form_analysis', 'course_fit', 'value_bet')\n- `insight_text` (TEXT, NOT NULL, generated narrative)\n- `supporting_data` (JSONB, NOT NULL, stats that support the insight)\n- `confidence_score` (DECIMAL(5,4))\n- `llm_model_used` (VARCHAR, NOT NULL, e.g., 'gpt-4', 'claude-3')\n- `generated_at` (TIMESTAMP WITH TIME ZONE, NOT NULL)\n- `user_feedback` (SMALLINT, -1 to 1 scale)\n\nImplement indexes:\n- Composite index on (tournament_id, dg_id)\n- Index on insight_type\n- Index on generated_at\n\nCreate an AI insight generation service that:\n1. Collects relevant data from player_feature_vectors, betting_market_analysis, and value_bet_tracking\n2. Formats data into prompts for LLM consumption\n3. Calls OpenAI GPT-4 or Anthropic Claude API with appropriate system prompts\n4. Processes and stores generated insights\n5. Tracks user feedback for insight quality\n\nImplement insight categorization and tagging for easy retrieval.\n\nCreate a feedback loop to improve prompt engineering based on user ratings.\n\nImplement a caching strategy to minimize API costs for similar insights.\n\nUse embeddings to find similar historical insights for reference.",
+        "testStrategy": "1. Unit tests for schema validation\n2. Test insight generation with sample data\n3. Verify prompt formatting with various data scenarios\n4. Test LLM API integration with mock responses\n5. Performance testing for bulk insight generation\n6. Test user feedback collection and processing\n7. Validate insight categorization and retrieval\n8. Test caching strategy effectiveness\n9. Integration test with feature vector and market analysis systems",
+        "priority": "low",
+        "dependencies": [
+          65,
+          66
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 70,
+        "title": "Implement Narrative Templates System",
+        "description": "Create the narrative_templates table to store and manage templates for AI-generated insights, enabling consistent and customizable narrative generation.",
+        "details": "Create a new table `narrative_templates` with the following columns:\n- `template_id` (Primary Key, UUID or SERIAL)\n- `template_name` (VARCHAR, NOT NULL)\n- `template_text` (TEXT, NOT NULL)\n- `variable_placeholders` (JSONB, NOT NULL, list of data points to inject)\n- `context_conditions` (JSONB, when to use this template)\n- `effectiveness_score` (DECIMAL(5,4))\n- `created_at` (TIMESTAMP WITH TIME ZONE, DEFAULT NOW())\n- `updated_at` (TIMESTAMP WITH TIME ZONE, DEFAULT NOW())\n\nImplement indexes:\n- Index on template_name\n\nCreate a template management service that:\n1. Provides CRUD operations for narrative templates\n2. Validates template syntax and variable placeholders\n3. Tracks template usage and effectiveness\n4. Selects appropriate templates based on context conditions\n5. Fills templates with player and tournament data\n\nImplement template versioning to track changes over time.\n\nCreate a template testing tool to preview generated narratives.\n\nImplement A/B testing for template effectiveness.\n\nUse Jinja2 or similar templating engine for variable substitution.\n\nImplement template categories for different insight types (form analysis, course fit, etc.).",
+        "testStrategy": "1. Unit tests for schema validation\n2. Test template syntax validation\n3. Verify variable substitution with sample data\n4. Test template selection based on context\n5. Performance testing for template rendering\n6. Test versioning system\n7. Validate A/B testing framework\n8. Test template preview functionality\n9. Integration test with AI insights system",
+        "priority": "low",
+        "dependencies": [
+          69
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 71,
+        "title": "Create Advanced Query System for User Interactions",
+        "description": "Implement the user_queries table to track natural language queries, their parsed intent, and response quality for an LLM-powered query interface.",
+        "details": "Create a new table `user_queries` with the following columns:\n- `query_id` (Primary Key, UUID or SERIAL)\n- `user_query_text` (TEXT, NOT NULL)\n- `parsed_intent` (JSONB, NOT NULL)\n- `data_sources_used` (JSONB, which tables were queried)\n- `response_generated` (TEXT, NOT NULL)\n- `response_quality_score` (SMALLINT, -1 to 5 scale)\n- `query_execution_time` (INTEGER, in milliseconds)\n- `created_at` (TIMESTAMP WITH TIME ZONE, DEFAULT NOW())\n- `user_id` (VARCHAR, if user authentication is implemented)\n\nImplement indexes:\n- Full-text search index on user_query_text\n- Index on created_at\n\nCreate a natural language query processing service that:\n1. Uses LLM to parse user queries into structured database queries\n2. Identifies relevant data sources based on query intent\n3. Executes optimized SQL queries against the database\n4. Formats results into natural language responses\n5. Tracks query performance and response quality\n\nImplement query intent classification (player comparison, course analysis, betting advice, etc.).\n\nCreate a query optimization layer to ensure efficient database access.\n\nImplement a feedback mechanism for users to rate response quality.\n\nUse vector embeddings to find similar previous queries for faster response.\n\nImplement query templates for common question types.",
+        "testStrategy": "1. Unit tests for schema validation\n2. Test query parsing with various natural language inputs\n3. Verify intent classification accuracy\n4. Test SQL generation with security considerations\n5. Performance testing for query execution\n6. Test response formatting with different result types\n7. Validate feedback collection\n8. Test similar query matching\n9. Integration test with the entire database system",
+        "priority": "low",
+        "dependencies": [
+          69
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 72,
+        "title": "Implement Database Performance Optimization Strategy",
+        "description": "Design and implement a comprehensive database performance optimization strategy including indexing, partitioning, and caching to ensure fast query response times for analytical workloads.",
+        "details": "Implement the following performance optimizations:\n\n1. Indexing Strategy:\n   - Create composite indexes on tournament_id + dg_id for all player-related tables\n   - Implement time-series indexes for historical data queries using BRIN indexes\n   - Create partial indexes for active tournament data\n   - Use covering indexes for frequently accessed columns\n   - Implement GIN indexes for JSONB fields with frequent querying\n\n2. Data Partitioning:\n   - Partition large tables (tournament_results_v2, odds_history) by tournament year\n   - Consider course-based partitioning for course-specific queries\n   - Implement partition pruning in queries\n   - Set up automatic partition creation and management\n\n3. Caching Layer:\n   - Implement Redis cache for frequently accessed player statistics\n   - Create materialized views for complex aggregations with refresh schedules\n   - Set up query result caching for common analytical queries\n   - Implement connection pooling with PgBouncer\n\n4. Query Optimization:\n   - Create database views for common query patterns\n   - Implement stored procedures for complex calculations\n   - Use CTEs and window functions for efficient analytics\n   - Configure PostgreSQL for analytical workloads\n\n5. Monitoring and Maintenance:\n   - Set up pg_stat_statements for query performance tracking\n   - Implement regular VACUUM and ANALYZE schedules\n   - Create performance dashboards with Grafana\n   - Set up alerting for slow queries\n\nUse TimescaleDB extension for time-series data optimization if appropriate.",
+        "testStrategy": "1. Benchmark current query performance as baseline\n2. Test index effectiveness with EXPLAIN ANALYZE\n3. Verify partition pruning with query plans\n4. Measure cache hit rates and performance improvement\n5. Load testing with simulated concurrent users\n6. Test materialized view refresh performance\n7. Validate query optimization with before/after comparisons\n8. Test database performance under various load conditions\n9. Verify monitoring and alerting functionality",
+        "priority": "high",
+        "dependencies": [
+          59,
+          60,
+          61,
+          62,
+          63,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 73,
+        "title": "Implement Data Quality and Validation Framework",
+        "description": "Design and implement a comprehensive data quality and validation framework to ensure data integrity, consistency, and reliability across all database tables.",
+        "details": "Implement the following data quality measures:\n\n1. Validation Rules:\n   - Create foreign key constraints with appropriate ON DELETE/UPDATE actions\n   - Implement check constraints for reasonable value ranges\n   - Add unique constraints to prevent duplicate data\n   - Create domain constraints for common data types\n\n2. Audit Trail:\n   - Implement row-level change tracking with temporal tables\n   - Create audit triggers to log all data modifications\n   - Store audit logs in a separate schema\n   - Implement data lineage tracking for ML model inputs\n\n3. Data Quality Monitoring:\n   - Create data quality checks for completeness, accuracy, and consistency\n   - Implement scheduled validation jobs\n   - Set up alerting for data quality issues\n   - Create data quality dashboards\n\n4. Error Handling:\n   - Implement graceful error handling in data pipelines\n   - Create error logging and reporting\n   - Design recovery procedures for failed data loads\n\n5. Data Reconciliation:\n   - Implement cross-table consistency checks\n   - Create reconciliation reports\n   - Design procedures for fixing inconsistencies\n\nUse pgAudit extension for comprehensive audit logging if appropriate.\n\nImplement data contracts for all tables to document expected data quality standards.",
+        "testStrategy": "1. Test foreign key constraints with invalid data\n2. Verify check constraints with boundary values\n3. Test audit trail with various data modifications\n4. Validate data quality checks with intentionally corrupted data\n5. Test alerting with simulated data quality issues\n6. Verify reconciliation reports with inconsistent data\n7. Test error handling with various failure scenarios\n8. Validate recovery procedures\n9. Test data lineage tracking with sample ML workflows",
+        "priority": "high",
+        "dependencies": [
+          59,
+          60,
+          61,
+          62,
+          63,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 74,
+        "title": "Design and Implement Integration Framework for External APIs",
+        "description": "Create a robust integration framework for connecting with external APIs including DataGolf, weather services, and sportsbooks, with proper error handling, rate limiting, and data transformation.",
+        "details": "Implement an integration framework with the following components:\n\n1. API Client Layer:\n   - Create modular API clients for each external service\n   - Implement authentication and session management\n   - Handle rate limiting and request throttling\n   - Add retry logic with exponential backoff\n\n2. Data Transformation Layer:\n   - Create standardized data models for external data\n   - Implement mapping between external and internal schemas\n   - Handle data format inconsistencies\n   - Validate incoming data against expected schemas\n\n3. Scheduling and Orchestration:\n   - Implement job scheduling for regular data fetching\n   - Create dependency management between jobs\n   - Set up monitoring and alerting for job failures\n   - Implement idempotent processing\n\n4. Error Handling and Fallbacks:\n   - Create comprehensive error handling strategies\n   - Implement fallback data sources where applicable\n   - Design circuit breakers for unreliable services\n   - Log and alert on integration failures\n\n5. Caching Strategy:\n   - Implement response caching to minimize API calls\n   - Create cache invalidation rules\n   - Set up cache warming for critical data\n\nUse Apache Airflow or similar tool for orchestration if appropriate.\n\nImplement API versioning support to handle external API changes.",
+        "testStrategy": "1. Test API clients with mock responses\n2. Verify rate limiting with high-frequency requests\n3. Test retry logic with simulated failures\n4. Validate data transformation with various response formats\n5. Test scheduling with different time intervals\n6. Verify error handling with various error scenarios\n7. Test circuit breakers with unreliable service simulation\n8. Validate caching strategy effectiveness\n9. Integration test with actual external APIs in sandbox environments",
+        "priority": "high",
+        "dependencies": [
+          60,
+          62
+        ],
+        "status": "pending",
+        "subtasks": []
       }
     ],
     "metadata": {
       "created": "2025-06-20T10:28:54.452Z",
-      "updated": "2025-07-01T00:21:48.739Z",
+      "updated": "2025-07-18T13:05:14.392Z",
       "description": "Tasks for master context"
     }
   }
