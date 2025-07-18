@@ -15,6 +15,7 @@
     "ingest:all": "node ingest-matchups.js all"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.56.0",
     "@hookform/resolvers": "^3.10.0",
     "@next/eslint-plugin-next": "^15.3.1",
     "@radix-ui/react-accordion": "^1.2.4",

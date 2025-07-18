@@ -10,8 +10,13 @@ export const createBrowserClient = () => {
 
 // Create a single supabase client for server components
 export const createServerClient = () => {
-  const supabaseUrl = process.env.SUPABASE_URL!
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL!
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
   return createClient(supabaseUrl, supabaseServiceKey)
 }
+
+// Default client - use browser client if in browser, server client if on server
+export const supabase = typeof window !== 'undefined' 
+  ? createBrowserClient() 
+  : createServerClient()
