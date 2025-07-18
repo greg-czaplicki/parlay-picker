@@ -170,7 +170,37 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // 6. Calculate player trends (daily update)
+    // 6. Populate tournament results from live stats
+    console.log('🏆 Populating tournament results from live stats...')
+    try {
+      const populateResponse = await fetch(`${baseUrl}/api/trends/populate-results`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (populateResponse.ok) {
+        const populateResult = await populateResponse.json()
+        results.push({
+          task: 'populate_tournament_results',
+          success: true,
+          data: populateResult
+        })
+        console.log('✅ Tournament results populated from live stats')
+      } else {
+        throw new Error(`Tournament results population failed: ${populateResponse.statusText}`)
+      }
+    } catch (error: any) {
+      console.error('❌ Tournament results population failed:', error)
+      results.push({
+        task: 'populate_tournament_results',
+        success: false,
+        error: error.message
+      })
+    }
+
+    // 7. Calculate player trends (daily update)
     console.log('📈 Calculating player trends...')
     try {
       const trendsResponse = await fetch(`${baseUrl}/api/trends`, {
