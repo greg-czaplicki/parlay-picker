@@ -201,120 +201,10 @@ export async function getMatchups(matchupType: string, bookmaker?: string): Prom
   const supabase = createServerClient();
 
   try {
-    let matchupRows: any[] = [];
-    let matchupsError: any = null;
-    // Unified query for both 2ball and 3ball
-    const response = await supabase
-      .from('matchups_v2')
-      .select('*')
-      .eq('type', matchupType)
-      .order('created_at', { ascending: false });
-    matchupRows = response.data || [];
-    matchupsError = response.error;
-
-    if (matchupsError) {
-      logger.error(`Supabase error fetching matchups:`, matchupsError);
-      throw new Error(`Error fetching matchups: ${matchupsError.message}`);
-    }
-    if (!matchupRows || matchupRows.length === 0) {
-      logger.info(`No matchup data returned from matchups table.`);
-      return { matchups: [] };
-    }
-
-    // 2. Get Unique Player IDs from all players in the fetched matchups
-    let playerIds: number[];
-    if (matchupType === '3ball') {
-      playerIds = [
-        ...new Set(
-          matchupRows.flatMap(row => [row.player1_dg_id, row.player2_dg_id, row.player3_dg_id])
-                     .filter((id): id is number => id != null)
-        ),
-      ];
-    } else {
-      playerIds = [
-        ...new Set(
-          matchupRows.flatMap(row => [row.player1_dg_id, row.player2_dg_id])
-                     .filter((id): id is number => id != null)
-        ),
-      ];
-    }
-    if (playerIds.length === 0) {
-        logger.info("No valid player IDs found in fetched matchups.");
-        return { matchups: [] };
-    }
-
-    // 3. Fetch Player Stats (SG Total for now)
-    const { data: playerStatsData, error: statsError } = await supabase
-      .from("player_stats")
-      .select("player_id, sg_total")
-      .in("player_id", playerIds);
-
-    if (statsError) {
-      logger.error("Supabase error fetching player stats:", statsError);
-      // Decide how to handle missing stats - here we'll default to 0
-    }
-
-    // Create a map for quick stat lookup (Player ID -> { sgTotal: number })
-    const playerStatsMap = new Map<number, { sgTotal: number }>();
-    playerStatsData?.forEach(ps => {
-        if (ps.player_id != null) {
-            playerStatsMap.set(ps.player_id, { sgTotal: Number(ps.sg_total) || 0 });
-        }
-    });
-
-    // Map to processed matchups (update field names as needed)
-    const processedMatchups: Matchup[] = matchupRows.map((row) => {
-      let playersInitial: any[] = [];
-      let expectedPlayerCount = 0;
-      if (matchupType === '3ball') {
-        // Use new unified schema
-        const p1 = {
-          id: row.player1_dg_id,
-          name: row.player1_name,
-          odds: Number(row[`${selectedBookmaker}_p1_odds`]) || 0,
-          sgTotal: playerStatsMap.get(row.player1_dg_id)?.sgTotal ?? 0
-        };
-        const p2 = {
-          id: row.player2_dg_id,
-          name: row.player2_name,
-          odds: Number(row[`${selectedBookmaker}_p2_odds`]) || 0,
-          sgTotal: playerStatsMap.get(row.player2_dg_id)?.sgTotal ?? 0
-        };
-        const p3 = {
-          id: row.player3_dg_id,
-          name: row.player3_name,
-          odds: Number(row[`${selectedBookmaker}_p3_odds`]) || 0,
-          sgTotal: playerStatsMap.get(row.player3_dg_id)?.sgTotal ?? 0
-        };
-        playersInitial = [p1, p2, p3];
-        expectedPlayerCount = 3;
-      } else {
-        // 2ball
-        const p1 = {
-          id: row.player1_dg_id,
-          name: row.player1_name,
-          odds: Number(row[`${selectedBookmaker}_p1_odds`]) || 0,
-          sgTotal: playerStatsMap.get(row.player1_dg_id)?.sgTotal ?? 0
-        };
-        const p2 = {
-          id: row.player2_dg_id,
-          name: row.player2_name,
-          odds: Number(row[`${selectedBookmaker}_p2_odds`]) || 0,
-          sgTotal: playerStatsMap.get(row.player2_dg_id)?.sgTotal ?? 0
-        };
-        playersInitial = [p1, p2];
-        expectedPlayerCount = 2;
-      }
-      // ...rest of your logic for recommendations, etc.
-      // Return the processed matchup object
-      return {
-        ...row,
-        players: playersInitial,
-        expectedPlayerCount,
-      };
-    });
-
-    return { matchups: processedMatchups };
+    // With the new schema, we need to implement proper betting market queries
+    // For now, return empty array
+    logger.info(`Matchups action: No betting markets data available yet in new schema`);
+    return { matchups: [] };
   } catch (err: any) {
     logger.error('Error in getMatchups:', err);
     return { matchups: [], error: err.message };
@@ -362,40 +252,10 @@ export async function findPlayerMatchup(playerName: string): Promise<{ matchup: 
     }
     const supabase = createServerClient();
     try {
-        // Search for 3ball matchups first
-        const { data: matchups, error: matchupError } = await supabase
-            .from('matchups_v2')
-            .select('*')
-            .or(patterns.map(p => `player1_name.ilike."${p}",player2_name.ilike."${p}",player3_name.ilike."${p}"`).join(","))
-            .eq('type', '3ball')
-            .order('created_at', { ascending: false })
-            .limit(1);
-        let matchup = matchups && matchups.length > 0 ? matchups[0] : null;
-        if (!matchup && !matchupError) {
-            // Try 2ball matchups
-            const { data: twoBallMatchups, error: twoBallError } = await supabase
-                .from('matchups_v2')
-                .select('*')
-                .or(patterns.map(p => `player1_name.ilike."${p}",player2_name.ilike."${p}"`).join(","))
-                .eq('type', '2ball')
-                .order('created_at', { ascending: false })
-                .limit(1);
-            matchup = twoBallMatchups && twoBallMatchups.length > 0 ? twoBallMatchups[0] : null;
-        }
-        if (!matchup && matchupError) {
-            logger.error(`[findPlayerMatchup] Supabase error finding latest matchup:`, matchupError);
-            throw new Error(`Database error finding matchup: ${matchupError.message}`);
-        }
-        if (!matchup) {
-            logger.info(`[findPlayerMatchup] No 3-ball or 2-ball matchup found for ${playerName}`);
-            return { matchup: null, error: "No matchup found for the given player" };
-        } else {
-            logger.info(`[findPlayerMatchup] Found matchup for ${playerName}`);
-        }
-        // Add opponents field
-        const allNames = [matchup.player1_name, matchup.player2_name, matchup.player3_name].filter(Boolean);
-        const opponents = allNames.filter((n: string) => n && n.toLowerCase() !== playerName.toLowerCase());
-        return { matchup: { ...matchup, opponents }, error: undefined };
+        // With new schema, we need to query betting_markets table
+        // For now, return null since we don't have betting data yet
+        logger.info(`[findPlayerMatchup] No betting markets data available in new schema`);
+        return { matchup: null, error: "Betting markets not yet populated in new database schema" };
     } catch (error) {
         logger.error(`[findPlayerMatchup] Error during execution for ${playerName}:`, error);
         return { matchup: null, error: error instanceof Error ? error.message : "Unknown error finding player matchup" };
@@ -492,7 +352,7 @@ export async function createParlay(name?: string): Promise<{ parlay: Parlay | nu
     try {
         // TODO: Add user_id if auth is implemented
         const { data, error } = await supabase
-            .from('parlays_v2')
+            .from('parlays')
             .insert([{ 
                 name: name /* , user_id: userId */,
                 outcome: 'push',
@@ -548,7 +408,7 @@ export async function getParlaysAndPicks(): Promise<{ parlays: ParlayWithPicks[]
         // TODO: Add user filter if auth is implemented e.g., .eq('user_id', userId)
         // Use Supabase join query, aliasing the joined table to match the interface
         const { data, error } = await supabase
-            .from('parlays_v2')
+            .from('parlays')
             .select(`
                 *,
                 picks:parlay_picks (*)
@@ -591,7 +451,7 @@ export async function addParlayPick(pickData: Omit<ParlayPick, 'id' | 'created_a
     const supabase = createServerClient();
     try {
         const { data, error } = await supabase
-            .from('parlay_picks_v2')
+            .from('parlay_picks')
             .insert([{
                 parlay_id: pickData.parlay_id,
                 matchup_id: pickData.matchup_id,
@@ -647,7 +507,7 @@ export async function removeParlayPick(pickId: number): Promise<{ success: boole
     try {
         // TODO: Add user filter if auth is implemented e.g., .eq('user_id', userId)
         const { error } = await supabase
-            .from('parlay_picks_v2')
+            .from('parlay_picks')
             .delete()
             .eq('id', pickId);
 
@@ -702,11 +562,10 @@ export async function batchLoadParlayPicksData(
             };
             
             // 1. Get the matchup data for this pick
-            const { data: matchupData, error: matchupError } = await supabase
-                .from('matchups_v2')
-                .select('*')
-                .eq('id', pick.matchup_id)
-                .single();
+            // Since matchups table was removed in migration, return null for now
+            // This will need to be updated when betting_markets table is populated
+            const matchupData = null;
+            const matchupError = { message: "Matchups table no longer exists - migrated to betting_markets" };
                 
             if (matchupError) {
                 pickResult.matchupError = `Error fetching matchup: ${matchupError.message}`;
@@ -762,7 +621,7 @@ export async function deleteParlay(parlayId: number): Promise<{ success: boolean
     try {
         // TODO: Add user filter if auth is implemented e.g., .eq('user_id', userId)
         const { error } = await supabase
-            .from('parlays_v2')
+            .from('parlays')
             .delete()
             .eq('id', parlayId);
 

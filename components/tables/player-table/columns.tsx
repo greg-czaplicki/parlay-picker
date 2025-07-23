@@ -5,7 +5,7 @@ import { type ColumnDef, type Row, type Column } from "@tanstack/react-table"
 import { ArrowUpDown } from "lucide-react"
 import { StatCell } from "./stat-cell"
 import { formatPlayerName } from "@/lib/utils"
-// import type { DisplayPlayer, PlayerSkillRating, LiveTournamentStat } from "@/types/definitions"
+import type { DisplayPlayer, PlayerSkillRating, LiveTournamentStat } from "@/types/definitions"
 
 interface UseColumnsProps<T> {
   dataView: "season" | "tournament"

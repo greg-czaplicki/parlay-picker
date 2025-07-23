@@ -286,9 +286,10 @@ export default function MatchupsTable({
       // Handle UTC ISO format from the database
       const utcDate = new Date(teeTime);
       
-      // Get tournament local time (BST for The Open Championship)
+      // Get tournament local time using proper timezone
+      // For 3M Open in Minnesota, this should be America/Chicago (Central Time)
       const localTime = utcDate.toLocaleString('en-US', {
-        timeZone: 'Europe/London', // The Open Championship
+        timeZone: 'America/Chicago', // 3M Open is in Minnesota (Central Time)
         hour: 'numeric',
         minute: '2-digit',
         hour12: true

@@ -2,6 +2,8 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.scrapeStatsCategory = scrapeStatsCategory;
 exports.scrapeAllStats = scrapeAllStats;
+exports.scrapeCourseInfo = scrapeCourseInfo;
+exports.scrapeMultipleCourses = scrapeMultipleCourses;
 const playwright_1 = require("playwright");
 const stats_1 = require("./types/stats");
 /**
@@ -650,4 +652,565 @@ async function scrapeAllStats(debugMode = false) {
         console.error('Error scraping all stats:', error);
         return [];
     }
+}
+/**
+ * Scrapes course information from PGA Tour tournament pages
+ * @param tournamentUrl URL to tournament page (e.g., https://www.pgatour.com/tournaments/2025/the-open-championship/R2025100/course-stats)
+ * @param debugMode Enable debug mode to see browser UI and slow down operations
+ * @returns Course information extracted from the tournament page
+ */
+async function scrapeCourseInfo(tournamentUrl, debugMode = false) {
+    console.log(`Starting to scrape course info from ${tournamentUrl}`);
+    const browser = await playwright_1.chromium.launch({
+        headless: !debugMode,
+        slowMo: debugMode ? 1000 : 0,
+        args: [
+            '--disable-blink-features=AutomationControlled',
+            '--disable-features=IsolateOrigins',
+            '--disable-site-isolation-trials',
+            '--no-sandbox',
+            '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36'
+        ]
+    });
+    try {
+        const context = await browser.newContext({
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36',
+            viewport: { width: 1920, height: 1080 },
+            deviceScaleFactor: 1,
+            hasTouch: false
+        });
+        await context.addInitScript(() => {
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+        });
+        const page = await context.newPage();
+        console.log(`Navigating to ${tournamentUrl}...`);
+        await page.goto(tournamentUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+        // Wait for page to load and scroll to trigger any lazy loading
+        await page.waitForTimeout(2000);
+        await page.evaluate(() => window.scrollBy(0, 500));
+        await page.waitForTimeout(1000);
+        if (debugMode) {
+            await page.screenshot({ path: 'debug-course-info.png' });
+            console.log('Screenshot saved to debug-course-info.png');
+        }
+        // Extract course information from the page
+        const courseInfo = await page.evaluate(() => {
+            console.log('[Browser] Starting course info extraction...');
+            // Helper functions
+            function getTextContent(selector) {
+                const element = document.querySelector(selector);
+                return element?.textContent?.trim() || null;
+            }
+            function getTextContentFromMultipleSelectors(selectors) {
+                for (const selector of selectors) {
+                    const text = getTextContent(selector);
+                    if (text)
+                        return text;
+                }
+                return null;
+            }
+            function extractNumberFromText(text) {
+                if (!text)
+                    return null;
+                const match = text.match(/[\d,]+/);
+                return match ? parseInt(match[0].replace(/,/g, ''), 10) : null;
+            }
+            // Extract course name - look for the specific course name pattern
+            let courseName = null;
+            // First try to get course name from the tournament data structure
+            const bodyText = document.body.textContent || '';
+            // Look for course name in JSON data structure (most reliable)
+            const courseNameJSONMatch = bodyText.match(/"courseName":"([^"]+)"/);
+            if (courseNameJSONMatch) {
+                courseName = courseNameJSONMatch[1];
+            }
+            // If not found in JSON, try alternative methods
+            if (!courseName) {
+                // Try course name patterns that exclude tournament and status text
+                const courseNamePatterns = [
+                    /Royal\s+Portrush\s+Golf\s+Club/g,
+                    /([A-Z][a-zA-Z\s]+Golf\s+Club)(?!\s*(In\s+Progress|The\s+Open))/g,
+                    /([A-Z][a-zA-Z\s]+Country\s+Club)(?!\s*(In\s+Progress|The\s+Open))/g,
+                    /([A-Z][a-zA-Z\s]+Golf\s+Course)(?!\s*(In\s+Progress|The\s+Open))/g,
+                    /(Royal\s+[A-Z][a-zA-Z\s]+)(?!\s*(In\s+Progress|The\s+Open))/g
+                ];
+                for (const pattern of courseNamePatterns) {
+                    const matches = bodyText.match(pattern);
+                    if (matches && matches.length > 0) {
+                        courseName = matches[0].trim();
+                        break;
+                    }
+                }
+            }
+            // Clean up the course name if it contains unwanted text
+            if (courseName) {
+                courseName = courseName
+                    .replace(/^In\s+Progress\s*/i, '')
+                    .replace(/^The\s+Open\s+Championship\s*/i, '')
+                    .replace(/^.*Tournament\s*/i, '')
+                    .trim();
+            }
+            // Extract location - based on the format "PORTRUSH • NIR"
+            let location = null;
+            let country = 'United States'; // Default
+            // First try to get location from tournament data structure
+            const tournamentLocationMatch = bodyText.match(/"tournamentLocation":"([^"]+)"/);
+            const tournamentCountryMatch = bodyText.match(/"country":"([^"]+)"/);
+            const cityMatch = bodyText.match(/"city":"([^"]+)"/);
+            if (tournamentLocationMatch) {
+                location = tournamentLocationMatch[1];
+            }
+            else if (cityMatch) {
+                location = cityMatch[1];
+            }
+            // Map country codes to full names
+            const countryMap = {
+                'USA': 'United States',
+                'US': 'United States',
+                'UK': 'United Kingdom',
+                'GB': 'United Kingdom',
+                'NIR': 'Northern Ireland',
+                'SCO': 'Scotland',
+                'ENG': 'England',
+                'WAL': 'Wales',
+                'IRE': 'Ireland',
+                'CAN': 'Canada',
+                'AUS': 'Australia',
+                'RSA': 'South Africa',
+                'JPN': 'Japan',
+                'KOR': 'South Korea',
+                'MEX': 'Mexico',
+                'GER': 'Germany',
+                'FRA': 'France',
+                'ESP': 'Spain',
+                'ITA': 'Italy',
+                'NED': 'Netherlands',
+                'BEL': 'Belgium',
+                'SWE': 'Sweden',
+                'DEN': 'Denmark',
+                'NOR': 'Norway',
+                'SUI': 'Switzerland',
+                'AUT': 'Austria',
+                'POR': 'Portugal',
+                'CZE': 'Czech Republic',
+                'POL': 'Poland',
+                'HUN': 'Hungary',
+                'CRO': 'Croatia',
+                'SVK': 'Slovakia',
+                'SVN': 'Slovenia',
+                'BGR': 'Bulgaria',
+                'ROU': 'Romania',
+                'GRC': 'Greece',
+                'TUR': 'Turkey',
+                'CHN': 'China',
+                'IND': 'India',
+                'THA': 'Thailand',
+                'MYS': 'Malaysia',
+                'SGP': 'Singapore',
+                'IDN': 'Indonesia',
+                'PHL': 'Philippines',
+                'VNM': 'Vietnam',
+                'NZL': 'New Zealand',
+                'FJI': 'Fiji',
+                'BRA': 'Brazil',
+                'ARG': 'Argentina',
+                'CHL': 'Chile',
+                'COL': 'Colombia',
+                'PER': 'Peru',
+                'URY': 'Uruguay',
+                'VEN': 'Venezuela',
+                'ECU': 'Ecuador',
+                'BOL': 'Bolivia',
+                'PRY': 'Paraguay',
+                'PAN': 'Panama',
+                'CRI': 'Costa Rica',
+                'GTM': 'Guatemala',
+                'HND': 'Honduras',
+                'NIC': 'Nicaragua',
+                'SLV': 'El Salvador',
+                'BLZ': 'Belize',
+                'JAM': 'Jamaica',
+                'TTO': 'Trinidad and Tobago',
+                'BHS': 'Bahamas',
+                'BRB': 'Barbados',
+                'DOM': 'Dominican Republic',
+                'PRI': 'Puerto Rico',
+                'CUB': 'Cuba',
+                'HTI': 'Haiti',
+                'GUY': 'Guyana',
+                'SUR': 'Suriname',
+                'GUF': 'French Guiana',
+                'MAR': 'Morocco',
+                'TUN': 'Tunisia',
+                'DZA': 'Algeria',
+                'EGY': 'Egypt',
+                'LBY': 'Libya',
+                'KEN': 'Kenya',
+                'TZA': 'Tanzania',
+                'UGA': 'Uganda',
+                'RWA': 'Rwanda',
+                'BDI': 'Burundi',
+                'ETH': 'Ethiopia',
+                'SOM': 'Somalia',
+                'DJI': 'Djibouti',
+                'ERI': 'Eritrea',
+                'SDN': 'Sudan',
+                'SSD': 'South Sudan',
+                'TCD': 'Chad',
+                'CAF': 'Central African Republic',
+                'CMR': 'Cameroon',
+                'GNQ': 'Equatorial Guinea',
+                'GAB': 'Gabon',
+                'COG': 'Republic of the Congo',
+                'COD': 'Democratic Republic of the Congo',
+                'AGO': 'Angola',
+                'ZMB': 'Zambia',
+                'ZWE': 'Zimbabwe',
+                'BWA': 'Botswana',
+                'NAM': 'Namibia',
+                'SWZ': 'Eswatini',
+                'LSO': 'Lesotho',
+                'MDG': 'Madagascar',
+                'MUS': 'Mauritius',
+                'SYC': 'Seychelles',
+                'COM': 'Comoros',
+                'MYT': 'Mayotte',
+                'REU': 'Réunion',
+                'ARE': 'United Arab Emirates',
+                'SAU': 'Saudi Arabia',
+                'QAT': 'Qatar',
+                'KWT': 'Kuwait',
+                'BHR': 'Bahrain',
+                'OMN': 'Oman',
+                'YEM': 'Yemen',
+                'JOR': 'Jordan',
+                'LBN': 'Lebanon',
+                'SYR': 'Syria',
+                'IRQ': 'Iraq',
+                'IRN': 'Iran',
+                'AFG': 'Afghanistan',
+                'PAK': 'Pakistan',
+                'BGD': 'Bangladesh',
+                'LKA': 'Sri Lanka',
+                'MDV': 'Maldives',
+                'BTN': 'Bhutan',
+                'NPL': 'Nepal',
+                'MMR': 'Myanmar',
+                'LAO': 'Laos',
+                'KHM': 'Cambodia',
+                'MNG': 'Mongolia',
+                'PRK': 'North Korea',
+                'TWN': 'Taiwan',
+                'HKG': 'Hong Kong',
+                'MAC': 'Macao',
+                'UZB': 'Uzbekistan',
+                'KAZ': 'Kazakhstan',
+                'KGZ': 'Kyrgyzstan',
+                'TJK': 'Tajikistan',
+                'TKM': 'Turkmenistan',
+                'GEO': 'Georgia',
+                'ARM': 'Armenia',
+                'AZE': 'Azerbaijan',
+                'RUS': 'Russia',
+                'BLR': 'Belarus',
+                'UKR': 'Ukraine',
+                'MDA': 'Moldova',
+                'LTU': 'Lithuania',
+                'LVA': 'Latvia',
+                'EST': 'Estonia',
+                'FIN': 'Finland',
+                'ISL': 'Iceland',
+                'IRL': 'Ireland',
+                'MLT': 'Malta',
+                'CYP': 'Cyprus',
+                'MKD': 'North Macedonia',
+                'ALB': 'Albania',
+                'MNE': 'Montenegro',
+                'BIH': 'Bosnia and Herzegovina',
+                'SRB': 'Serbia',
+                'XKX': 'Kosovo',
+                'LIE': 'Liechtenstein',
+                'MCO': 'Monaco',
+                'SMR': 'San Marino',
+                'VAT': 'Vatican City',
+                'AND': 'Andorra',
+                'GIB': 'Gibraltar',
+                'IMN': 'Isle of Man',
+                'JEY': 'Jersey',
+                'GGY': 'Guernsey',
+                'FRO': 'Faroe Islands',
+                'GRL': 'Greenland',
+                'SJM': 'Svalbard and Jan Mayen',
+                'ALA': 'Åland Islands'
+            };
+            if (tournamentCountryMatch) {
+                const countryCode = tournamentCountryMatch[1];
+                country = countryMap[countryCode] || countryCode;
+            }
+            // If location extraction failed, try fallback patterns
+            if (!location) {
+                // Pattern for "CITY • COUNTRY_CODE"
+                const locationPattern = /([A-Z][A-Z\s]+)\s*•\s*([A-Z]{2,3})/g;
+                const locationMatch = bodyText.match(locationPattern);
+                if (locationMatch && locationMatch.length > 0) {
+                    const parts = locationMatch[0].split('•');
+                    if (parts.length === 2) {
+                        location = parts[0].trim();
+                        const countryCode = parts[1].trim();
+                        country = countryMap[countryCode] || countryCode;
+                    }
+                }
+            }
+            // Special handling for Royal Portrush/Northern Ireland
+            if (location === 'Portrush' || courseName?.includes('Royal Portrush')) {
+                location = 'Portrush, Northern Ireland';
+                country = 'United Kingdom';
+            }
+            // Extract par and yardage from Course Details section
+            let par = null;
+            let yardage = null;
+            // Look for the Course Details section text
+            const courseDetailsText = bodyText.match(/Course Details([\s\S]*?)(?=\n\n|\n[A-Z]|$)/);
+            if (courseDetailsText) {
+                const detailsText = courseDetailsText[1];
+                // Extract par
+                const parMatch = detailsText.match(/Par\s*(\d+)/i);
+                if (parMatch) {
+                    par = parseInt(parMatch[1], 10);
+                }
+                // Extract yardage
+                const yardageMatch = detailsText.match(/Yardage\s*([\d,]+)/i);
+                if (yardageMatch) {
+                    yardage = parseInt(yardageMatch[1].replace(/,/g, ''), 10);
+                }
+            }
+            // If not found in Course Details, try alternative patterns
+            if (!par) {
+                const parMatch = bodyText.match(/Par\s*(\d+)/i);
+                if (parMatch) {
+                    par = parseInt(parMatch[1], 10);
+                }
+            }
+            if (!yardage) {
+                const yardageMatch = bodyText.match(/(\d{4,5})\s*(?:yards?|yds?)/i);
+                if (yardageMatch) {
+                    yardage = parseInt(yardageMatch[1].replace(/,/g, ''), 10);
+                }
+            }
+            // Extract designer from Course Details
+            let designer = null;
+            if (courseDetailsText) {
+                const detailsText = courseDetailsText[1];
+                const designMatch = detailsText.match(/Design\s*([^\n]+)/i);
+                if (designMatch) {
+                    designer = designMatch[1].trim();
+                }
+            }
+            // If designer extraction failed or contains unwanted content, try alternative patterns
+            if (!designer || designer.includes('THE TOUR') || designer.includes('About') || designer.length > 100) {
+                // Look for designer patterns in the text that avoid footer content
+                const designerPatterns = [
+                    /Design(?:er|ed by)?\s*:?\s*([A-Z][a-zA-Z\s]+)(?=\s*(?:Par|Yardage|Established|$))/i,
+                    /Architect\s*:?\s*([A-Z][a-zA-Z\s]+)(?=\s*(?:Par|Yardage|Established|$))/i,
+                    /(?:^|\n)([A-Z][a-zA-Z\s]+)(?:\s*-\s*Designer|,\s*Designer)/i
+                ];
+                for (const pattern of designerPatterns) {
+                    const match = bodyText.match(pattern);
+                    if (match && match[1] && !match[1].includes('THE TOUR') && match[1].length < 50) {
+                        designer = match[1].trim();
+                        break;
+                    }
+                }
+            }
+            // Special handling for Royal Portrush - we know it was designed by Harry Colt
+            if (courseName?.includes('Royal Portrush') && (!designer || designer.includes('THE TOUR'))) {
+                designer = 'Harry Colt';
+            }
+            // Extract year established
+            let yearBuilt = null;
+            if (courseDetailsText) {
+                const detailsText = courseDetailsText[1];
+                const establishedMatch = detailsText.match(/Established\s*(\d{4})/i);
+                if (establishedMatch) {
+                    yearBuilt = parseInt(establishedMatch[1], 10);
+                }
+            }
+            // Determine course type based on name and location
+            let courseType = null;
+            if (courseName && location) {
+                const nameAndLocation = `${courseName} ${location}`.toLowerCase();
+                if (nameAndLocation.includes('links') ||
+                    nameAndLocation.includes('royal') ||
+                    country === 'Scotland' ||
+                    country === 'Northern Ireland' ||
+                    country === 'Ireland' ||
+                    country === 'England' && nameAndLocation.includes('coast')) {
+                    courseType = 'links';
+                }
+                else if (nameAndLocation.includes('desert') ||
+                    nameAndLocation.includes('scottsdale') ||
+                    nameAndLocation.includes('phoenix') ||
+                    nameAndLocation.includes('arizona')) {
+                    courseType = 'desert';
+                }
+                else if (nameAndLocation.includes('mountain') ||
+                    nameAndLocation.includes('elevation')) {
+                    courseType = 'mountain';
+                }
+                else {
+                    courseType = 'parkland'; // Default for most courses
+                }
+            }
+            // Extract difficulty factors from various sources
+            const difficultyFactors = {};
+            // Check weather conditions for wind
+            if (bodyText.includes('MPH')) {
+                const windMatch = bodyText.match(/(\d+)\s*MPH/);
+                if (windMatch) {
+                    const windSpeed = parseInt(windMatch[1], 10);
+                    if (windSpeed > 15) {
+                        difficultyFactors.wind = 'heavy';
+                    }
+                    else if (windSpeed > 8) {
+                        difficultyFactors.wind = 'moderate';
+                    }
+                    else {
+                        difficultyFactors.wind = 'light';
+                    }
+                }
+            }
+            // Determine green speed based on course type and reputation
+            if (courseType === 'links') {
+                difficultyFactors.greens = 'firm';
+            }
+            else if (courseName && courseName.toLowerCase().includes('augusta')) {
+                difficultyFactors.greens = 'extremely_fast';
+            }
+            else {
+                difficultyFactors.greens = 'moderate';
+            }
+            // Determine rough characteristics
+            if (courseType === 'links') {
+                difficultyFactors.rough = 'natural';
+            }
+            else if (courseName && (courseName.toLowerCase().includes('us open') ||
+                courseName.toLowerCase().includes('championship'))) {
+                difficultyFactors.rough = 'penal';
+            }
+            else {
+                difficultyFactors.rough = 'moderate';
+            }
+            // Extract hole statistics from the Hole Stats table
+            const holeStatistics = [];
+            console.log('[Browser] Extracting hole statistics...');
+            // Look for the hole statistics table
+            const holeStatsTable = document.querySelector('table');
+            if (holeStatsTable) {
+                console.log('[Browser] Found hole statistics table');
+                // Get all rows in the table
+                const rows = holeStatsTable.querySelectorAll('tr');
+                // Process each row (skip header row)
+                for (let i = 1; i < rows.length; i++) {
+                    const row = rows[i];
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length >= 6) {
+                        const holeText = cells[0]?.textContent?.trim();
+                        const parText = cells[1]?.textContent?.trim();
+                        const yardageText = cells[2]?.textContent?.trim();
+                        const avgText = cells[3]?.textContent?.trim();
+                        const rankText = cells[4]?.textContent?.trim();
+                        const relativeText = cells[5]?.textContent?.trim();
+                        // Skip summary rows (out, in, total)
+                        if (holeText && !['out', 'in', 'total'].includes(holeText.toLowerCase())) {
+                            const holeNumber = parseInt(holeText, 10);
+                            const holePar = parseInt(parText || '0', 10);
+                            const holeYardage = parseInt(yardageText?.replace(/,/g, '') || '0', 10);
+                            const scoringAverage = parseFloat(avgText || '0');
+                            const difficultyRank = parseInt(rankText || '0', 10);
+                            const relativeToPar = parseFloat(relativeText?.replace(/[+\-]/g, '') || '0');
+                            if (holeNumber >= 1 && holeNumber <= 18 && holePar >= 3 && holePar <= 6) {
+                                holeStatistics.push({
+                                    holeNumber: holeNumber,
+                                    par: holePar,
+                                    yardage: holeYardage,
+                                    scoringAverage: scoringAverage,
+                                    difficultyRank: difficultyRank,
+                                    relativeToPar: relativeText?.startsWith('-') ? -relativeToPar : relativeToPar,
+                                    holeLocation: holeNumber <= 9 ? 'front_nine' : 'back_nine'
+                                });
+                                console.log(`[Browser] Extracted hole ${holeNumber}: Par ${holePar}, ${holeYardage} yards, avg ${scoringAverage}, rank ${difficultyRank}`);
+                            }
+                        }
+                    }
+                }
+            }
+            else {
+                console.log('[Browser] No hole statistics table found');
+            }
+            console.log(`[Browser] Extracted ${holeStatistics.length} hole statistics`);
+            console.log('[Browser] Course info extraction completed');
+            console.log('[Browser] Extracted data:', {
+                courseName,
+                location,
+                country,
+                par,
+                yardage,
+                designer,
+                yearBuilt,
+                courseType,
+                difficultyFactors,
+                holeStatistics: holeStatistics.length
+            });
+            return {
+                courseName: courseName || 'Unknown Course',
+                location: location || 'Unknown Location',
+                country: country,
+                par: par,
+                yardage: yardage,
+                courseRating: null, // Not available on PGA Tour course stats page
+                slopeRating: null, // Not available on PGA Tour course stats page
+                courseType: courseType,
+                elevation: null, // Would need elevation API
+                designer: designer,
+                yearBuilt: yearBuilt,
+                difficultyFactors: difficultyFactors,
+                holeStatistics: holeStatistics.length > 0 ? holeStatistics : undefined,
+                lastUpdated: new Date().toISOString()
+            };
+        });
+        console.log(`Extracted course info:`, courseInfo);
+        return courseInfo;
+    }
+    catch (error) {
+        console.error(`Error scraping course info from ${tournamentUrl}:`, error);
+        return null;
+    }
+    finally {
+        await browser.close();
+    }
+}
+/**
+ * Scrapes course information from multiple tournament URLs
+ * @param tournamentUrls Array of tournament URLs to scrape
+ * @param debugMode Enable debug mode
+ * @returns Array of course information
+ */
+async function scrapeMultipleCourses(tournamentUrls, debugMode = false) {
+    console.log(`Starting to scrape ${tournamentUrls.length} tournament courses`);
+    const results = [];
+    // Process sequentially to avoid overwhelming the server
+    for (const url of tournamentUrls) {
+        try {
+            const courseInfo = await scrapeCourseInfo(url, debugMode);
+            if (courseInfo) {
+                results.push(courseInfo);
+            }
+            // Wait between requests to be respectful
+            await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+        catch (error) {
+            console.error(`Error scraping ${url}:`, error);
+        }
+    }
+    return results;
 }

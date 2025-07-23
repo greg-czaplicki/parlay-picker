@@ -18,7 +18,7 @@ export interface PlayerSGData {
   seasonDrivingAcc?: number | null;
   seasonDrivingDist?: number | null;
   
-  // Tournament/Live SG data (from latest_live_tournament_stats_view)
+  // Tournament/Live SG data (from live_tournament_stats)
   sgTotal?: number | null;
   sgPutt?: number | null;
   sgArg?: number | null;

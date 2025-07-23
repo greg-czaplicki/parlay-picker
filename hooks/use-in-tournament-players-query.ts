@@ -110,7 +110,7 @@ export function useInTournamentPlayersQuery({
       if (round === 'live') {
         // First, try to get 'event_avg' data
         let query = supabase
-          .from('latest_live_tournament_stats_view')
+          .from('live_tournament_stats')
           .select('*')
           .eq('round_num', 'event_avg')
           
@@ -133,7 +133,7 @@ export function useInTournamentPlayersQuery({
         
         // Query for available rounds for this event
         let roundsQuery = supabase
-          .from('latest_live_tournament_stats_view')
+          .from('live_tournament_stats')
           .select('round_num')
           
         if (eventName) {
@@ -156,7 +156,7 @@ export function useInTournamentPlayersQuery({
             
             // Fetch data for the latest round
             let latestQuery = supabase
-              .from('latest_live_tournament_stats_view')
+              .from('live_tournament_stats')
               .select('*')
               .eq('round_num', latestRound)
               
@@ -217,7 +217,7 @@ export function useInTournamentPlayersQuery({
       // For current rounds (4, event_avg) or fallback, use live stats
       console.log(`Fetching live data for round ${dbRound}`)
       let query = supabase
-        .from('latest_live_tournament_stats_view')
+        .from('live_tournament_stats')
         .select('*')
         
       if (dbRound !== 'latest') {

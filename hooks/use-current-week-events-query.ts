@@ -33,12 +33,21 @@ async function fetchCurrentWeekEvents(): Promise<Event[]> {
   const supabase = createBrowserClient();
   const { monday, sunday } = getCurrentWeekRange();
   const { data, error } = await supabase
-    .from('tournaments_v2')
-    .select('event_id, event_name, start_date, end_date')
+    .from('tournaments')
+    .select('dg_id, name, start_date, end_date')
     .lte('start_date', sunday)
     .gte('end_date', monday);
   if (error) throw error;
-  return data || [];
+  
+  // Map data to expected format for compatibility
+  const events: Event[] = (data || []).map((t: any) => ({
+    event_id: t.dg_id,
+    event_name: t.name,
+    start_date: t.start_date,
+    end_date: t.end_date,
+  }));
+  
+  return events;
 }
 
 // Add a query key for current week events if not present

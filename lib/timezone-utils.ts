@@ -185,27 +185,84 @@ export function convertTournamentTimeToUTC(
     const [year, month, day] = datePart.split('-');
     const [hour, minute] = timePart.split(':');
     
-    // Create date in the tournament timezone using a simpler approach
-    // We'll use the fact that we know specific timezone offsets
-    const localDateTime = new Date(
+    // Create an ISO string representation of the local time
+    const isoString = `${year}-${month}-${day}T${hour}:${minute}:00`;
+    
+    // Use Intl.DateTimeFormat to create a date in the specific timezone
+    // This is more reliable than manual offset calculations
+    const tempDate = new Date(`${isoString}Z`); // Treat as UTC temporarily
+    
+    // Create a formatter for the tournament timezone
+    const formatter = new Intl.DateTimeFormat('sv-SE', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit', 
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
+    
+    // Get what time it would be in the tournament timezone if it were this UTC time
+    const formattedInTimezone = formatter.format(tempDate);
+    const [tzDatePart, tzTimePart] = formattedInTimezone.split(' ');
+    
+    // Calculate the difference between what we want and what we got
+    const wantedString = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')} ${hour.padStart(2, '0')}:${minute.padStart(2, '0')}:00`;
+    const gotString = `${tzDatePart} ${tzTimePart}`;
+    
+    const wantedTime = new Date(`${wantedString.replace(' ', 'T')}Z`).getTime();
+    const gotTime = new Date(`${gotString.replace(' ', 'T')}Z`).getTime();
+    const offsetMs = wantedTime - gotTime;
+    
+    // Apply the offset to get the correct UTC time
+    const correctUtcTime = tempDate.getTime() + offsetMs;
+    
+    return new Date(correctUtcTime).toISOString();
+  } catch (error) {
+    console.error(`Failed to convert time "${localTimeString}" for tournament "${tournamentName}":`, error);
+    // Use the simpler fallback approach with known offsets
+    return convertWithKnownOffsets(localTimeString, timezone);
+  }
+}
+
+// Fallback function using known timezone offsets
+function convertWithKnownOffsets(localTimeString: string, timezone: string): string | null {
+  try {
+    const [datePart, timePart] = localTimeString.split(' ');
+    const [year, month, day] = datePart.split('-');
+    const [hour, minute] = timePart.split(':');
+    
+    // Create local date
+    const localDate = new Date(
       parseInt(year), 
-      parseInt(month) - 1, // Month is 0-indexed
+      parseInt(month) - 1, 
       parseInt(day), 
       parseInt(hour), 
       parseInt(minute), 
       0
     );
     
-    // Get the timezone offset in minutes for this date
-    const utcOffset = getTimezoneOffset(timezone, localDateTime);
+    // Known timezone offsets in minutes from UTC (negative means behind UTC)
+    const knownOffsets: Record<string, number> = {
+      'America/New_York': -240, // EDT (UTC-4) in summer
+      'America/Chicago': -300,  // CDT (UTC-5) in summer  
+      'America/Denver': -360,   // MDT (UTC-6) in summer
+      'America/Los_Angeles': -420, // PDT (UTC-7) in summer
+      'America/Phoenix': -420,  // MST (no DST, UTC-7)
+      'Pacific/Honolulu': -600, // HST (no DST, UTC-10)
+      'Europe/London': 60,      // BST (UTC+1) in summer
+    };
     
-    // Convert to UTC by subtracting the offset
-    const utcTime = localDateTime.getTime() - (utcOffset * 60 * 1000);
+    const offsetMinutes = knownOffsets[timezone] || 0;
+    
+    // Convert to UTC by subtracting the offset (since offset is already negative for US timezones)
+    const utcTime = localDate.getTime() - (offsetMinutes * 60 * 1000);
     
     return new Date(utcTime).toISOString();
   } catch (error) {
-    console.error(`Failed to convert time "${localTimeString}" for tournament "${tournamentName}":`, error);
-    // Fallback to treating as UTC (current behavior)
+    console.error('Fallback conversion failed:', error);
     return new Date(localTimeString).toISOString();
   }
 }

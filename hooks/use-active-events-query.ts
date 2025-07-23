@@ -52,16 +52,25 @@ async function fetchActiveEvents(): Promise<DisplayEvent[]> {
   const mondayStr = monday.toISOString().split('T')[0]
   const sundayStr = sunday.toISOString().split('T')[0]
   const { data, error } = await supabase
-    .from('tournaments_v2')
-    .select('event_id, event_name, start_date, end_date, tour')
+    .from('tournaments')
+    .select('dg_id, name, start_date, end_date, tour')
     .lte('start_date', sundayStr)
     .gte('end_date', mondayStr)
     .order('tour', { ascending: true })
-    .order('event_id', { ascending: true })
+    .order('dg_id', { ascending: true })
   if (error) throw new Error(error.message)
   if (!data || data.length === 0) return []
+  // Map raw data to expected format
+  const tournaments: Tournament[] = data.map((t: any) => ({
+    event_id: t.dg_id,
+    event_name: t.name,
+    start_date: t.start_date,
+    end_date: t.end_date,
+    tour: t.tour
+  }));
+  
   // Identify PGA events
-  const pgaEvents = data.filter((t: Tournament) => t.tour === 'pga' || !t.tour)
+  const pgaEvents = tournaments.filter((t: Tournament) => t.tour === 'pga' || !t.tour)
   let mainEventId = -1
   if (pgaEvents.length > 0) {
     const lowestIdPgaEvent = pgaEvents.reduce((lowest, current) =>
@@ -69,7 +78,7 @@ async function fetchActiveEvents(): Promise<DisplayEvent[]> {
     mainEventId = lowestIdPgaEvent.event_id
   }
   // Map and type events
-  let eventsWithTypes: DisplayEvent[] = data.map((tournament: Tournament) => {
+  let eventsWithTypes: DisplayEvent[] = tournaments.map((tournament: Tournament) => {
     let eventType: EventType = null
     if (tournament.tour === 'euro') {
       eventType = 'euro'

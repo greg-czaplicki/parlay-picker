@@ -41,7 +41,7 @@ export function usePlayerTableQuery({
     queryFn: async () => {
       const supabase = createBrowserClient()
       let query = supabase
-        .from('latest_live_tournament_stats_view')
+        .from('live_tournament_stats')
         .select('*')
       if (roundFilter !== 'latest') {
         query = query.eq('round_num', roundFilter)

@@ -1,0 +1,52 @@
+{
+  "courses": [
+    {
+      "courseName": "Test Course with Hole Statistics v2",
+      "location": "Test Location v2",
+      "country": "United States",
+      "par": 72,
+      "yardage": 7200,
+      "courseRating": 74.2,
+      "slopeRating": 135,
+      "courseType": "parkland",
+      "elevation": 500,
+      "designer": "Test Designer",
+      "yearBuilt": 1990,
+      "difficultyFactors": {
+        "wind": "moderate",
+        "rough": "thick",
+        "greens": "fast"
+      },
+      "holeStatistics": [
+        {
+          "holeNumber": 1,
+          "par": 4,
+          "yardage": 420,
+          "scoringAverage": 4.286,
+          "difficultyRank": 4,
+          "relativeToPar": 0.286,
+          "holeLocation": "front_nine"
+        },
+        {
+          "holeNumber": 2,
+          "par": 5,
+          "yardage": 575,
+          "scoringAverage": 4.783,
+          "difficultyRank": 16,
+          "relativeToPar": -0.217,
+          "holeLocation": "front_nine"
+        },
+        {
+          "holeNumber": 18,
+          "par": 4,
+          "yardage": 474,
+          "scoringAverage": 4.241,
+          "difficultyRank": 6,
+          "relativeToPar": 0.241,
+          "holeLocation": "back_nine"
+        }
+      ],
+      "lastUpdated": "2024-07-18T13:30:00Z"
+    }
+  ]
+}

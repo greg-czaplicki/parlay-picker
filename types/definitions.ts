@@ -32,7 +32,7 @@ export type PlayerSkillRating = {
   updated_at: string; // Supabase timestamp for this record
 };
 
-// Type for Live Tournament Stats (from latest_live_tournament_stats_view)
+// Type for Live Tournament Stats (from live_tournament_stats)
 export type LiveTournamentStat = {
   dg_id: bigint;
   player_name: string;

@@ -2,6 +2,7 @@
 // Types for PGA Tour stats scraping
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.backupStatsCategoryUrls = exports.statsCategoryUrls = exports.StatsCategory = void 0;
+exports.generateCourseIdFromName = generateCourseIdFromName;
 // Stats categories to scrape from PGA Tour
 var StatsCategory;
 (function (StatsCategory) {
@@ -35,3 +36,14 @@ exports.backupStatsCategoryUrls = {
     [StatsCategory.DRIVING_ACCURACY]: 'https://www.pgatour.com/stats/stat/102.html',
     [StatsCategory.DRIVING_DISTANCE]: 'https://www.pgatour.com/stats/stat/101.html'
 };
+// Helper function to generate course ID from name
+function generateCourseIdFromName(courseName) {
+    if (!courseName)
+        return '';
+    // Remove non-alphanumeric characters and convert to lowercase
+    const cleaned = courseName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    // Remove consecutive underscores
+    const normalized = cleaned.replace(/_+/g, '_');
+    // Trim underscores from start and end
+    return normalized.replace(/^_|_$/g, '');
+}

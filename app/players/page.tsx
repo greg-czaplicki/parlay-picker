@@ -55,7 +55,7 @@ async function getInitialPlayerData() {
     // 1. Get latest event name
     let latestEventName: string | null = null
     const { data: latestEventData, error: eventError } = await supabaseServerClient
-      .from('latest_live_tournament_stats_view')
+      .from('live_tournament_stats')
       .select('event_name')
       .order('data_golf_updated_at', { ascending: false })
       .limit(1)
@@ -68,7 +68,7 @@ async function getInitialPlayerData() {
     let liveStats: LiveTournamentStat[] = []
     if (latestEventName) {
       const { data: liveData, error: liveError } = await supabaseServerClient
-        .from("latest_live_tournament_stats_view")
+        .from("live_tournament_stats")
         .select("*")
         .eq('event_name', latestEventName)
         .eq('round_num', 'event_avg') // Fetch default view

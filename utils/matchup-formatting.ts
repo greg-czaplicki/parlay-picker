@@ -34,55 +34,28 @@ export const formatTeeTime = (
   tournamentName?: string, 
   courseName?: string
 ): { localTime: string; easternTime: string } => {
-  // Always return test values to debug
-  return { localTime: "10:35 AM", easternTime: "5:35 AM" };
-    // Fallback to the old logic for backwards compatibility
-    try {
-      if (teeTime.includes(' ') && !teeTime.includes('T')) {
-        const timePart = teeTime.split(' ')[1];
-        if (timePart) {
-          const [hoursStr, minutesStr] = timePart.split(':');
-          const hours = parseInt(hoursStr, 10);
-          const minutes = parseInt(minutesStr, 10);
-          
-          if (isNaN(hours) || isNaN(minutes)) {
-            return { localTime: "-", easternTime: "" };
-          }
-          
-          const localDate = new Date();
-          localDate.setHours(hours, minutes, 0, 0);
-          
-          const localTime = localDate.toLocaleTimeString('en-US', {
-            hour: 'numeric',
-            minute: '2-digit',
-            hour12: true
-          });
-          
-          return { localTime, easternTime: "" };
-        }
-      }
-      
-      const teeTimeDate = new Date(teeTime);
-      if (isNaN(teeTimeDate.getTime())) {
-        return { localTime: "-", easternTime: "" };
-      }
-      
-      const hours = teeTimeDate.getUTCHours();
-      const minutes = teeTimeDate.getUTCMinutes();
-      
-      const localDate = new Date();
-      localDate.setHours(hours, minutes, 0, 0);
-      
-      const localTime = localDate.toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true
-      });
-      
-      return { localTime, easternTime: "" };
-    } catch (fallbackError) {
-      return { localTime: "-", easternTime: "" };
-    }
+  if (!teeTime) {
+    return { localTime: "-", easternTime: "" };
+  }
+
+  try {
+    // Use the proper timezone conversion from timezone-utils
+    const displayTimes = getDisplayTimes(teeTime, tournamentName || "", courseName);
+    
+    // Debug logging
+    console.log('🕐 formatTeeTime debug:', {
+      input: teeTime,
+      tournament: tournamentName,
+      output: displayTimes
+    });
+    
+    return { 
+      localTime: displayTimes.tournamentTime || "-", 
+      easternTime: displayTimes.easternTime || "" 
+    };
+  } catch (error) {
+    console.error('Failed to format tee time:', error);
+    return { localTime: "-", easternTime: "" };
   }
 };
 

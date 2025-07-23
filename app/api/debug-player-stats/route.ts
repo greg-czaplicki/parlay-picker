@@ -39,9 +39,9 @@ export async function GET(req: NextRequest) {
       const isActiveTournament = tournamentStart && tournamentEnd && 
                                  now >= tournamentStart && now <= tournamentEnd;
 
-      // Check what data exists in latest_live_tournament_stats_view
+      // Check what data exists in live_tournament_stats
       const { data: liveStats, error: liveStatsError } = await supabase
-        .from('latest_live_tournament_stats_view')
+        .from('live_tournament_stats')
         .select('dg_id, player_name, position, total, today, thru, data_golf_updated_at')
         .eq('event_name', event.event_name)
         .limit(5);

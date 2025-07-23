@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     
     for (const tournament of activeTournaments) {
       const { data: stats } = await supabase
-        .from('latest_live_tournament_stats_view')
+        .from('live_tournament_stats')
         .select('data_golf_updated_at, round_num')
         .eq('event_name', tournament.event_name)
         .order('data_golf_updated_at', { ascending: false })
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
       
       // Check if we have SG data
       const { data: sgCheck } = await supabase
-        .from('latest_live_tournament_stats_view')
+        .from('live_tournament_stats')
         .select('sg_total')
         .eq('event_name', tournament.event_name)
         .not('sg_total', 'is', null)

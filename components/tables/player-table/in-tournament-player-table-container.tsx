@@ -122,6 +122,9 @@ function LiveStatsTable({ eventId, roundFilter, eventOptions }: { eventId: numbe
 
   // Restore all rows for performance
   const displayPlayers = useMemo(() => liveStats ?? [], [liveStats]);
+  
+  // Debug logging
+  console.log('LiveStatsTable rendering with:', { eventId, roundFilter, playerCount: displayPlayers.length });
 
   // Updated heatmap logic to use season stats color scheme
   const SG_COLUMNS = ['sg_putt', 'sg_arg', 'sg_app', 'sg_ott', 'sg_t2g', 'sg_total'];
@@ -148,6 +151,12 @@ function LiveStatsTable({ eventId, roundFilter, eventOptions }: { eventId: numbe
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'total', desc: false }
   ]);
+
+  // Ensure columns are defined before creating table
+  if (!columns || columns.length === 0) {
+    console.error('No columns defined for tournament table');
+    return <PlayerTableSkeleton rows={10} columns={8} />;
+  }
 
   const table = useReactTable({
     data: displayPlayers,
@@ -217,6 +226,12 @@ function LastEventStatsTable({ eventId, eventName }: { eventId: number; eventNam
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'total', desc: false }
   ]);
+
+  // Ensure columns are defined before creating table
+  if (!columns || columns.length === 0) {
+    console.error('No columns defined for tournament table');
+    return <PlayerTableSkeleton rows={10} columns={8} />;
+  }
 
   const table = useReactTable({
     data: displayPlayers,

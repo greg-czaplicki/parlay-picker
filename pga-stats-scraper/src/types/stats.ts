@@ -54,3 +54,60 @@ export const backupStatsCategoryUrls: Record<StatsCategory, string> = {
   [StatsCategory.DRIVING_ACCURACY]: 'https://www.pgatour.com/stats/stat/102.html',
   [StatsCategory.DRIVING_DISTANCE]: 'https://www.pgatour.com/stats/stat/101.html'
 };
+
+// Hole statistics interface
+export interface HoleStatistic {
+  holeNumber: number;
+  par: number;
+  yardage: number;
+  scoringAverage: number;
+  difficultyRank: number;
+  relativeToPar: number;
+  holeLocation: 'front_nine' | 'back_nine';
+}
+
+// Course information interfaces
+export interface CourseInfo {
+  courseName: string;
+  location: string;
+  country: string;
+  par: number | null;
+  yardage: number | null;
+  courseRating: number | null;
+  slopeRating: number | null;
+  courseType: string | null;
+  elevation: number | null;
+  designer: string | null;
+  yearBuilt: number | null;
+  difficultyFactors: {
+    wind?: string;
+    rough?: string;
+    greens?: string;
+    waterHazards?: string;
+    elevationChanges?: string;
+    treeLineage?: string;
+  };
+  holeStatistics?: HoleStatistic[]; // Optional hole-by-hole data
+  lastUpdated: string;
+}
+
+export interface TournamentCourseData {
+  tournamentId: string;
+  tournamentName: string;
+  year: number;
+  courseInfo: CourseInfo;
+}
+
+// Helper function to generate course ID from name
+export function generateCourseIdFromName(courseName: string): string {
+  if (!courseName) return '';
+  
+  // Remove non-alphanumeric characters and convert to lowercase
+  const cleaned = courseName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+  
+  // Remove consecutive underscores
+  const normalized = cleaned.replace(/_+/g, '_');
+  
+  // Trim underscores from start and end
+  return normalized.replace(/^_|_$/g, '');
+}

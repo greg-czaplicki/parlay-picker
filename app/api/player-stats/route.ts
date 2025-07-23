@@ -73,7 +73,7 @@ export async function GET(req: NextRequest) {
     // Check if tournament has started by looking for Round 1 completion
     // Only show position/score data after first round is complete
     const { data: round1Check, error: round1Error } = await supabase
-      .from('latest_live_tournament_stats_view')
+      .from('live_tournament_stats')
       .select('round_num')
       .eq('event_name', eventName)
       .eq('round_num', '1')
@@ -141,7 +141,7 @@ export async function GET(req: NextRequest) {
     let allEventStats: any[] = [];
     if (hasRound1Data) {
       const { data: eventStatsData, error: allEventStatsError } = await supabase
-        .from('latest_live_tournament_stats_view')
+        .from('live_tournament_stats')
         .select(`
           dg_id,
           player_name,
