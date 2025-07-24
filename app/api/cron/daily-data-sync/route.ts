@@ -80,13 +80,13 @@ export async function GET(request: NextRequest) {
     }
 
     // 3. Refresh matchups data (all tours)
-    console.log('🏌️ Refreshing matchups data...')
+    console.log('🏌️ Refreshing matchups data for all tours...')
     try {
-      const matchupsResponse = await fetch(`${baseUrl}/api/matchups/refresh`, {
-        method: 'POST',
+      const matchupsResponse = await fetch(`${baseUrl}/api/cron/ingest-matchups`, {
+        method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.INGEST_SECRET}`
+          'Authorization': `Bearer ${process.env.CRON_SECRET}`
         }
       })
 
