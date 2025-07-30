@@ -95,10 +95,93 @@ export function useInTournamentPlayersQuery({
     staleTime: 60_000, // 1 minute
     gcTime: 5 * 60_000, // 5 minutes
     queryFn: async () => {
-      // TEMPORARY: Return empty data until we implement the new schema queries
-      // The live_tournament_stats table no longer exists after the database migration
-      console.warn('InTournamentPlayersQuery: live_tournament_stats table migrated to tournament_rounds. Returning empty data until queries are updated.');
-      return [];
+      if (!eventId) {
+        console.log('No eventId provided, returning empty array')
+        return []
+      }
+
+      const supabase = createBrowserClient()
+      console.log(`Fetching live tournament stats for event ${eventId}, round: ${round}`)
+
+      try {
+        let query = supabase
+          .from('live_tournament_stats')
+          .select(`
+            dg_id,
+            player_name,
+            event_name,
+            round_num,
+            position,
+            total,
+            today,
+            thru,
+            sg_total,
+            sg_ott,
+            sg_app,
+            sg_arg,
+            sg_putt,
+            sg_t2g,
+            accuracy,
+            distance,
+            gir,
+            prox_fw,
+            scrambling,
+            data_golf_updated_at
+          `)
+          .order('position', { ascending: true, nullsFirst: false })
+
+        // Filter by event name if we have one from eventOptions
+        const eventName = eventOptions.find(e => e.dg_id === eventId)?.name
+        if (eventName) {
+          query = query.eq('event_name', eventName)
+        }
+
+        // Handle round filtering
+        if (round === 'live') {
+          // For live view, prefer event_avg if available, otherwise get latest round
+          console.log('Live round requested - checking for event_avg data first')
+          
+          let { data: eventAvgData, error: eventAvgError } = await query
+            .eq('round_num', 'event_avg')
+
+          if (eventAvgError) {
+            console.warn('Error fetching event_avg data:', eventAvgError)
+          }
+
+          if (eventAvgData && eventAvgData.length > 0) {
+            console.log(`Found ${eventAvgData.length} players with event_avg data`)
+            return processRoundData(eventAvgData, 'event_avg', eventName || null)
+          } else {
+            console.log('No event_avg data found, falling back to latest available round')
+            // Fallback: get the latest round data
+            let { data: latestData, error: latestError } = await query
+              .in('round_num', ['4', '3', '2', '1'])
+              .order('round_num', { ascending: false })
+              .limit(200)
+
+            if (latestError) {
+              console.error('Error fetching latest round data:', latestError)
+              return []
+            }
+
+            return processRoundData(latestData || [], 'live', eventName || null)
+          }
+        } else {
+          // Specific round requested
+          console.log(`Specific round requested: ${round}`)
+          let { data, error } = await query.eq('round_num', round)
+
+          if (error) {
+            console.error(`Error fetching round ${round} data:`, error)
+            return []
+          }
+
+          return processRoundData(data || [], round, eventName || null)
+        }
+      } catch (error) {
+        console.error('Error in live tournament stats query:', error)
+        return []
+      }
     },
   })
 }
