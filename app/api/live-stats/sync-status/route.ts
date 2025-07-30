@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     // Get active tournaments
     const today = new Date().toISOString().split('T')[0]
     const { data: activeTournaments } = await supabase
-      .from('tournaments_v2')
+      .from('tournaments')
       .select('event_id, event_name, start_date, end_date, tour')
       .lte('start_date', today)
       .gte('end_date', today)

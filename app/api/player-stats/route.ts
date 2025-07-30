@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
 
     // Lookup event_name from event_id using tournaments table
     const { data: eventRows, error: eventError } = await supabase
-      .from('tournaments_v2')
+      .from('tournaments')
       .select('event_name, start_date, end_date')
       .eq('event_id', Number(eventId))
       .limit(1);

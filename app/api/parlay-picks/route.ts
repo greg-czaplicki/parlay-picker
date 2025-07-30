@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
   // TODO: Add authentication and input validation
   const pick = await req.json()
   const { data, error } = await supabase
-    .from('parlay_picks_v2')
+    .from('parlay_picks')
     .insert([pick])
     .select()
     .single()
@@ -46,7 +46,7 @@ export async function PATCH(req: NextRequest) {
   // TODO: Add authentication and input validation
   const { id, ...fields } = await req.json()
   const { data, error } = await supabase
-    .from('parlay_picks_v2')
+    .from('parlay_picks')
     .update(fields)
     .eq('id', id)
     .select()
@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
   // TODO: Add authentication, filter by parlay_id
   const { searchParams } = new URL(req.url)
   const parlay_id = searchParams.get('parlay_id')
-  let query = supabase.from('parlay_picks_v2').select('*')
+  let query = supabase.from('parlay_picks').select('*')
   if (parlay_id) query = query.eq('parlay_id', parlay_id)
   const { data, error } = await query.order('created_at', { ascending: false })
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })

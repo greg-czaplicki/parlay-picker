@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
 
     // Verify event exists
     const { data: tournament, error: tournamentError } = await supabase
-      .from('tournaments_v2')
+      .from('tournaments')
       .select('event_id, event_name, tour')
       .eq('event_id', eventId)
       .single()
@@ -122,10 +122,10 @@ async function getEventsWithUnsettledParlays(supabase: any) {
   
   // Get unsettled parlay picks with their matchup event_ids
   const { data: pickData, error: pickError } = await supabase
-    .from('parlay_picks_v2')
+    .from('parlay_picks')
     .select(`
       event_id,
-      matchups_v2!inner(event_id)
+      betting_markets!inner(event_id)
     `)
     .eq('settlement_status', 'pending')
 
@@ -139,7 +139,7 @@ async function getEventsWithUnsettledParlays(supabase: any) {
   // Get unique event IDs from both direct event_id and matchup.event_id
   const eventIds = [...new Set((pickData || []).map((p: any) => {
     // Use direct event_id if available, otherwise use matchup.event_id
-    return p.event_id || p.matchups_v2?.event_id
+    return p.event_id || p.betting_markets?.event_id
   }).filter(Boolean))]
   
   logger.info(`Unique event IDs with unsettled picks: ${eventIds.join(', ')}`)
@@ -150,7 +150,7 @@ async function getEventsWithUnsettledParlays(supabase: any) {
 
   // Now fetch tournament info for these events
   const { data: tournamentData, error: tournamentError } = await supabase
-    .from('tournaments_v2')
+    .from('tournaments')
     .select('event_id, event_name, tour')
     .in('event_id', eventIds)
 
@@ -198,7 +198,7 @@ export async function GET(request: NextRequest) {
     if (eventId) {
       // Get settlement status for specific event
       const { data, error } = await supabase
-        .from('parlay_picks_v2')
+        .from('parlay_picks')
         .select(`
           uuid,
           settlement_status,

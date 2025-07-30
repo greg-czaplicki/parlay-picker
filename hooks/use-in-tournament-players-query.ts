@@ -6,7 +6,7 @@ import type { LiveTournamentStat } from '@/types/definitions'
 interface UseInTournamentPlayersQueryParams {
   eventId: number | null
   round: string
-  eventOptions: { event_id: number; event_name: string }[]
+  eventOptions: { dg_id: number; name: string }[]
 }
 
 // Helper function to detect if scores are raw (stroke count) vs to-par

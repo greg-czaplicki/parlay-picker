@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   let matchupData = []
   if (pickMatchupIds.length > 0) {
     const { data: matchupsData, error: matchupsError } = await supabase
-      .from('matchups_v2')
+      .from('betting_markets')
       .select('*')
       .in('id', pickMatchupIds)
     if (matchupsError) return NextResponse.json({ error: matchupsError.message }, { status: 400 })
@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
   
   // Insert parlay with calculated values into V2 table
   const { data: parlay, error: parlayError } = await supabase
-    .from('parlays_v2')
+    .from('parlays')
     .insert([
       {
         user_id,
@@ -134,7 +134,7 @@ export async function POST(req: NextRequest) {
     ...pick,
     parlay_id: parlay.id, // Use integer ID from V2 table
   }))
-  const { error: picksError } = await supabase.from('parlay_picks_v2').insert(picksWithParlayId)
+  const { error: picksError } = await supabase.from('parlay_picks').insert(picksWithParlayId)
   if (picksError) return NextResponse.json({ error: picksError.message }, { status: 400 })
   
   return NextResponse.json({ parlay })
@@ -161,7 +161,7 @@ export async function GET(req: NextRequest) {
   
   // Fetch parlays with stored calculated values from V2 table
   const { data: parlays, error: parlaysError } = await supabase
-    .from('parlays_v2')
+    .from('parlays')
     .select('*')
     .eq('user_id', user_id)
     .order('created_at', { ascending: false })
@@ -172,7 +172,7 @@ export async function GET(req: NextRequest) {
   let picks = []
   if (parlayIds.length > 0) {
     const { data: picksData, error: picksError } = await supabase
-      .from('parlay_picks_v2')
+      .from('parlay_picks')
       .select('*')
       .in('parlay_id', parlayIds)
     if (picksError) return NextResponse.json({ error: picksError.message }, { status: 400 })
@@ -184,7 +184,7 @@ export async function GET(req: NextRequest) {
   let matchups: any[] = []
   if (matchupIds.length > 0) {
     const { data: matchupsData, error: matchupsError } = await supabase
-      .from('matchups_v2')
+      .from('betting_markets')
       .select('id, type, round_num, event_id, player1_name, player2_name, player3_name, player1_dg_id, player2_dg_id, player3_dg_id, odds1, odds2, odds3, tee_time')
       .in('id', matchupIds)
     if (matchupsError) return NextResponse.json({ error: matchupsError.message }, { status: 400 })
@@ -198,7 +198,7 @@ export async function GET(req: NextRequest) {
   
   if (eventIds.length > 0) {
     const { data: tournamentsData, error: tournamentsError } = await supabase
-      .from('tournaments_v2')
+      .from('tournaments')
       .select('event_id, event_name, start_date, end_date')
       .in('event_id', eventIds)
     if (!tournamentsError && tournamentsData) {

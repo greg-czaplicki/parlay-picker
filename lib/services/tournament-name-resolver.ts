@@ -115,9 +115,9 @@ export class TournamentNameResolver {
     startDate?: string
   ): Promise<Omit<TournamentMatch, 'confidence' | 'match_type'> | null> {
     let query = this.supabase
-      .from('tournaments_v2')
-      .select('event_id, event_name, tour, start_date, course_name')
-      .eq('event_name', eventName)
+      .from('tournaments')
+      .select('dg_id as event_id, name as event_name, tour, start_date')
+      .eq('name', eventName)
 
     if (tour) query = query.eq('tour', tour)
     if (startDate) query = query.gte('start_date', startDate).lte('end_date', startDate)
@@ -137,7 +137,7 @@ export class TournamentNameResolver {
       .from('tournament_aliases')
       .select(`
         event_id,
-        tournaments!inner(event_name, tour, start_date, end_date, course_name)
+        tournaments!inner(dg_id, name, tour, start_date, end_date, course_name)
       `)
       .eq('alias_name', eventName)
 
@@ -163,11 +163,11 @@ export class TournamentNameResolver {
     const match = filtered[0]
     const tournament = match.tournaments as any
     return {
-      event_id: match.event_id,
-      event_name: tournament.event_name,
+      event_id: tournament.dg_id,
+      event_name: tournament.name,
       tour: tournament.tour,
       start_date: tournament.start_date,
-      course_name: tournament.course_name
+      course_name: null
     }
   }
 
@@ -178,8 +178,8 @@ export class TournamentNameResolver {
   ): Promise<TournamentMatch | null> {
     // Get tournaments for fuzzy matching
     let query = this.supabase
-      .from('tournaments_v2')
-      .select('event_id, event_name, tour, start_date, end_date')
+      .from('tournaments')
+      .select('dg_id as event_id, name as event_name, tour, start_date, end_date')
 
     if (tour) query = query.eq('tour', tour)
 
@@ -261,9 +261,9 @@ export class TournamentNameResolver {
   ): Promise<Omit<TournamentMatch, 'confidence' | 'match_type'> | null> {
     // Look for exact match across all tours
     let query = this.supabase
-      .from('tournaments_v2')
-      .select('event_id, event_name, tour, start_date, course_name')
-      .eq('event_name', eventName)
+      .from('tournaments')
+      .select('dg_id as event_id, name as event_name, tour, start_date')
+      .eq('name', eventName)
 
     if (startDate) {
       query = query.gte('start_date', startDate).lte('end_date', startDate)
@@ -298,8 +298,8 @@ export class TournamentNameResolver {
 
     // Get suggestions for low confidence or no matches
     let query = this.supabase
-      .from('tournaments_v2')
-      .select('event_name')
+      .from('tournaments')
+      .select('name as event_name')
       .order('start_date', { ascending: false })
       .limit(20)
 

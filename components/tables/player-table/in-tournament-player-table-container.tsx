@@ -66,11 +66,11 @@ export function InTournamentPlayerTableContainer() {
         <div className="space-y-6">
           <div className="glass-card p-4">
             <div className="text-muted-foreground">
-              No live event. Showing results from <span className="text-foreground font-semibold">{lastEvent.event_name}</span> (ended {lastEvent.end_date}).
+              No live event. Showing results from <span className="text-foreground font-semibold">{lastEvent.name}</span> (ended {lastEvent.end_date}).
             </div>
           </div>
           <div className="glass-card">
-            <LastEventStatsTable eventId={lastEvent.event_id} eventName={lastEvent.event_name} />
+            <LastEventStatsTable eventId={lastEvent.dg_id} eventName={lastEvent.name} />
           </div>
         </div>
       </Suspense>
@@ -113,7 +113,7 @@ function hasSGData<T>(data: T[]): boolean {
  * @param roundFilter - The selected round filter
  * @param eventOptions - List of event options for lookup
  */
-function LiveStatsTable({ eventId, roundFilter, eventOptions }: { eventId: number; roundFilter: string; eventOptions: { event_id: number; event_name: string }[] }) {
+function LiveStatsTable({ eventId, roundFilter, eventOptions }: { eventId: number; roundFilter: string; eventOptions: { dg_id: number; name: string }[] }) {
   const { data: liveStats } = useInTournamentPlayersQuery({
     eventId,
     round: roundFilter,
@@ -191,7 +191,7 @@ function LiveStatsTable({ eventId, roundFilter, eventOptions }: { eventId: numbe
  * @param eventName - The last event's name
  */
 function LastEventStatsTable({ eventId, eventName }: { eventId: number; eventName: string }) {
-  const eventOptions = [{ event_id: eventId, event_name: eventName }];
+  const eventOptions = [{ dg_id: eventId, name: eventName }];
   const { data: stats } = useInTournamentPlayersQuery({
     eventId,
     round: 'event_avg',

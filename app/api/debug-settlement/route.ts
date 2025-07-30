@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
 
     // Get tournament info
     const { data: tournament } = await supabase
-      .from('tournaments_v2')
+      .from('tournaments')
       .select('event_id, event_name, tour')
       .eq('event_id', eventIdNum)
       .single()
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
 
     // Get unsettled parlay picks with detailed info
     const { data: pickData, error: pickError } = await supabase
-      .from('parlay_picks_v2')
+      .from('parlay_picks')
       .select(`
         id,
         parlay_id,

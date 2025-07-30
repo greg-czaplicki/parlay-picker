@@ -4,9 +4,10 @@ import { Inter } from "next/font/google"
 import "./globals.css"
 import { Toaster } from "@/components/ui/toaster"
 import { Providers } from "./providers"
-import Sidebar from "@/components/sidebar";
-import BottomNavBar from "@/components/bottom-nav-bar";
-import MainContent from "@/components/main-content";
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
+import { AppSidebar } from "@/components/app-sidebar"
+import { BreadcrumbNav } from "@/components/breadcrumb-nav"
+import { MobileNav } from "@/components/mobile-nav"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -24,12 +25,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className={inter.className}>
         <Providers>
-          <div className="flex h-screen bg-gradient-to-br from-[#0f0f15] via-[#1a1a24] to-[#252538]">
-            <Sidebar />
-            <MainContent>{children}</MainContent>
-            <BottomNavBar />
-          </div>
-          <Toaster />
+          <SidebarProvider defaultOpen={true}>
+            <div className="flex min-h-screen bg-gradient-to-br from-[#0f0f15] via-[#1a1a24] to-[#252538]">
+              <AppSidebar />
+              <SidebarInset className="flex flex-1 flex-col">
+                <BreadcrumbNav />
+                <main className="flex-1 overflow-auto p-4 pb-20 md:pb-4">
+                  {children}
+                </main>
+              </SidebarInset>
+              <MobileNav />
+            </div>
+            <Toaster />
+          </SidebarProvider>
         </Providers>
       </body>
     </html>

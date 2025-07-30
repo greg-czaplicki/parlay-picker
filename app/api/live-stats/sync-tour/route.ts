@@ -193,7 +193,7 @@ export async function GET(request: Request) {
   try {
     // Get active tournaments
     const { data: activeTournaments } = await supabase
-      .from('tournaments_v2')
+      .from('tournaments')
       .select('event_id, event_name')
       .gte('end_date', new Date().toISOString().split('T')[0]);
 

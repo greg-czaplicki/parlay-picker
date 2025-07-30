@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
       sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60)
 
       const { data: deletedMatchups, error: matchupsError } = await supabase
-        .from('matchups_v2')
+        .from('betting_markets')
         .delete()
         .lt('created_at', sixtyDaysAgo.toISOString())
 
@@ -85,7 +85,7 @@ export async function GET(request: NextRequest) {
       ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90)
 
       const { data: deletedParlays, error: parlaysError } = await supabase
-        .from('parlays_v2')
+        .from('parlays')
         .delete()
         .lt('created_at', ninetyDaysAgo.toISOString())
 
@@ -152,7 +152,7 @@ export async function GET(request: NextRequest) {
 
       // Check for recent matchups
       const { count: recentMatchupsCount, error: recentMatchupsError } = await supabase
-        .from('matchups_v2')
+        .from('betting_markets')
         .select('*', { count: 'exact', head: true })
         .gte('created_at', yesterday.toISOString())
 

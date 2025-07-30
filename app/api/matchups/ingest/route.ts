@@ -243,7 +243,7 @@ async function updateExistingTeetimes(supabase: any, event_id: number, round_num
   
   // Get all existing matchups for this event/round
   const { data: existingMatchups, error: fetchError } = await supabase
-    .from('matchups_v2')
+    .from('betting_markets')
     .select('id, player1_dg_id, player2_dg_id, player3_dg_id, tee_time, type')
     .eq('event_id', event_id)
     .eq('round_num', round_num);
@@ -316,7 +316,7 @@ async function updateExistingTeetimes(supabase: any, event_id: number, round_num
       }
 
       const { error: updateError } = await supabase
-        .from('matchups_v2')
+        .from('betting_markets')
         .update(updateFields)
         .eq('id', update.id);
         
@@ -373,7 +373,7 @@ export async function POST(req: NextRequest) {
       if (eventName) {
         // Find the event_id
         const { data: eventRows, error: eventError } = await supabase
-          .from('tournaments_v2')
+          .from('tournaments')
           .select('event_id')
           .eq('event_name', eventName)
           .limit(1);
@@ -489,7 +489,7 @@ export async function POST(req: NextRequest) {
     // Upsert all unique players into the players table
     if (allPlayers.length > 0) {
       const { error: upsertError } = await supabase
-        .from('players_v2')
+        .from('players')
         .upsert(allPlayers, { onConflict: 'dg_id' });
       if (upsertError) {
         throw new Error(`Could not upsert players: ${upsertError.message}`);
@@ -519,7 +519,7 @@ export async function POST(req: NextRequest) {
     
     // Use upsert to handle updates of existing matchups (refresh scenario)
     const { error } = await supabase
-      .from('matchups_v2')
+      .from('betting_markets')
       .upsert(allMatchups, { 
         onConflict: 'event_id,round_num,player1_dg_id,player2_dg_id,player3_dg_id',
         ignoreDuplicates: false // We want to update existing records

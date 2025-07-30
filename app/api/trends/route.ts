@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
       // First, get recent tournaments
       const cutoffDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       const { data: recentTournaments, error: tourError } = await supabase
-        .from('tournaments_v2')
+        .from('tournaments')
         .select('event_id, start_date')
         .gte('start_date', cutoffDate)
         .order('start_date', { ascending: false });
@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
       
       // Then get results for those tournaments
       const { data: recentResults, error: resultsError } = await supabase
-        .from('tournament_results_v2')
+        .from('tournament_results')
         .select('*')
         .in('event_id', eventIds);
 

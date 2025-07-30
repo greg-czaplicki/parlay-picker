@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
       try {
         // Check if course already exists
         const { data: existingCourse } = await supabase
-          .from('courses_v2')
+          .from('courses')
           .select('course_id')
           .eq('course_name', course.courseName)
           .eq('location', course.location)
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
 
         // Insert the new course
         const { data: insertedCourse, error: insertError } = await supabase
-          .from('courses_v2')
+          .from('courses')
           .insert({
             course_name: course.courseName,
             location: course.location,
@@ -195,7 +195,7 @@ export async function GET(req: NextRequest) {
     
     // Get all unique course names from tournaments
     const { data: tournaments, error: tournamentsError } = await supabase
-      .from('tournaments_v2')
+      .from('tournaments')
       .select('course_name')
       .not('course_name', 'is', null);
 
@@ -208,7 +208,7 @@ export async function GET(req: NextRequest) {
 
     // Get existing courses to avoid duplicates
     const { data: existingCourses, error: coursesError } = await supabase
-      .from('courses_v2')
+      .from('courses')
       .select('course_name, location, country, par, yardage, course_type, designer, year_built');
 
     if (coursesError) {

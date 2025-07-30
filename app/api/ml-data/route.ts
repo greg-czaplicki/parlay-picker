@@ -340,7 +340,7 @@ export async function GET(request: NextRequest) {
       if (includeOutcomes && processedData.length > 0) {
         const pickIds = processedData.map(s => s.parlay_pick_id)
         const { data: pickOutcomes } = await supabase
-          .from('parlay_picks_v2')
+          .from('parlay_picks')
           .select(`
             id,
             outcome,
@@ -428,7 +428,7 @@ export async function GET(request: NextRequest) {
       // Get outcomes for these picks
       const pickIds = snapshotsWithPicks.map(s => s.parlay_pick_id)
       const { data: pickOutcomes } = await supabase
-        .from('parlay_picks_v2')
+        .from('parlay_picks')
         .select(`
           id,
           outcome,

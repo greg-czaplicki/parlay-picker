@@ -98,7 +98,7 @@ export class SnapshotService {
       
       // 1. Get matchup data
       const { data: matchup, error: matchupError } = await this.supabase
-        .from('matchups_v2')
+        .from('betting_markets')
         .select('*')
         .eq('id', matchupId)
         .single();

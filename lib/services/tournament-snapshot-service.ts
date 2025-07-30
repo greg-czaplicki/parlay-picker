@@ -290,7 +290,7 @@ export class TournamentSnapshotService {
 
       // 1. Get tournament info
       const { data: tournament } = await this.supabase
-        .from('tournaments_v2')
+        .from('tournaments')
         .select('event_id, event_name')
         .eq('event_name', eventName)
         .single()
@@ -643,7 +643,7 @@ export class TournamentSnapshotService {
 
       // 1. Get tournament info
       const { data: tournament, error: tournamentError } = await this.supabase
-        .from('tournaments_v2')
+        .from('tournaments')
         .select('event_id, event_name')
         .eq('event_id', eventId)
         .single()
@@ -1132,7 +1132,7 @@ export class TournamentSnapshotService {
     try {
       // Get tournament info
       const { data: tournament } = await this.supabase
-        .from('tournaments_v2')
+        .from('tournaments')
         .select('event_name')
         .eq('event_id', eventId)
         .single()

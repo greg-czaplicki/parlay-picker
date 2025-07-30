@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
       .from('tournament_results_v2')
       .select(`
         *,
-        tournaments_v2!inner(event_name, course_name)
+        tournaments!inner(event_name, course_name)
       `)
       .eq('event_id', 100)
       .not('final_position', 'is', null)
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
       .from('tournament_results_v2')
       .select(`
         *,
-        tournaments_v2!inner(event_name, course_name)
+        tournaments!inner(event_name, course_name)
       `)
       .not('final_position', 'is', null)
       .order('final_position', { ascending: true })
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
       .from('tournament_results_v2')
       .select(`
         *,
-        tournaments_v2!inner(event_name, course_name)
+        tournaments!inner(event_name, course_name)
       `)
       .in('event_id', [100, 472])
       .not('final_position', 'is', null)

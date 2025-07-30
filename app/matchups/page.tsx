@@ -99,9 +99,51 @@ async function getInitialPlayerData() {
   }
 }
 
+// Function to refresh matchups data on page load
+async function refreshMatchupsOnLoad() {
+  try {
+    const baseUrl = process.env.VERCEL_URL 
+      ? `https://${process.env.VERCEL_URL}` 
+      : 'http://localhost:3000';
+    
+    console.log('🔄 Auto-refreshing matchups on page load...');
+    
+    // Call the refresh endpoint to get fresh data with timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+    
+    const response = await fetch(`${baseUrl}/api/matchups/refresh`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+      },
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (response.ok) {
+      const result = await response.json();
+      console.log(`✅ Auto-refresh completed: ${result.totalInserted || 0} matchups updated`);
+    } else {
+      console.warn(`⚠️ Auto-refresh failed: ${response.statusText} - using existing data`);
+    }
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      console.warn('⚠️ Auto-refresh timed out - using existing data');
+    } else {
+      console.warn('⚠️ Auto-refresh error (using existing data):', error);
+    }
+  }
+}
+
 export default async function MatchupsPage() {
   // Fetch data on the server before rendering
   const { initialSeasonSkills, initialPgaTourStats, initialLiveStats } = await getInitialPlayerData()
+  
+  // Auto-refresh matchups data (don't await to avoid blocking page load)
+  refreshMatchupsOnLoad().catch(err => console.warn('Background refresh failed:', err));
 
   return (
     <main>

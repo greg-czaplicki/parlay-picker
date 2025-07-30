@@ -8,7 +8,7 @@ interface InitializePlayerViewResult {
   setDataView: (view: "season" | "tournament") => void
   selectedEventId: number | null
   setSelectedEventId: (id: number | null) => void
-  eventOptions: Array<{ event_id: number, event_name: string }>
+  eventOptions: Array<{ dg_id: number, name: string }>
   eventsLoading: boolean
   currentEventEnded: boolean | null
 }
@@ -39,7 +39,7 @@ export function useInitializePlayerView(): InitializePlayerViewResult {
       if (eventOptions.length > 0) {
         setDataView('tournament')
         // Only set initial event if there hasn't been a selection yet
-        setSelectedEventId(eventOptions[0].event_id)
+        setSelectedEventId(eventOptions[0].dg_id)
       } else {
         setDataView('season')
       }

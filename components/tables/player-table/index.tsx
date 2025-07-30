@@ -178,7 +178,7 @@ export default function PlayerTable({
                     className="bg-gray-800 text-white border border-gray-700 rounded px-2 py-1 text-sm"
                   >
                     {eventOptions.map(ev => (
-                      <option key={ev.event_id} value={ev.event_id}>{ev.event_name}</option>
+                      <option key={ev.dg_id} value={ev.dg_id}>{ev.name}</option>
                     ))}
                   </select>
                 </div>

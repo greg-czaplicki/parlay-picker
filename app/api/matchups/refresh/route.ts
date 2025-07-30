@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
       try {
         console.log(`Refreshing ${tour} tour...`)
         
-        const ingestResponse = await fetch(`${baseUrl}/api/matchups/ingest?tour=${tour}`, {
+        const ingestResponse = await fetch(`${baseUrl}/api/betting-markets/ingest?tour=${tour}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

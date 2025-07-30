@@ -118,7 +118,7 @@ async function findCompletedRoundsWithUnsettledParlays(supabase: any): Promise<C
 
   // Get all unsettled picks grouped by event and round
   const { data: unsettledPicks, error: picksError } = await supabase
-    .from('parlay_picks_v2')
+    .from('parlay_picks')
     .select('event_id, parlay_id')
     .eq('settlement_status', 'pending')
 
@@ -143,7 +143,7 @@ async function findCompletedRoundsWithUnsettledParlays(supabase: any): Promise<C
     
     // Get tournament info
     const { data: tournament } = await supabase
-      .from('tournaments_v2')
+      .from('tournaments')
       .select('event_name, tour')
       .eq('event_id', eventId)
       .single();
@@ -153,7 +153,7 @@ async function findCompletedRoundsWithUnsettledParlays(supabase: any): Promise<C
     // Get all parlays for this event to determine which rounds have unsettled picks
     const eventPicks = unsettledPicks.filter(p => p.event_id === eventId);
     const { data: parlays } = await supabase
-      .from('parlays_v2')
+      .from('parlays')
       .select('round_num')
       .in('uuid', eventPicks.map(p => p.parlay_id));
     
@@ -201,7 +201,7 @@ async function isRoundComplete(
   try {
     // Get tournament info to determine tour
     const { data: tournament } = await supabase
-      .from('tournaments_v2')
+      .from('tournaments')
       .select('tour')
       .eq('event_id', eventId)
       .single()

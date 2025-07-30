@@ -12,7 +12,7 @@ export interface TournamentResult {
   round_2_score: number | null;
   round_3_score: number | null;
   round_4_score: number | null;
-  tournaments_v2?: {
+  tournaments?: {
     event_id: number;
     event_name: string;
     start_date: string;
@@ -40,7 +40,7 @@ export class TrendsCalculationService {
 
     // First get recent tournaments
     const { data: recentTournaments, error: tourError } = await this.supabase
-      .from('tournaments_v2')
+      .from('tournaments')
       .select('event_id, event_name, start_date')
       .gte('start_date', cutoffDate.toISOString().split('T')[0])
       .order('start_date', { ascending: false });
@@ -52,7 +52,7 @@ export class TrendsCalculationService {
     
     // Then get results for those tournaments
     const { data: results, error } = await this.supabase
-      .from('tournament_results_v2')
+      .from('tournament_results')
       .select('*')
       .in('event_id', eventIds);
 
@@ -65,7 +65,7 @@ export class TrendsCalculationService {
     // Add tournament info to each result
     const enrichedResults = results.map(result => ({
       ...result,
-      tournaments_v2: tournamentMap.get(result.event_id)
+      tournaments: tournamentMap.get(result.event_id)
     }));
 
     // Group by player
@@ -111,7 +111,7 @@ export class TrendsCalculationService {
     // Sort each player's results by date
     for (const [, playerResults] of groups) {
       playerResults.sort((a, b) => 
-        new Date(b.tournaments_v2?.start_date || '').getTime() - new Date(a.tournaments_v2?.start_date || '').getTime()
+        new Date(b.tournaments?.start_date || '').getTime() - new Date(a.tournaments?.start_date || '').getTime()
       );
     }
 

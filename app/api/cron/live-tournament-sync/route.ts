@@ -8,7 +8,7 @@ async function getActiveTournaments() {
   const supabase = createSupabaseClient()
   
   const { data: activeTournaments } = await supabase
-    .from('tournaments_v2')
+    .from('tournaments')
     .select('event_id, event_name, tour')
     .gte('end_date', new Date().toISOString().split('T')[0])
   

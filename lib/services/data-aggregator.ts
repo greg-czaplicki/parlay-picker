@@ -44,7 +44,7 @@ export class GolfDataAggregator {
       
       // First: Get tournaments that are currently happening (today is between start and end dates)
       const { data: currentTournaments, error: currentError } = await supabase
-        .from('tournaments_v2')
+        .from('tournaments')
         .select('*')
         .lte('start_date', currentDate)
         .gte('end_date', currentDate)
@@ -58,7 +58,7 @@ export class GolfDataAggregator {
 
       // Second: Try status-based active tournaments
       const { data: activeTournaments, error: activeError } = await supabase
-        .from('tournaments_v2')
+        .from('tournaments')
         .select('*')
         .in('status', ['active', 'in_progress', 'upcoming'])
         .order('start_date', { ascending: true })
@@ -72,7 +72,7 @@ export class GolfDataAggregator {
       // Third: Get most recent tournaments with substantial matchup data
       console.log('No active tournaments found, using recent tournaments with most data')
       const { data: recentTournaments, error: recentError } = await supabase
-        .from('tournaments_v2')
+        .from('tournaments')
         .select('*')
         .in('event_id', [100, 10022, 26, 10021, 32]) // Tournaments with most matchup data
         .order('end_date', { ascending: false })
@@ -95,7 +95,7 @@ export class GolfDataAggregator {
       if (tournaments.length === 0) {
         // Fallback: Get matchups from tournaments with most data
         const { data, error } = await supabase
-          .from('matchups_v2')
+          .from('betting_markets')
           .select('*')
           .in('event_id', [100, 10022, 26]) // The Open first
           .order('created_at', { ascending: false })
@@ -108,7 +108,7 @@ export class GolfDataAggregator {
       const currentEventIds = tournaments.map(t => t.event_id)
 
       const { data, error } = await supabase
-        .from('matchups_v2')
+        .from('betting_markets')
         .select('*')
         .in('event_id', currentEventIds)
         .order('created_at', { ascending: false })
@@ -131,7 +131,7 @@ export class GolfDataAggregator {
       if (eventIds.length > 0) {
         // First get the tournament names for the event IDs
         const { data: tournaments, error: tournamentError } = await supabase
-          .from('tournaments_v2')
+          .from('tournaments')
           .select('event_id, event_name')
           .in('event_id', eventIds)
 
@@ -211,10 +211,10 @@ export class GolfDataAggregator {
 
       // For active tournaments, get current round scores even without final positions
       const { data, error } = await supabase
-        .from('tournament_results_v2')
+        .from('tournament_results')
         .select(`
           *,
-          tournaments_v2!inner(event_name, course_name)
+          tournaments!inner(event_name, course_name)
         `)
         .in('event_id', eventIds)
         .not('total_score', 'is', null) // Changed from final_position to total_score
@@ -238,10 +238,10 @@ export class GolfDataAggregator {
 
       // Get historical results from completed tournaments
       const { data, error } = await supabase
-        .from('tournament_results_v2')
+        .from('tournament_results')
         .select(`
           *,
-          tournaments_v2!inner(event_name, course_name, status)
+          tournaments!inner(event_name, course_name, status)
         `)
         .not('final_position', 'is', null) // Only completed tournaments have final positions
         .order('calculated_at', { ascending: false })
@@ -262,10 +262,10 @@ export class GolfDataAggregator {
     try {
       const supabase = getSupabaseClient()
       const { data, error } = await supabase
-        .from('parlays_v2')
+        .from('parlays')
         .select(`
           *,
-          parlay_picks_v2!inner(
+          parlay_picks!inner(
             picked_player_name,
             picked_player_odds,
             pick_outcome,
@@ -293,7 +293,7 @@ export class GolfDataAggregator {
       if (error) {
         // Fallback to basic success rate calculation
         const { data: parlayData, error: parlayError } = await supabase
-          .from('parlays_v2')
+          .from('parlays')
           .select('outcome')
           .not('outcome', 'is', null)
 
@@ -324,7 +324,7 @@ export class GolfDataAggregator {
       if (eventIds.length === 0) return []
 
       const { data, error } = await supabase
-        .from('player_advanced_stats_v2')
+        .from('player_advanced_stats')
         .select(`
           dg_id,
           sg_total,
@@ -332,7 +332,7 @@ export class GolfDataAggregator {
           sg_app,
           sg_arg,
           sg_putt,
-          players_v2!inner(name, country)
+          players!inner(name, country)
         `)
         .in('event_id', eventIds)
         .not('sg_total', 'is', null)
@@ -406,7 +406,7 @@ export class GolfDataAggregator {
       const supabase = getSupabaseClient()
       // Get player ID
       const { data: playerData, error: playerError } = await supabase
-        .from('players_v2')
+        .from('players')
         .select('dg_id, name')
         .ilike('name', `%${playerName}%`)
         .limit(1)
@@ -421,7 +421,7 @@ export class GolfDataAggregator {
       // Get recent stats and trends for specific player
       const [advancedStats, trends, recentResults] = await Promise.all([
         supabase
-          .from('player_advanced_stats_v2')
+          .from('player_advanced_stats')
           .select('*')
           .eq('dg_id', playerId)
           .order('created_at', { ascending: false })
@@ -435,10 +435,10 @@ export class GolfDataAggregator {
           .limit(20),
         
         supabase
-          .from('tournament_results_v2')
+          .from('tournament_results')
           .select(`
             *,
-            tournaments_v2!inner(event_name, course_name)
+            tournaments!inner(event_name, course_name)
           `)
           .eq('dg_id', playerId)
           .order('calculated_at', { ascending: false })

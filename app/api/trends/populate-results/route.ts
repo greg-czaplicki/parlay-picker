@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
 
     // Get recent tournaments from the tournaments table
     const { data: tournaments, error: tournamentsError } = await supabase
-      .from('tournaments_v2')
+      .from('tournaments')
       .select('event_id, event_name, start_date, end_date')
       .gte('start_date', new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]) // Last 6 months
       .order('start_date', { ascending: false });
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     for (const tournament of tournaments) {
       // Check if we already have results for this tournament
       const { data: existingResults, error: checkError } = await supabase
-        .from('tournament_results_v2')
+        .from('tournament_results')
         .select('id')
         .eq('event_id', tournament.event_id)
         .limit(1);
@@ -148,7 +148,7 @@ export async function POST(req: NextRequest) {
         const batch = resultsToInsert.slice(i, i + batchSize);
         
         const { error: insertError } = await supabase
-          .from('tournament_results_v2')
+          .from('tournament_results')
           .insert(batch);
 
         if (insertError) {

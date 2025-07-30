@@ -260,7 +260,7 @@ export async function GET(req?: NextRequest) {
   try {
     // Get active tournaments list
     const { data: activeTournaments } = await supabase
-      .from('tournaments_v2')
+      .from('tournaments')
       .select('event_id, event_name')
       .gte('end_date', new Date().toISOString().split('T')[0]);
 
@@ -314,7 +314,7 @@ export async function GET(req?: NextRequest) {
           // For Euro tour, let's be more flexible and check if we have any unsettled parlays for this event
           if (tour === 'euro') {
             const { data: euroTournament } = await supabase
-              .from('tournaments_v2')
+              .from('tournaments')
               .select('event_id, event_name')
               .eq('event_name', eventName)
               .eq('tour', 'euro')
@@ -340,7 +340,7 @@ export async function GET(req?: NextRequest) {
         // Look up event_id from tournament name for more reliable querying
         let eventId: number | undefined;
         const { data: tournamentData } = await supabase
-          .from('tournaments_v2')
+          .from('tournaments')
           .select('event_id')
           .eq('event_name', eventName)
           .single();

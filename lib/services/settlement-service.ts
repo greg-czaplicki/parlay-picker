@@ -77,7 +77,7 @@ export class SettlementService {
     try {
       // Get tournament info to determine tour type
       const { data: tournament } = await this.supabase
-        .from('tournaments_v2')
+        .from('tournaments')
         .select('event_id, event_name, tour')
         .eq('event_id', eventId)
         .single()
@@ -151,7 +151,7 @@ export class SettlementService {
    */
   private async getUnsettledPicks(eventId: number): Promise<ParlayPick[]> {
     const { data, error } = await this.supabase
-      .from('parlay_picks_v2')
+      .from('parlay_picks')
       .select(`
         id,
         parlay_id,
@@ -162,8 +162,8 @@ export class SettlementService {
         pick_outcome,
         event_id,
         settlement_status,
-        parlays_v2!inner(round_num),
-        matchups_v2!inner(round_num)
+        parlays!inner(round_num),
+        betting_markets!inner(round_num)
       `)
       .eq('event_id', eventId)
       .in('settlement_status', ['pending'])
@@ -176,9 +176,9 @@ export class SettlementService {
     const picks = (data || []).map((pick: any) => ({
       ...pick,
       uuid: pick.id, // Map id to uuid for compatibility with existing interface
-      round_num: pick.parlays_v2?.round_num || pick.matchups_v2?.round_num,
-      parlays_v2: undefined, // Remove the joined data 
-      matchups_v2: undefined
+      round_num: pick.parlays?.round_num || pick.betting_markets?.round_num,
+      parlays: undefined, // Remove the joined data 
+      betting_markets: undefined
     }))
 
     const rounds = [...new Set(picks.map(p => p.round_num).filter(Boolean))]
@@ -215,7 +215,7 @@ export class SettlementService {
   ): Promise<PickSettlementResult[]> {
     // Get matchup details
     const { data: matchup } = await this.supabase
-      .from('matchups_v2')
+      .from('betting_markets')
       .select('*')
       .eq('id', matchupId)
       .single()
@@ -290,7 +290,7 @@ export class SettlementService {
     try {
       // First, try to get stored data from live_tournament_stats
       const { data: tournament } = await this.supabase
-        .from('tournaments_v2')
+        .from('tournaments')
         .select('event_name')
         .eq('event_id', eventId)
         .single()
@@ -546,7 +546,7 @@ export class SettlementService {
     // Update parlay_picks table
     for (const pick of settledPicks) {
       await this.supabase
-        .from('parlay_picks_v2')
+        .from('parlay_picks')
         .update({
           pick_outcome: pick.new_outcome,
           settlement_status: 'settled',
@@ -591,19 +591,19 @@ export class SettlementService {
     try {
       // Get all parlays for this event that don't have an outcome yet
       const { data: parlays } = await this.supabase
-        .from('parlays_v2')
+        .from('parlays')
         .select(`
           id,
           amount,
           total_odds,
           potential_payout,
-          parlay_picks_v2!inner(
+          parlay_picks!inner(
             id,
             pick_outcome,
             settlement_status
           )
         `)
-        .eq('parlay_picks_v2.event_id', eventId)
+        .eq('parlay_picks.event_id', eventId)
         .is('outcome', null)
 
       if (!parlays || parlays.length === 0) {
@@ -612,7 +612,7 @@ export class SettlementService {
 
       // Process each parlay
       for (const parlay of parlays) {
-        const picks = parlay.parlay_picks_v2 || []
+        const picks = parlay.parlay_picks || []
         
         // Check if all picks are settled
         const allSettled = picks.every((pick: any) => 
@@ -669,7 +669,7 @@ export class SettlementService {
         // Update parlay outcome if determined
         if (parlayOutcome) {
           await this.supabase
-            .from('parlays_v2')
+            .from('parlays')
             .update({
               outcome: parlayOutcome,
               actual_payout: actualPayout,
@@ -697,7 +697,7 @@ export class SettlementService {
     try {
       // Get tournament name for the event
       const { data: tournament } = await this.supabase
-        .from('tournaments_v2')
+        .from('tournaments')
         .select('event_name')
         .eq('event_id', eventId)
         .single()

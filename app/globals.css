@@ -37,6 +37,16 @@
   --chart-3: 140 69% 58%; /* Green accent */
   --chart-4: 210 98% 68%; /* Blue accent */
   --chart-5: 142 71% 55%; /* Green accent */
+  
+  /* Sidebar theme colors */
+  --sidebar-background: 220 13% 16%; /* Darker background for sidebar */
+  --sidebar-foreground: 0 0% 98%;
+  --sidebar-primary: 142 71% 45%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 220 13% 25%;
+  --sidebar-accent-foreground: 0 0% 98%;
+  --sidebar-border: 220 13% 30%;
+  --sidebar-ring: 142 71% 45%;
 }
 
 body {
@@ -549,5 +559,20 @@ body {
 @keyframes float {
   0%, 100% { transform: translateY(0px); }
   50% { transform: translateY(-10px); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { 
+    opacity: 1; 
+    box-shadow: 0 0 10px rgba(34, 197, 94, 0.5);
+  }
+  50% { 
+    opacity: 0.7; 
+    box-shadow: 0 0 20px rgba(34, 197, 94, 0.8);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
 }
 

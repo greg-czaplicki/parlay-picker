@@ -43,7 +43,7 @@ jobs:
         run: |
           echo "🏌️ Syncing PGA Tour data..."
           
-          response=$(curl -s -L -w "HTTPSTATUS:%{http_code}" \
+          response=$(curl -s -L -w "HTTPSTATUS:%{http_code}" --max-time 120 \
             -X GET "${{ env.APP_URL }}/api/live-stats/sync-tour?tour=pga" \
             -H "User-Agent: GitHub-Actions-Tournament-Sync/1.0")
           
@@ -73,7 +73,7 @@ jobs:
         run: |
           echo "🌍 Syncing European Tour data..."
           
-          response=$(curl -s -L -w "HTTPSTATUS:%{http_code}" \
+          response=$(curl -s -L -w "HTTPSTATUS:%{http_code}" --max-time 120 \
             -X GET "${{ env.APP_URL }}/api/live-stats/sync" \
             -H "User-Agent: GitHub-Actions-Tournament-Sync/1.0")
           
@@ -102,7 +102,7 @@ jobs:
         run: |
           echo "🔄 Running comprehensive multi-tour sync..."
           
-          response=$(curl -s -L -w "HTTPSTATUS:%{http_code}" \
+          response=$(curl -s -L -w "HTTPSTATUS:%{http_code}" --max-time 120 \
             -X GET "${{ env.APP_URL }}/api/live-stats/sync" \
             -H "User-Agent: GitHub-Actions-Tournament-Sync/1.0")
           

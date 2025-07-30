@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     // Test direct database queries
     console.log('1. Testing direct tournament query...')
     const { data: tournaments, error: tournamentError } = await supabase
-      .from('tournaments_v2')
+      .from('tournaments')
       .select('*')
       .in('event_id', [100, 26, 10022])
       .limit(3)
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     
     console.log('2. Testing direct matchup query...')
     const { data: matchups, error: matchupError } = await supabase
-      .from('matchups_v2')
+      .from('betting_markets')
       .select('*')
       .in('event_id', [100, 26, 10022])
       .limit(10)
