@@ -46,60 +46,40 @@ export async function POST(req: NextRequest) {
     if (matchup.player1_dg_id === pick.picked_player_dg_id) {
       playerPosition = 1
       playerName = matchup.player1_name || ''
-      const decimalOdds = Number(matchup.odds1) || 0
-      // Convert decimal odds to American odds for storage (with safety checks)
-      if (decimalOdds <= 1) {
-        playerOdds = 100 // Default for invalid odds
-      } else if (decimalOdds >= 2.0) {
-        playerOdds = Math.round((decimalOdds - 1) * 100)  // Positive American odds
-      } else {
-        playerOdds = Math.round(-100 / (decimalOdds - 1)) // Negative American odds
-      }
+      const decimalOdds = Number(matchup.odds1) || 1.01 // Default to minimum valid odds
+      // Store decimal odds directly (database expects decimal odds >= 1.01)
+      playerOdds = decimalOdds
     } else if (matchup.player2_dg_id === pick.picked_player_dg_id) {
       playerPosition = 2
       playerName = matchup.player2_name || ''
-      const decimalOdds = Number(matchup.odds2) || 0
-      if (decimalOdds <= 1) {
-        playerOdds = 100
-      } else if (decimalOdds >= 2.0) {
-        playerOdds = Math.round((decimalOdds - 1) * 100)
-      } else {
-        playerOdds = Math.round(-100 / (decimalOdds - 1))
-      }
+      const decimalOdds = Number(matchup.odds2) || 1.01 // Default to minimum valid odds
+      // Store decimal odds directly (database expects decimal odds >= 1.01)
+      playerOdds = decimalOdds
     } else if (matchup.player3_dg_id === pick.picked_player_dg_id) {
       playerPosition = 3
       playerName = matchup.player3_name || ''
-      const decimalOdds = Number(matchup.odds3) || 0
-      if (decimalOdds <= 1) {
-        playerOdds = 100
-      } else if (decimalOdds >= 2.0) {
-        playerOdds = Math.round((decimalOdds - 1) * 100)
-      } else {
-        playerOdds = Math.round(-100 / (decimalOdds - 1))
-      }
+      const decimalOdds = Number(matchup.odds3) || 1.01 // Default to minimum valid odds
+      // Store decimal odds directly (database expects decimal odds >= 1.01)
+      playerOdds = decimalOdds
     } else {
       return NextResponse.json({ error: `Player DG ID ${pick.picked_player_dg_id} not found in matchup ${pick.matchup_id}` }, { status: 400 })
     }
     
-    // Calculate decimal odds for this pick (using the original decimal odds)
-    const decimalOddsForCalculation = playerOdds > 0 
-      ? (playerOdds / 100) + 1
-      : (100 / Math.abs(playerOdds)) + 1
-    
-    // Only multiply if we have valid odds
-    if (decimalOddsForCalculation > 1) {
-      totalDecimalOdds *= decimalOddsForCalculation
+    // Use decimal odds directly for calculation
+    if (playerOdds > 1) {
+      totalDecimalOdds *= playerOdds
     }
     
     picksToInsert.push({
-      matchup_id: pick.matchup_id,
-      pick: playerPosition,
-      picked_player_name: playerName,
-      picked_player_dg_id: pick.picked_player_dg_id,
-      picked_player_odds: playerOdds,
-      pick_outcome: 'pending',
-      outcome: 'void', // Legacy field
-      event_id: matchup.event_id, // Populate event_id for settlement detection
+      matchup_id: pick.matchup_id, // UUID from betting_markets table
+      selection_name: playerName,
+      odds_at_bet: Number(playerOdds),
+      outcome: 'pending',
+      selection_criteria: {
+        picked_player_dg_id: Number(pick.picked_player_dg_id),
+        player_position: playerPosition,
+        event_id: matchup.event_id ? Number(matchup.event_id) : null
+      }
     })
   }
   
@@ -110,29 +90,29 @@ export async function POST(req: NextRequest) {
   const calculatedPayout = Math.round(defaultStake * totalDecimalOdds)
   const firstRound = matchupData[0]?.round_num || round_num || 1
   
-  // Insert parlay with calculated values into V2 table
+  // Insert parlay with calculated values into parlays table
   const { data: parlay, error: parlayError } = await supabase
     .from('parlays')
     .insert([
       {
         user_id,
+        name: name || `Parlay - $${defaultStake}`,
         amount: defaultStake,
-        total_odds: americanOdds,
-        potential_payout: calculatedPayout,
+        payout: calculatedPayout,
+        odds: americanOdds,
         actual_payout: 0.00,
-        round_num: firstRound,
         outcome: null, // Parlay outcome is null until all picks are settled
-        payout_amount: '0.00',
+        status: 'active'
       },
     ])
     .select()
     .single()
   if (parlayError) return NextResponse.json({ error: parlayError.message }, { status: 400 })
   
-  // Insert picks with snapshot data into V2 table
+  // Insert picks into parlay_picks table
   const picksWithParlayId = picksToInsert.map(pick => ({
     ...pick,
-    parlay_id: parlay.id, // Use integer ID from V2 table
+    parlay_id: parlay.id,
   }))
   const { error: picksError } = await supabase.from('parlay_picks').insert(picksWithParlayId)
   if (picksError) return NextResponse.json({ error: picksError.message }, { status: 400 })
@@ -159,7 +139,7 @@ export async function GET(req: NextRequest) {
     return response
   }
   
-  // Fetch parlays with stored calculated values from V2 table
+  // Fetch parlays from database
   const { data: parlays, error: parlaysError } = await supabase
     .from('parlays')
     .select('*')
@@ -167,7 +147,7 @@ export async function GET(req: NextRequest) {
     .order('created_at', { ascending: false })
   if (parlaysError) return NextResponse.json({ error: parlaysError.message }, { status: 400 })
   
-  // Fetch picks with stored snapshot data from V2 table
+  // Fetch picks from database
   const parlayIds = parlays.map((p: any) => p.id)
   let picks = []
   if (parlayIds.length > 0) {
@@ -313,13 +293,17 @@ export async function GET(req: NextRequest) {
       const displayRound = parlay.round_num || matchup?.round_num || 1
       
       // Check if this pick is settled to determine data source
-      const isPickSettled = pick.settlement_status === 'settled' || 
-                           (pick.pick_outcome && ['win', 'loss', 'push', 'void'].includes(pick.pick_outcome))
+      const isPickSettled = pick.settled_at !== null || 
+                           (pick.outcome && ['win', 'loss', 'push', 'void'].includes(pick.outcome))
       
       // Build player array for the matchup
       let playersInMatchup: any[] = []
       if (matchup) {
         const eventName = tournamentsByEventId[matchup.event_id]
+        
+        // Extract pick information from selection_criteria
+        const pickedPlayerDgId = pick.selection_criteria?.picked_player_dg_id
+        const playerPosition = pick.selection_criteria?.player_position
         
         // Helper to get player stats with fallback logic
         const getPlayerStats = async (playerName: string) => {
@@ -338,7 +322,7 @@ export async function GET(req: NextRequest) {
           playersInMatchup.push({
             id: matchup.player1_dg_id,
             name: matchup.player1_name,
-            isUserPick: pick.pick === 1,
+            isUserPick: Number(matchup.player1_dg_id) === Number(pickedPlayerDgId),
             currentPosition: typeof stats.position === 'string' ? stats.position : '-',
             totalScore: typeof stats.total === 'number' ? stats.total : Number(stats.total) || 0,
             roundScore: typeof stats.today === 'number' ? stats.today : Number(stats.today) || 0,
@@ -351,7 +335,7 @@ export async function GET(req: NextRequest) {
           playersInMatchup.push({
             id: matchup.player2_dg_id,
             name: matchup.player2_name,
-            isUserPick: pick.pick === 2,
+            isUserPick: Number(matchup.player2_dg_id) === Number(pickedPlayerDgId),
             currentPosition: typeof stats.position === 'string' ? stats.position : '-',
             totalScore: typeof stats.total === 'number' ? stats.total : Number(stats.total) || 0,
             roundScore: typeof stats.today === 'number' ? stats.today : Number(stats.today) || 0,
@@ -364,7 +348,7 @@ export async function GET(req: NextRequest) {
           playersInMatchup.push({
             id: matchup.player3_dg_id,
             name: matchup.player3_name,
-            isUserPick: pick.pick === 3,
+            isUserPick: Number(matchup.player3_dg_id) === Number(pickedPlayerDgId),
             currentPosition: typeof stats.position === 'string' ? stats.position : '-',
             totalScore: typeof stats.total === 'number' ? stats.total : Number(stats.total) || 0,
             roundScore: typeof stats.today === 'number' ? stats.today : Number(stats.today) || 0,
@@ -383,12 +367,10 @@ export async function GET(req: NextRequest) {
       }
     }))
     
-    // Return parlay with stored calculated values (no more calculations needed!)
+    // Return parlay data (no mapping needed - fields match frontend expectations)
     return {
       ...parlay,
-      odds: parlay.total_odds,        // Map total_odds to odds for frontend
-      payout: parlay.potential_payout, // Map potential_payout to payout for frontend
-      tournament_name: tournamentName, // Add tournament name for display
+      tournament_name: tournamentName,
       picks: Array.isArray(picksWithDetails) ? picksWithDetails : [],
     }
   }))

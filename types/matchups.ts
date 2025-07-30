@@ -104,4 +104,22 @@ export interface MatchupsTableProps {
   playerSearchTerm?: string;
   highlightText?: (text: string) => React.ReactNode;
   getMatchupAnalysis?: (matchupId: number) => any;
+}
+
+// Interface for betting markets (UUID-based)
+export interface BettingMarket {
+  id: string; // UUID
+  event_id: number;
+  market_type: string;
+  player1_dg_id?: number;
+  player1_name?: string;
+  player2_dg_id?: number;
+  player2_name?: string;
+  player3_dg_id?: number;
+  player3_name?: string;
+  odds1?: number;
+  odds2?: number;
+  odds3?: number;
+  round_num?: number;
+  tee_time?: string;
 } 

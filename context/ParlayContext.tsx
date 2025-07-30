@@ -7,7 +7,7 @@ export type ParlaySelection = {
   matchupType: string
   group: string
   player: string
-  matchupId?: number
+  matchupId?: string
   eventName?: string
   roundNum?: number
   odds: number
