@@ -168,9 +168,6 @@ export const MatchupBreakdownModal: FC<MatchupBreakdownModalProps> = ({
           {/* Player Comparison Table */}
           <div>
             <h3 className="font-semibold mb-3">Player Comparison</h3>
-            <div className="mb-3 text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg">
-              <span className="font-medium">📊 Data Sources:</span> For SG stats, PGA Tour data is shown on the <strong>left</strong> and DataGolf data on the <strong>right</strong> (PGA / DG format)
-            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm border-collapse">
                 <thead>
@@ -178,11 +175,26 @@ export const MatchupBreakdownModal: FC<MatchupBreakdownModalProps> = ({
                     <th className="text-left py-2 font-medium">Player</th>
                     <th className="text-center py-2 font-medium">FD Odds</th>
                     <th className="text-center py-2 font-medium">DG Odds</th>
-                    <th className="text-center py-2 font-medium">SG Total</th>
-                    <th className="text-center py-2 font-medium">SG Putt</th>
-                    <th className="text-center py-2 font-medium">SG App</th>
-                    <th className="text-center py-2 font-medium">SG Arg</th>
-                    <th className="text-center py-2 font-medium">SG OTT</th>
+                    <th className="text-center py-2 font-medium">
+                      SG Total
+                      <div className="text-xs text-gray-500 font-normal mt-0.5">PGA / DG</div>
+                    </th>
+                    <th className="text-center py-2 font-medium">
+                      SG Putt
+                      <div className="text-xs text-gray-500 font-normal mt-0.5">PGA / DG</div>
+                    </th>
+                    <th className="text-center py-2 font-medium">
+                      SG App
+                      <div className="text-xs text-gray-500 font-normal mt-0.5">PGA / DG</div>
+                    </th>
+                    <th className="text-center py-2 font-medium">
+                      SG Arg
+                      <div className="text-xs text-gray-500 font-normal mt-0.5">PGA / DG</div>
+                    </th>
+                    <th className="text-center py-2 font-medium">
+                      SG OTT
+                      <div className="text-xs text-gray-500 font-normal mt-0.5">PGA / DG</div>
+                    </th>
                     <th className="text-center py-2 font-medium">Position</th>
                   </tr>
                 </thead>
