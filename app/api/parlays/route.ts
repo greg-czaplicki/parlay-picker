@@ -179,16 +179,16 @@ export async function GET(req: NextRequest) {
   if (eventIds.length > 0) {
     const { data: tournamentsData, error: tournamentsError } = await supabase
       .from('tournaments')
-      .select('event_id, event_name, start_date, end_date')
-      .in('event_id', eventIds)
+      .select('dg_id, name, start_date, end_date')
+      .in('dg_id', eventIds)
     if (!tournamentsError && tournamentsData) {
       // Check which tournaments are currently active
       const today = new Date().toISOString().split('T')[0];
       
       // Create a mapping of event_id to tournament name and track tournaments with parlays
       tournamentsData.forEach((t: any) => {
-        if (t.event_id && t.event_name) {
-          tournamentsByEventId[t.event_id] = t.event_name
+        if (t.dg_id && t.name) {
+          tournamentsByEventId[t.dg_id] = t.name
           
           // For parlay display, we want stats for tournaments that either:
           // 1. Are currently active (for live parlays), OR
@@ -197,10 +197,10 @@ export async function GET(req: NextRequest) {
           const isActive = t.start_date && t.end_date && 
                           today >= t.start_date && today <= t.end_date;
           
-          const hasParlay = eventIds.includes(t.event_id);
+          const hasParlay = eventIds.includes(t.dg_id);
           
           if (isActive || hasParlay) {
-            activeTournamentNames.push(t.event_name);
+            activeTournamentNames.push(t.name);
           }
         }
       })
