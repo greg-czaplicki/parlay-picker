@@ -9,7 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Loader2, Sliders, CheckCircle, Info, PlusCircle, AlertTriangle } from "lucide-react"
+import { Loader2, Sliders, CheckCircle, Info, PlusCircle, AlertTriangle, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Tooltip,
@@ -369,7 +369,7 @@ export default function MatchupsTable({
     const inCurrent = isPlayerInCurrentParlay(playerName);
     // Check active/pending parlays only (settled parlays allow reuse)
     const inSubmitted = allParlayPicks.some((pick: any) => {
-      const pickPlayerName = pick.picked_player_name || '';
+      const pickPlayerName = pick.selection_name || pick.picked_player_name || '';
       // Format both names the same way for comparison
       const formattedPickName = formatPlayerName(pickPlayerName).toLowerCase();
       const formattedCheckName = formatPlayerName(playerName).toLowerCase();
@@ -384,7 +384,7 @@ export default function MatchupsTable({
     
     // Check active parlays for conflicts
     const usedInActiveParlay = allParlayPicks.find((pick: any) => {
-      const pickPlayerName = (pick.picked_player_name || '');
+      const pickPlayerName = (pick.selection_name || pick.picked_player_name || '');
       const checkPlayerName = playerName;
       
       // Format both names the same way for comparison
@@ -397,7 +397,7 @@ export default function MatchupsTable({
     
     // Check ALL parlays for round indicator
     const usedInAnyParlay = allHistoricalPicks.find((pick: any) => {
-      const pickPlayerName = (pick.picked_player_name || '');
+      const pickPlayerName = (pick.selection_name || pick.picked_player_name || '');
       const checkPlayerName = playerName;
       
       // Format both names the same way for comparison
@@ -838,13 +838,21 @@ export default function MatchupsTable({
                               return false;
                             })();
 
+                            // Check for opponent conflicts (betting against yourself)
+                            const opponents = players.filter(p => p.dg_id !== player.dg_id);
+                            const conflictingOpponents = opponents.filter(opponent => 
+                              isPlayerInAnyParlay(formatPlayerName(opponent.name))
+                            );
+                            const hasMatchupConflict = conflictingOpponents.length > 0;
+
                             return (
                               <TableRow 
                                 key={`${matchup.id}-${player.id}`}
                                 className={`
                                   ${idx === players.length - 1 ? 'border-b-8 border-b-gray-900' : 'border-b border-b-gray-800'}
-                                  ${playerStatus.status === 'used' ? 'bg-yellow-50/5' : ''}
+                                  ${playerStatus.status === 'used' ? 'bg-blue-50/5' : ''}
                                   ${playerStatus.status === 'current' ? 'bg-primary/5' : ''}
+                                  ${hasMatchupConflict ? '!border-yellow-200 border-1' : ''}
                                   ${isOddsGapHighlight ? 'bg-green-500/10 border-l-4 border-l-green-500' : ''}
                                   bg-gray-950/30
                                 `}
@@ -860,13 +868,23 @@ export default function MatchupsTable({
                                         R{playerStatus.roundNum}
                                       </span>
                                     )}
-                                    {playerStatus.status !== 'available' && (
+                                    {hasMatchupConflict && (
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <AlertCircle className="h-4 w-4 text-yellow-200" />
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          <p className="text-foreground">Betting against yourself! You already have {conflictingOpponents.map(o => formatPlayerName(o.name)).join(', ')} in active parlays</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    )}
+                                    {playerStatus.status !== 'available' && !hasMatchupConflict && (
                                       <Tooltip>
                                         <TooltipTrigger asChild>
                                           <Info 
                                             className={playerStatus.status === 'current' ? 
-                                              'text-blue-400/70' : 
-                                              'text-yellow-400/70'
+                                              'text-green-400/70' : 
+                                              'text-blue-400/70'
                                             } 
                                             size={14} 
                                           />
@@ -911,15 +929,36 @@ export default function MatchupsTable({
                                     </Button>
                                   ) : playerStatus.status === 'used' ? (
                                     <Button size="icon" variant="secondary" disabled className="h-6 w-6 p-0">
-                                      <CheckCircle className="text-yellow-400/70" size={16} />
+                                      <CheckCircle className="text-blue-400" size={16} />
                                     </Button>
                                   ) : (
                                     <Button 
                                       size="icon" 
                                       variant="outline" 
-                                      className="h-6 w-6 p-0 group group-hover:text-white" 
-                                      onClick={() => {
+                                      className={`h-6 w-6 p-0 group group-hover:text-white ${hasMatchupConflict ? 'border-yellow-500/50 text-yellow-200 hover:bg-yellow-500/20 hover:border-yellow-400' : ''}`}
+                                      onClick={(e) => {
+                                        // Prevent double clicks
+                                        const button = e.currentTarget;
+                                        button.disabled = true;
+                                        setTimeout(() => {
+                                          if (button) {
+                                            button.disabled = false;
+                                          }
+                                        }, 1000);
+                                        
                                         if (typeof player.dg_id !== 'number') return;
+                                        
+                                        if (hasMatchupConflict) {
+                                          // Show warning toast for betting against yourself
+                                          const conflictNames = conflictingOpponents.map(o => formatPlayerName(o.name)).join(', ');
+                                          toast({
+                                            title: "Betting Against Yourself!",
+                                            description: `You already have ${conflictNames} in active parlays. Adding ${playerName} means you're betting against yourself in the same matchup.`,
+                                            duration: 5000,
+                                            variant: "destructive"
+                                          });
+                                        }
+                                        
                                         addSelection({
                                           id: `${player.dg_id}-${matchup.id}`,
                                           matchupType,
@@ -1128,13 +1167,21 @@ export default function MatchupsTable({
                               return false;
                             })();
 
+                            // Check for opponent conflicts (betting against yourself) - Mobile
+                            const opponentsMobile = players.filter(p => p.dg_id !== player.dg_id);
+                            const conflictingOpponentsMobile = opponentsMobile.filter(opponent => 
+                              isPlayerInAnyParlay(formatPlayerName(opponent.name))
+                            );
+                            const hasMatchupConflictMobile = conflictingOpponentsMobile.length > 0;
+
                             return (
                               <div 
                                 key={`${matchup.id}-${player.id}`}
                                 className={`
                                   ${idx === players.length - 1 ? 'border-b-8 border-b-gray-900' : 'border-b border-b-gray-800'}
-                                  ${playerStatus.status === 'used' ? 'bg-yellow-50/5' : ''}
+                                  ${playerStatus.status === 'used' ? 'bg-blue-50/5' : ''}
                                   ${playerStatus.status === 'current' ? 'bg-primary/5' : ''}
+                                  ${hasMatchupConflictMobile ? '!border-yellow-200 border-1' : ''}
                                   ${isOddsGapHighlight ? 'bg-green-500/10 border-l-4 border-l-green-500' : ''}
                                   bg-gray-950/30 p-4
                                 `}
@@ -1153,13 +1200,23 @@ export default function MatchupsTable({
                                         R{playerStatus.roundNum}
                                       </span>
                                     )}
-                                    {playerStatus.status !== 'available' && (
+                                    {hasMatchupConflictMobile && (
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <AlertCircle className="h-4 w-4 text-yellow-200" />
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          <p className="text-foreground">Betting against yourself! You already have {conflictingOpponentsMobile.map(o => formatPlayerName(o.name)).join(', ')} in active parlays</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    )}
+                                    {playerStatus.status !== 'available' && !hasMatchupConflictMobile && (
                                       <Tooltip>
                                         <TooltipTrigger asChild>
                                           <Info 
                                             className={playerStatus.status === 'current' ? 
-                                              'text-blue-400/70' : 
-                                              'text-yellow-400/70'
+                                              'text-green-400/70' : 
+                                              'text-blue-400/70'
                                             } 
                                             size={14} 
                                           />
@@ -1184,15 +1241,36 @@ export default function MatchupsTable({
                                     </Button>
                                   ) : playerStatus.status === 'used' ? (
                                     <Button size="icon" variant="secondary" disabled className="h-8 w-8">
-                                      <CheckCircle className="text-yellow-400/70" size={16} />
+                                      <CheckCircle className="text-blue-400" size={16} />
                                     </Button>
                                   ) : (
                                     <Button 
                                       size="icon" 
                                       variant="outline" 
-                                      className="h-8 w-8 group group-hover:text-white" 
-                                      onClick={() => {
+                                      className={`h-8 w-8 group group-hover:text-white ${hasMatchupConflictMobile ? 'border-yellow-500/50 text-yellow-200 hover:bg-yellow-500/20 hover:border-yellow-400' : ''}`}
+                                      onClick={(e) => {
+                                        // Prevent double clicks
+                                        const button = e.currentTarget;
+                                        button.disabled = true;
+                                        setTimeout(() => {
+                                          if (button) {
+                                            button.disabled = false;
+                                          }
+                                        }, 1000);
+                                        
                                         if (typeof player.dg_id !== 'number') return;
+                                        
+                                        if (hasMatchupConflictMobile) {
+                                          // Show warning toast for betting against yourself
+                                          const conflictNames = conflictingOpponentsMobile.map(o => formatPlayerName(o.name)).join(', ');
+                                          toast({
+                                            title: "Betting Against Yourself!",
+                                            description: `You already have ${conflictNames} in active parlays. Adding ${playerName} means you're betting against yourself in the same matchup.`,
+                                            duration: 5000,
+                                            variant: "destructive"
+                                          });
+                                        }
+                                        
                                         addSelection({
                                           id: `${player.dg_id}-${matchup.id}`,
                                           matchupType,

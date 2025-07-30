@@ -227,7 +227,7 @@ export function RecommendedPicksContent({
   
   const allParlayPicks = activeParlays.flatMap((parlay: any) => parlay.picks || []);
   const isPlayerInAnyParlay = (playerName: string) =>
-    allParlayPicks.some((pick: any) => formatPlayerName(pick.picked_player_name || '').toLowerCase() === formatPlayerName(playerName).toLowerCase());
+    allParlayPicks.some((pick: any) => formatPlayerName(pick.selection_name || pick.picked_player_name || '').toLowerCase() === formatPlayerName(playerName).toLowerCase());
 
   // Add player search state and functionality
 
