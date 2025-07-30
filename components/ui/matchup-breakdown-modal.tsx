@@ -242,7 +242,7 @@ export const MatchupBreakdownModal: FC<MatchupBreakdownModalProps> = ({
                               {formatSG(player.sgTotal)}
                             </span>
                             <span className="text-gray-400">/</span>
-                            <span className={`${getSGColor((player as any).dgSgTotal)} ${sgLeaders.dgSgTotal === player.dgId ? 'font-bold bg-purple-500/20 px-1 py-0.5 rounded' : ''}`}>
+                            <span className={`${getSGColor((player as any).dgSgTotal)} ${sgLeaders.dgSgTotal === player.dgId ? 'font-bold bg-green-500/20 px-1 py-0.5 rounded' : ''}`}>
                               {formatSG((player as any).dgSgTotal)}
                             </span>
                           </div>
@@ -253,7 +253,7 @@ export const MatchupBreakdownModal: FC<MatchupBreakdownModalProps> = ({
                               {formatSG(player.sgPutt)}
                             </span>
                             <span className="text-gray-400">/</span>
-                            <span className={`${getSGColor((player as any).dgSgPutt)} ${sgLeaders.dgSgPutt === player.dgId ? 'font-bold bg-purple-500/20 px-1 py-0.5 rounded' : ''}`}>
+                            <span className={`${getSGColor((player as any).dgSgPutt)} ${sgLeaders.dgSgPutt === player.dgId ? 'font-bold bg-green-500/20 px-1 py-0.5 rounded' : ''}`}>
                               {formatSG((player as any).dgSgPutt)}
                             </span>
                           </div>
@@ -264,7 +264,7 @@ export const MatchupBreakdownModal: FC<MatchupBreakdownModalProps> = ({
                               {formatSG(player.sgApp)}
                             </span>
                             <span className="text-gray-400">/</span>
-                            <span className={`${getSGColor((player as any).dgSgApp)} ${sgLeaders.dgSgApp === player.dgId ? 'font-bold bg-purple-500/20 px-1 py-0.5 rounded' : ''}`}>
+                            <span className={`${getSGColor((player as any).dgSgApp)} ${sgLeaders.dgSgApp === player.dgId ? 'font-bold bg-green-500/20 px-1 py-0.5 rounded' : ''}`}>
                               {formatSG((player as any).dgSgApp)}
                             </span>
                           </div>
@@ -275,7 +275,7 @@ export const MatchupBreakdownModal: FC<MatchupBreakdownModalProps> = ({
                               {formatSG(player.sgArg)}
                             </span>
                             <span className="text-gray-400">/</span>
-                            <span className={`${getSGColor((player as any).dgSgArg)} ${sgLeaders.dgSgArg === player.dgId ? 'font-bold bg-purple-500/20 px-1 py-0.5 rounded' : ''}`}>
+                            <span className={`${getSGColor((player as any).dgSgArg)} ${sgLeaders.dgSgArg === player.dgId ? 'font-bold bg-green-500/20 px-1 py-0.5 rounded' : ''}`}>
                               {formatSG((player as any).dgSgArg)}
                             </span>
                           </div>
@@ -286,7 +286,7 @@ export const MatchupBreakdownModal: FC<MatchupBreakdownModalProps> = ({
                               {formatSG(player.sgOtt)}
                             </span>
                             <span className="text-gray-400">/</span>
-                            <span className={`${getSGColor((player as any).dgSgOtt)} ${sgLeaders.dgSgOtt === player.dgId ? 'font-bold bg-purple-500/20 px-1 py-0.5 rounded' : ''}`}>
+                            <span className={`${getSGColor((player as any).dgSgOtt)} ${sgLeaders.dgSgOtt === player.dgId ? 'font-bold bg-green-500/20 px-1 py-0.5 rounded' : ''}`}>
                               {formatSG((player as any).dgSgOtt)}
                             </span>
                           </div>
