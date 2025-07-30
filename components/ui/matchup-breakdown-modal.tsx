@@ -238,55 +238,55 @@ export const MatchupBreakdownModal: FC<MatchupBreakdownModalProps> = ({
                         </td>
                         <td className="text-center py-2 font-mono">
                           <div className="flex justify-center items-center gap-1">
-                            <span className={`${getSGColor(player.sgTotal)} ${sgLeaders.sgTotal === player.dgId ? 'font-bold bg-green-500/20 px-1 py-0.5 rounded' : ''}`}>
+                            <span className={`px-1 py-0.5 rounded ${getSGColor(player.sgTotal)} ${sgLeaders.sgTotal === player.dgId ? 'font-bold bg-green-500/20' : ''}`}>
                               {formatSG(player.sgTotal)}
                             </span>
                             <span className="text-gray-400">/</span>
-                            <span className={`${getSGColor((player as any).dgSgTotal)} ${sgLeaders.dgSgTotal === player.dgId ? 'font-bold bg-green-500/20 px-1 py-0.5 rounded' : ''}`}>
+                            <span className={`px-1 py-0.5 rounded ${getSGColor((player as any).dgSgTotal)} ${sgLeaders.dgSgTotal === player.dgId ? 'font-bold bg-green-500/20' : ''}`}>
                               {formatSG((player as any).dgSgTotal)}
                             </span>
                           </div>
                         </td>
                         <td className="text-center py-2 font-mono">
                           <div className="flex justify-center items-center gap-1">
-                            <span className={`${getSGColor(player.sgPutt)} ${sgLeaders.sgPutt === player.dgId ? 'font-bold bg-green-500/20 px-1 py-0.5 rounded' : ''}`}>
+                            <span className={`px-1 py-0.5 rounded ${getSGColor(player.sgPutt)} ${sgLeaders.sgPutt === player.dgId ? 'font-bold bg-green-500/20' : ''}`}>
                               {formatSG(player.sgPutt)}
                             </span>
                             <span className="text-gray-400">/</span>
-                            <span className={`${getSGColor((player as any).dgSgPutt)} ${sgLeaders.dgSgPutt === player.dgId ? 'font-bold bg-green-500/20 px-1 py-0.5 rounded' : ''}`}>
+                            <span className={`px-1 py-0.5 rounded ${getSGColor((player as any).dgSgPutt)} ${sgLeaders.dgSgPutt === player.dgId ? 'font-bold bg-green-500/20' : ''}`}>
                               {formatSG((player as any).dgSgPutt)}
                             </span>
                           </div>
                         </td>
                         <td className="text-center py-2 font-mono">
                           <div className="flex justify-center items-center gap-1">
-                            <span className={`${getSGColor(player.sgApp)} ${sgLeaders.sgApp === player.dgId ? 'font-bold bg-green-500/20 px-1 py-0.5 rounded' : ''}`}>
+                            <span className={`px-1 py-0.5 rounded ${getSGColor(player.sgApp)} ${sgLeaders.sgApp === player.dgId ? 'font-bold bg-green-500/20' : ''}`}>
                               {formatSG(player.sgApp)}
                             </span>
                             <span className="text-gray-400">/</span>
-                            <span className={`${getSGColor((player as any).dgSgApp)} ${sgLeaders.dgSgApp === player.dgId ? 'font-bold bg-green-500/20 px-1 py-0.5 rounded' : ''}`}>
+                            <span className={`px-1 py-0.5 rounded ${getSGColor((player as any).dgSgApp)} ${sgLeaders.dgSgApp === player.dgId ? 'font-bold bg-green-500/20' : ''}`}>
                               {formatSG((player as any).dgSgApp)}
                             </span>
                           </div>
                         </td>
                         <td className="text-center py-2 font-mono">
                           <div className="flex justify-center items-center gap-1">
-                            <span className={`${getSGColor(player.sgArg)} ${sgLeaders.sgArg === player.dgId ? 'font-bold bg-green-500/20 px-1 py-0.5 rounded' : ''}`}>
+                            <span className={`px-1 py-0.5 rounded ${getSGColor(player.sgArg)} ${sgLeaders.sgArg === player.dgId ? 'font-bold bg-green-500/20' : ''}`}>
                               {formatSG(player.sgArg)}
                             </span>
                             <span className="text-gray-400">/</span>
-                            <span className={`${getSGColor((player as any).dgSgArg)} ${sgLeaders.dgSgArg === player.dgId ? 'font-bold bg-green-500/20 px-1 py-0.5 rounded' : ''}`}>
+                            <span className={`px-1 py-0.5 rounded ${getSGColor((player as any).dgSgArg)} ${sgLeaders.dgSgArg === player.dgId ? 'font-bold bg-green-500/20' : ''}`}>
                               {formatSG((player as any).dgSgArg)}
                             </span>
                           </div>
                         </td>
                         <td className="text-center py-2 font-mono">
                           <div className="flex justify-center items-center gap-1">
-                            <span className={`${getSGColor(player.sgOtt)} ${sgLeaders.sgOtt === player.dgId ? 'font-bold bg-green-500/20 px-1 py-0.5 rounded' : ''}`}>
+                            <span className={`px-1 py-0.5 rounded ${getSGColor(player.sgOtt)} ${sgLeaders.sgOtt === player.dgId ? 'font-bold bg-green-500/20' : ''}`}>
                               {formatSG(player.sgOtt)}
                             </span>
                             <span className="text-gray-400">/</span>
-                            <span className={`${getSGColor((player as any).dgSgOtt)} ${sgLeaders.dgSgOtt === player.dgId ? 'font-bold bg-green-500/20 px-1 py-0.5 rounded' : ''}`}>
+                            <span className={`px-1 py-0.5 rounded ${getSGColor((player as any).dgSgOtt)} ${sgLeaders.dgSgOtt === player.dgId ? 'font-bold bg-green-500/20' : ''}`}>
                               {formatSG((player as any).dgSgOtt)}
                             </span>
                           </div>
