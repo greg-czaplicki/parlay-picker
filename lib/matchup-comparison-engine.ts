@@ -207,7 +207,8 @@ export class MatchupComparisonEngine {
   private analyzeSG(players: PlayerComparison[]) {
     const playersWithSG = players.filter(p => p.sgTotal !== null);
     
-    if (playersWithSG.length < 2) {
+    // For fair comparison, all players must have SG data
+    if (playersWithSG.length !== players.length || playersWithSG.length < 2) {
       return {
         sgLeader: null,
         sgGapSize: 0,
@@ -263,12 +264,13 @@ export class MatchupComparisonEngine {
     const dominanceScore = new Map<string, { categories: number; totalGap: number }>();
     const MINIMUM_GAP = 0.05; // Require at least 0.05 SG advantage to count as "dominance"
 
-    // Count how many players have SG data
-    const playersWithAnySG = players.filter(p => 
-      p.sgPutt !== null || p.sgApp !== null || p.sgArg !== null || p.sgOtt !== null
+    // Check if ALL players have complete SG data (all 4 categories)
+    const playersWithCompleteSG = players.filter(p => 
+      p.sgPutt !== null && p.sgApp !== null && p.sgArg !== null && p.sgOtt !== null
     );
 
-    if (playersWithAnySG.length === 0) {
+    // Only analyze if all players in the matchup have complete SG data
+    if (playersWithCompleteSG.length !== players.length) {
       return null;
     }
 

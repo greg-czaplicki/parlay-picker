@@ -184,23 +184,43 @@ export default function Dashboard({
     
     // Sort recommendations by best value first
     const sortedRecommendations = recommendations.sort((a, b) => {
-      // Parse odds gap from reason string (e.g., "31pt odds gap" -> 31)
-      const getOddsGap = (reason: string) => {
-        const match = reason.match(/(\d+)pt odds gap/);
-        return match ? parseInt(match[1]) : 0;
+      // Calculate priority score based on reason type
+      const getReasonScore = (reason: string) => {
+        // SG category dominance is highest priority
+        if (reason.includes('Leads') && reason.includes('SG categories')) {
+          const match = reason.match(/Leads (\d+) SG categories/);
+          const categories = match ? parseInt(match[1]) : 0;
+          // 4 categories = 140, 3 categories = 130, 2 categories = 120
+          return 100 + categories * 10;
+        }
+        
+        // Better SG than favorite is second priority
+        if (reason.includes('Better SG than favorite')) {
+          return 80;
+        }
+        
+        // Odds gap is third priority
+        if (reason.includes('pt odds gap')) {
+          const match = reason.match(/(\d+)pt odds gap/);
+          const gap = match ? parseInt(match[1]) : 0;
+          // Base score of 50, plus 0.5 points per gap point (capped at 20 bonus)
+          return 50 + Math.min(gap * 0.5, 20);
+        }
+        
+        return 0;
       };
       
-      const aGap = getOddsGap(a.reason);
-      const bGap = getOddsGap(b.reason);
+      const aScore = getReasonScore(a.reason);
+      const bScore = getReasonScore(b.reason);
       
-      // Sort by largest odds gap first (best value)
-      if (aGap !== bGap) {
-        return bGap - aGap;
+      // Primary sort: reason score (higher is better)
+      if (aScore !== bScore) {
+        return bScore - aScore;
       }
       
       // Secondary sort: higher SG Total (better player)
-      const aSG = a.sgTotal || 0;
-      const bSG = b.sgTotal || 0;
+      const aSG = a.sgTotal || -999;
+      const bSG = b.sgTotal || -999;
       if (aSG !== bSG) {
         return bSG - aSG;
       }

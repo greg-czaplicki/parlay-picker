@@ -1,6 +1,6 @@
 "use client"
 
-import { FC } from 'react';
+import { FC, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { formatPlayerName } from '@/lib/utils';
@@ -61,6 +61,33 @@ export const MatchupBreakdownModal: FC<MatchupBreakdownModalProps> = ({
     if (sg > 0) return 'text-orange-400';
     return 'text-red-400';
   };
+
+  // Calculate SG leaders for each category
+  const sgLeaders = useMemo(() => {
+    const leaders: Record<string, number> = {};
+    const MINIMUM_GAP = 0.05;
+    
+    // For each SG category, find the leader
+    ['sgTotal', 'sgPutt', 'sgApp', 'sgArg', 'sgOtt'].forEach(category => {
+      const playersWithStat = players.filter(p => p[category as keyof typeof p] !== null);
+      if (playersWithStat.length >= 2) {
+        const sorted = [...playersWithStat].sort((a, b) => 
+          (b[category as keyof typeof b] as number || 0) - (a[category as keyof typeof a] as number || 0)
+        );
+        const leader = sorted[0];
+        const secondBest = sorted[1];
+        const gap = (leader[category as keyof typeof leader] as number || 0) - 
+                   (secondBest[category as keyof typeof secondBest] as number || 0);
+        
+        // Only mark as leader if gap is meaningful
+        if (gap >= MINIMUM_GAP) {
+          leaders[category] = leader.dgId;
+        }
+      }
+    });
+    
+    return leaders;
+  }, [players]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -157,19 +184,29 @@ export const MatchupBreakdownModal: FC<MatchupBreakdownModalProps> = ({
                           {formatOdds(player.odds)}
                         </td>
                         <td className={`text-center py-2 font-mono ${getSGColor(player.sgTotal)}`}>
-                          {player.sgTotal?.toFixed(2) ?? 'N/A'}
+                          <span className={sgLeaders.sgTotal === player.dgId ? 'font-bold bg-green-500/20 px-2 py-0.5 rounded' : ''}>
+                            {player.sgTotal?.toFixed(2) ?? 'N/A'}
+                          </span>
                         </td>
                         <td className={`text-center py-2 font-mono ${getSGColor(player.sgPutt)}`}>
-                          {player.sgPutt?.toFixed(2) ?? 'N/A'}
+                          <span className={sgLeaders.sgPutt === player.dgId ? 'font-bold bg-green-500/20 px-2 py-0.5 rounded' : ''}>
+                            {player.sgPutt?.toFixed(2) ?? 'N/A'}
+                          </span>
                         </td>
                         <td className={`text-center py-2 font-mono ${getSGColor(player.sgApp)}`}>
-                          {player.sgApp?.toFixed(2) ?? 'N/A'}
+                          <span className={sgLeaders.sgApp === player.dgId ? 'font-bold bg-green-500/20 px-2 py-0.5 rounded' : ''}>
+                            {player.sgApp?.toFixed(2) ?? 'N/A'}
+                          </span>
                         </td>
                         <td className={`text-center py-2 font-mono ${getSGColor(player.sgArg)}`}>
-                          {player.sgArg?.toFixed(2) ?? 'N/A'}
+                          <span className={sgLeaders.sgArg === player.dgId ? 'font-bold bg-green-500/20 px-2 py-0.5 rounded' : ''}>
+                            {player.sgArg?.toFixed(2) ?? 'N/A'}
+                          </span>
                         </td>
                         <td className={`text-center py-2 font-mono ${getSGColor(player.sgOtt)}`}>
-                          {player.sgOtt?.toFixed(2) ?? 'N/A'}
+                          <span className={sgLeaders.sgOtt === player.dgId ? 'font-bold bg-green-500/20 px-2 py-0.5 rounded' : ''}>
+                            {player.sgOtt?.toFixed(2) ?? 'N/A'}
+                          </span>
                         </td>
                         <td className="text-center py-2">
                           {player.position ?? 'N/A'}
