@@ -72,7 +72,7 @@ export const MatchupBreakdownModal: FC<MatchupBreakdownModalProps> = ({
     const leaders: Record<string, number> = {};
     const MINIMUM_GAP = 0.05;
     
-    // For each SG category, find the leader
+    // For each PGA Tour SG category, find the leader
     ['sgTotal', 'sgPutt', 'sgApp', 'sgArg', 'sgOtt'].forEach(category => {
       const playersWithStat = players.filter(p => p[category as keyof typeof p] !== null);
       if (playersWithStat.length >= 2) {
@@ -91,27 +91,29 @@ export const MatchupBreakdownModal: FC<MatchupBreakdownModalProps> = ({
       }
     });
 
-    // DataGolf SG Total leader
-    const playersWithDgSG = players.filter(p => (p as any).dgSgTotal !== null);
-    if (playersWithDgSG.length >= 2) {
-      const sorted = [...playersWithDgSG].sort((a, b) => 
-        ((b as any).dgSgTotal || 0) - ((a as any).dgSgTotal || 0)
-      );
-      const leader = sorted[0];
-      const secondBest = sorted[1];
-      const gap = ((leader as any).dgSgTotal || 0) - ((secondBest as any).dgSgTotal || 0);
-      
-      if (gap >= MINIMUM_GAP) {
-        leaders.dgSgTotal = leader.dgId;
+    // For each DataGolf SG category, find the leader
+    ['dgSgTotal', 'dgSgPutt', 'dgSgApp', 'dgSgArg', 'dgSgOtt'].forEach(category => {
+      const playersWithStat = players.filter(p => (p as any)[category] !== null);
+      if (playersWithStat.length >= 2) {
+        const sorted = [...playersWithStat].sort((a, b) => 
+          ((b as any)[category] || 0) - ((a as any)[category] || 0)
+        );
+        const leader = sorted[0];
+        const secondBest = sorted[1];
+        const gap = ((leader as any)[category] || 0) - ((secondBest as any)[category] || 0);
+        
+        if (gap >= MINIMUM_GAP) {
+          leaders[category] = leader.dgId;
+        }
       }
-    }
+    });
     
     return leaders;
   }, [players]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-7xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span>Matchup Breakdown</span>
@@ -166,6 +168,9 @@ export const MatchupBreakdownModal: FC<MatchupBreakdownModalProps> = ({
           {/* Player Comparison Table */}
           <div>
             <h3 className="font-semibold mb-3">Player Comparison</h3>
+            <div className="mb-3 text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg">
+              <span className="font-medium">📊 Data Sources:</span> For SG stats, PGA Tour data is shown on the <strong>left</strong> and DataGolf data on the <strong>right</strong> (PGA / DG format)
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm border-collapse">
                 <thead>
@@ -173,8 +178,7 @@ export const MatchupBreakdownModal: FC<MatchupBreakdownModalProps> = ({
                     <th className="text-left py-2 font-medium">Player</th>
                     <th className="text-center py-2 font-medium">FD Odds</th>
                     <th className="text-center py-2 font-medium">DG Odds</th>
-                    <th className="text-center py-2 font-medium">PGA SG Total</th>
-                    <th className="text-center py-2 font-medium">DG SG Total</th>
+                    <th className="text-center py-2 font-medium">SG Total</th>
                     <th className="text-center py-2 font-medium">SG Putt</th>
                     <th className="text-center py-2 font-medium">SG App</th>
                     <th className="text-center py-2 font-medium">SG Arg</th>
@@ -232,35 +236,60 @@ export const MatchupBreakdownModal: FC<MatchupBreakdownModalProps> = ({
                           )}
                           {!player.dgOdds && 'N/A'}
                         </td>
-                        <td className={`text-center py-2 font-mono ${getSGColor(player.sgTotal)}`}>
-                          <span className={sgLeaders.sgTotal === player.dgId ? 'font-bold bg-green-500/20 px-2 py-0.5 rounded' : ''}>
-                            {formatSG(player.sgTotal)}
-                          </span>
+                        <td className="text-center py-2 font-mono">
+                          <div className="flex justify-center items-center gap-1">
+                            <span className={`${getSGColor(player.sgTotal)} ${sgLeaders.sgTotal === player.dgId ? 'font-bold bg-green-500/20 px-1 py-0.5 rounded' : ''}`}>
+                              {formatSG(player.sgTotal)}
+                            </span>
+                            <span className="text-gray-400">/</span>
+                            <span className={`${getSGColor((player as any).dgSgTotal)} ${sgLeaders.dgSgTotal === player.dgId ? 'font-bold bg-purple-500/20 px-1 py-0.5 rounded' : ''}`}>
+                              {formatSG((player as any).dgSgTotal)}
+                            </span>
+                          </div>
                         </td>
-                        <td className={`text-center py-2 font-mono ${getSGColor((player as any).dgSgTotal)}`}>
-                          <span className={sgLeaders.dgSgTotal === player.dgId ? 'font-bold bg-purple-500/20 px-2 py-0.5 rounded' : ''}>
-                            {formatSG((player as any).dgSgTotal)}
-                          </span>
+                        <td className="text-center py-2 font-mono">
+                          <div className="flex justify-center items-center gap-1">
+                            <span className={`${getSGColor(player.sgPutt)} ${sgLeaders.sgPutt === player.dgId ? 'font-bold bg-green-500/20 px-1 py-0.5 rounded' : ''}`}>
+                              {formatSG(player.sgPutt)}
+                            </span>
+                            <span className="text-gray-400">/</span>
+                            <span className={`${getSGColor((player as any).dgSgPutt)} ${sgLeaders.dgSgPutt === player.dgId ? 'font-bold bg-purple-500/20 px-1 py-0.5 rounded' : ''}`}>
+                              {formatSG((player as any).dgSgPutt)}
+                            </span>
+                          </div>
                         </td>
-                        <td className={`text-center py-2 font-mono ${getSGColor(player.sgPutt)}`}>
-                          <span className={sgLeaders.sgPutt === player.dgId ? 'font-bold bg-green-500/20 px-2 py-0.5 rounded' : ''}>
-                            {formatSG(player.sgPutt)}
-                          </span>
+                        <td className="text-center py-2 font-mono">
+                          <div className="flex justify-center items-center gap-1">
+                            <span className={`${getSGColor(player.sgApp)} ${sgLeaders.sgApp === player.dgId ? 'font-bold bg-green-500/20 px-1 py-0.5 rounded' : ''}`}>
+                              {formatSG(player.sgApp)}
+                            </span>
+                            <span className="text-gray-400">/</span>
+                            <span className={`${getSGColor((player as any).dgSgApp)} ${sgLeaders.dgSgApp === player.dgId ? 'font-bold bg-purple-500/20 px-1 py-0.5 rounded' : ''}`}>
+                              {formatSG((player as any).dgSgApp)}
+                            </span>
+                          </div>
                         </td>
-                        <td className={`text-center py-2 font-mono ${getSGColor(player.sgApp)}`}>
-                          <span className={sgLeaders.sgApp === player.dgId ? 'font-bold bg-green-500/20 px-2 py-0.5 rounded' : ''}>
-                            {formatSG(player.sgApp)}
-                          </span>
+                        <td className="text-center py-2 font-mono">
+                          <div className="flex justify-center items-center gap-1">
+                            <span className={`${getSGColor(player.sgArg)} ${sgLeaders.sgArg === player.dgId ? 'font-bold bg-green-500/20 px-1 py-0.5 rounded' : ''}`}>
+                              {formatSG(player.sgArg)}
+                            </span>
+                            <span className="text-gray-400">/</span>
+                            <span className={`${getSGColor((player as any).dgSgArg)} ${sgLeaders.dgSgArg === player.dgId ? 'font-bold bg-purple-500/20 px-1 py-0.5 rounded' : ''}`}>
+                              {formatSG((player as any).dgSgArg)}
+                            </span>
+                          </div>
                         </td>
-                        <td className={`text-center py-2 font-mono ${getSGColor(player.sgArg)}`}>
-                          <span className={sgLeaders.sgArg === player.dgId ? 'font-bold bg-green-500/20 px-2 py-0.5 rounded' : ''}>
-                            {formatSG(player.sgArg)}
-                          </span>
-                        </td>
-                        <td className={`text-center py-2 font-mono ${getSGColor(player.sgOtt)}`}>
-                          <span className={sgLeaders.sgOtt === player.dgId ? 'font-bold bg-green-500/20 px-2 py-0.5 rounded' : ''}>
-                            {formatSG(player.sgOtt)}
-                          </span>
+                        <td className="text-center py-2 font-mono">
+                          <div className="flex justify-center items-center gap-1">
+                            <span className={`${getSGColor(player.sgOtt)} ${sgLeaders.sgOtt === player.dgId ? 'font-bold bg-green-500/20 px-1 py-0.5 rounded' : ''}`}>
+                              {formatSG(player.sgOtt)}
+                            </span>
+                            <span className="text-gray-400">/</span>
+                            <span className={`${getSGColor((player as any).dgSgOtt)} ${sgLeaders.dgSgOtt === player.dgId ? 'font-bold bg-purple-500/20 px-1 py-0.5 rounded' : ''}`}>
+                              {formatSG((player as any).dgSgOtt)}
+                            </span>
+                          </div>
                         </td>
                         <td className="text-center py-2">
                           {player.position ?? 'N/A'}
