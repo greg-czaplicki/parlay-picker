@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { toast } from "@/components/ui/use-toast"
 import { useRouter } from "next/navigation"
-import { Send } from "lucide-react"
+import { Send, Trash2 } from "lucide-react"
 import { useCreateParlayMutation } from '@/hooks/use-create-parlay-mutation'
 import { useParlayContext, ParlaySelection } from "@/context/ParlayContext"
 
@@ -16,9 +16,7 @@ type ParlayProps = {
 
 export default function ParlaySummary({ selections, userId = '00000000-0000-0000-0000-000000000001' }: ParlayProps) {
   const router = useRouter()
-  const [stake, setStake] = useState(10)
-  const [totalOdds, setTotalOdds] = useState(0)
-  const [payout, setPayout] = useState(0)
+  const { stake, setStake, totalOdds, potentialPayout, clearSelections } = useParlayContext()
   const [submitting, setSubmitting] = useState(false)
   const createParlayMutation = useCreateParlayMutation(userId)
   
@@ -86,7 +84,7 @@ export default function ParlaySummary({ selections, userId = '00000000-0000-0000
         user_id: userId,
         amount: stake,
         odds: totalOdds,
-        payout,
+        payout: potentialPayout,
         round_num: selections[0]?.roundNum || null,
         picks: picks as any,  // Cast to any to bypass TypeScript error
       })
@@ -94,6 +92,7 @@ export default function ParlaySummary({ selections, userId = '00000000-0000-0000
         title: "Parlay Submitted",
         description: `Your parlay has been saved with ${selections.length} selections.`,
       })
+      clearSelections() // Clear after successful submission
       router.push('/parlays')
     } catch (err) {
       console.error("Error submitting parlay:", err)
@@ -107,32 +106,14 @@ export default function ParlaySummary({ selections, userId = '00000000-0000-0000
     }
   }
   
-  // Calculate parlay odds and payout whenever selections or stake changes
-  useEffect(() => {
-    if (selections.length === 0) {
-      setTotalOdds(0)
-      setPayout(0)
-      return
-    }
-    
-    // Convert American odds to decimal
-    const decimalOdds = selections.map(selection => toDecimalOdds(Number(selection.odds)))
-    
-    // Multiply to get total odds
-    const totalDecimal = decimalOdds.reduce((acc, curr) => acc * curr, 1)
-    
-    // Convert back to American
-    const americanOdds = totalDecimal >= 2
-      ? Math.round((totalDecimal - 1) * 100)
-      : Math.round(-100 / (totalDecimal - 1))
-    
-    // Calculate payout
-    const totalPayout = stake * totalDecimal
-    
-    // Update state
-    setTotalOdds(americanOdds)
-    setPayout(Number(totalPayout.toFixed(2)))
-  }, [selections, stake])
+  // Clear parlay after successful submission
+  const handleClearParlay = () => {
+    clearSelections()
+    toast({
+      title: "Parlay Cleared",
+      description: "All selections have been removed.",
+    })
+  }
   
   return (
     <div className="glass-card p-6">
@@ -174,29 +155,41 @@ export default function ParlaySummary({ selections, userId = '00000000-0000-0000
 
           <div>
             <label className="text-sm text-gray-400 mb-1 block">Potential Payout</label>
-            <div className="text-4xl font-bold text-green-400">${payout.toFixed(2)}</div>
+            <div className="text-4xl font-bold text-green-400">${potentialPayout.toFixed(2)}</div>
           </div>
           
-          {/* Submit button */}
-          <Button 
-            onClick={submitParlay} 
-            disabled={submitting || selections.length === 0}
-            className="w-full bg-primary hover:bg-primary/90 text-white mt-4"
-          >
-            {submitting ? (
-              <>
-                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Submitting...
-              </>
-            ) : (
-              <>
-                <Send size={16} className="mr-2" /> Submit Parlay
-              </>
+          {/* Action buttons */}
+          <div className="space-y-2">
+            <Button 
+              onClick={submitParlay} 
+              disabled={submitting || selections.length === 0}
+              className="w-full bg-primary hover:bg-primary/90 text-white"
+            >
+              {submitting ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <Send size={16} className="mr-2" /> Submit Parlay
+                </>
+              )}
+            </Button>
+            
+            {selections.length > 0 && (
+              <Button 
+                onClick={handleClearParlay} 
+                variant="outline"
+                className="w-full border-gray-600 text-gray-400 hover:text-white hover:bg-gray-700"
+              >
+                <Trash2 size={16} className="mr-2" /> Clear All Selections
+              </Button>
             )}
-          </Button>
+          </div>
         </div>
     </div>
   )

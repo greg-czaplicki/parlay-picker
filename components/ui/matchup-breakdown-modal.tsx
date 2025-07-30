@@ -380,7 +380,19 @@ export const MatchupBreakdownModal: FC<MatchupBreakdownModalProps> = ({
                   )}
                   {analysis.hasDataSourceDisagreement && (
                     <div className={`${analysis.dataSourceDisagreementType === 'strong' ? 'text-purple-600 dark:text-purple-400' : 'text-purple-500 dark:text-purple-300'}`}>
-                      🧠 {analysis.dataSourceDisagreementType === 'strong' ? 'Strong' : 'Mild'} data source disagreement
+                      {(() => {
+                        // Check if the recommended player is the DataGolf leader
+                        const recommendedPlayerData = players.find(p => 
+                          formatPlayerName(p.name).toLowerCase() === formatPlayerName(recommendedPlayer.name).toLowerCase()
+                        );
+                        const isDgLeader = recommendedPlayerData?.name === analysis.dgLeader;
+                        
+                        if (isDgLeader) {
+                          return `🎯 ${analysis.dataSourceDisagreementType === 'strong' ? 'Strong' : 'Good'} DataGolf validation`;
+                        } else {
+                          return `🧠 ${analysis.dataSourceDisagreementType === 'strong' ? 'Strong' : 'Mild'} data source disagreement`;
+                        }
+                      })()}
                     </div>
                   )}
                   {analysis.hasDataConsensus && (

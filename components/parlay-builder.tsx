@@ -19,6 +19,19 @@ export default function ParlayBuilder({ matchupType, roundNum }: { matchupType: 
     setStake,
     potentialPayout,
   } = useParlayContext()
+
+  // Sort selections by tee time for display (earliest first)
+  const sortedSelections = [...selections].sort((a, b) => {
+    // If both have tee times, sort by tee time
+    if (a.teeTime && b.teeTime) {
+      return new Date(a.teeTime).getTime() - new Date(b.teeTime).getTime()
+    }
+    // If only one has a tee time, put it first
+    if (a.teeTime && !b.teeTime) return -1
+    if (!a.teeTime && b.teeTime) return 1
+    // If neither has a tee time, maintain original order
+    return 0
+  })
   
   // Local state for stake input
   const [localStake, setLocalStake] = useState(contextStake)
@@ -41,13 +54,22 @@ export default function ParlayBuilder({ matchupType, roundNum }: { matchupType: 
       <div className="glass-card md:col-span-2 p-6">
           <h2 className="text-xl font-bold mb-4">Build Your Parlay</h2>
           <div className="space-y-4">
-            {selections.map((selection, index) => (
+            {sortedSelections.map((selection, index) => (
               <div key={selection.id} className="p-4 bg-[#1e1e23] rounded-lg">
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <h3 className="font-medium">Selection {index + 1}</h3>
                     {selection.eventName && (
                       <span className="text-xs text-gray-400">Event: {selection.eventName}</span>
+                    )}
+                    {selection.teeTime && (
+                      <div className="text-xs text-gray-400">
+                        Tee Time: {new Date(selection.teeTime).toLocaleTimeString([], { 
+                          hour: '2-digit', 
+                          minute: '2-digit',
+                          timeZoneName: 'short'
+                        })}
+                      </div>
                     )}
                   </div>
                   <div className="flex items-center gap-2">

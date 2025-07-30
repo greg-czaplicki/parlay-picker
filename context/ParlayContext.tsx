@@ -50,21 +50,62 @@ export function ParlayProvider({ children }: { children: ReactNode }) {
 
   // Load from localStorage on mount
   useEffect(() => {
-    const saved = typeof window !== 'undefined' ? localStorage.getItem('parlaySelections') : null;
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved).map((s: any) => ({ ...s, id: String(s.id) }));
-        setSelections(parsed);
-      } catch {}
+    if (typeof window !== 'undefined') {
+      let loadedSelections: ParlaySelection[] = [];
+      let loadedStake = 10;
+
+      // Load selections
+      const savedSelections = localStorage.getItem('parlaySelections');
+      if (savedSelections) {
+        try {
+          const parsed = JSON.parse(savedSelections).map((s: any) => ({ ...s, id: String(s.id) }));
+          loadedSelections = parsed;
+          setSelections(parsed);
+        } catch (error) {
+          console.warn('Failed to parse saved parlay selections:', error);
+          localStorage.removeItem('parlaySelections');
+        }
+      }
+
+      // Load stake
+      const savedStake = localStorage.getItem('parlayStake');
+      if (savedStake) {
+        try {
+          const parsedStake = JSON.parse(savedStake);
+          if (typeof parsedStake === 'number' && parsedStake > 0) {
+            loadedStake = parsedStake;
+            setStake(parsedStake);
+          }
+        } catch (error) {
+          console.warn('Failed to parse saved parlay stake:', error);
+          localStorage.removeItem('parlayStake');
+        }
+      }
+
+      // Recalculate with loaded data
+      if (loadedSelections.length > 0) {
+        setTimeout(() => recalculate(loadedSelections, loadedStake), 0);
+      }
     }
   }, []);
 
-  // Save to localStorage on change
+  // Save selections to localStorage on change
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('parlaySelections', JSON.stringify(selections));
+      if (selections.length > 0) {
+        localStorage.setItem('parlaySelections', JSON.stringify(selections));
+      } else {
+        localStorage.removeItem('parlaySelections');
+      }
     }
   }, [selections]);
+
+  // Save stake to localStorage on change
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('parlayStake', JSON.stringify(stake));
+    }
+  }, [stake]);
 
   // Add selection to parlay
   const addSelection = useCallback((newSelection: Partial<ParlaySelection>) => {
@@ -133,6 +174,10 @@ export function ParlayProvider({ children }: { children: ReactNode }) {
     setSelections([])
     setTotalOdds(0)
     setPotentialPayout(0)
+    // Clear from localStorage as well
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('parlaySelections')
+    }
   }
 
   // Calculate total odds and potential payout

@@ -234,10 +234,24 @@ export class MatchupComparisonEngine {
   }
 
   private analyzeSG(players: PlayerComparison[]) {
-    const playersWithSG = players.filter(p => p.sgTotal !== null);
+    // Check for DataGolf SG data first (prefer it when available)
+    const playersWithDgSG = players.filter(p => (p as any).dgSgTotal !== null);
+    const playersWithPgaSG = players.filter(p => p.sgTotal !== null);
     
-    // For fair comparison, all players must have SG data
-    if (playersWithSG.length !== players.length || playersWithSG.length < 2) {
+    // Determine which SG data to use - prefer DataGolf if most/all players have it
+    let playersWithSG: PlayerComparison[];
+    let sgProperty: string;
+    
+    if (playersWithDgSG.length >= playersWithPgaSG.length && playersWithDgSG.length >= 2) {
+      // Use DataGolf data if it's more complete or equal
+      playersWithSG = playersWithDgSG;
+      sgProperty = 'dgSgTotal';
+    } else if (playersWithPgaSG.length >= 2) {
+      // Fall back to PGA Tour data
+      playersWithSG = playersWithPgaSG;
+      sgProperty = 'sgTotal';
+    } else {
+      // Not enough data from either source
       return {
         sgLeader: null,
         sgGapSize: 0,
@@ -251,15 +265,21 @@ export class MatchupComparisonEngine {
       };
     }
 
-    // SG Total analysis
-    const sortedBySG = [...playersWithSG].sort((a, b) => (b.sgTotal ?? 0) - (a.sgTotal ?? 0));
+    // SG Total analysis using the preferred data source
+    const sortedBySG = [...playersWithSG].sort((a, b) => {
+      const aValue = sgProperty === 'dgSgTotal' ? (a as any).dgSgTotal : a.sgTotal;
+      const bValue = sgProperty === 'dgSgTotal' ? (b as any).dgSgTotal : b.sgTotal;
+      return (bValue ?? 0) - (aValue ?? 0);
+    });
     const sgLeader = sortedBySG[0];
     
     // Find first player with different SG Total (handles ties)
     let sgGapSize = 0;
     for (let i = 1; i < sortedBySG.length; i++) {
       const competitor = sortedBySG[i];
-      const gap = Math.abs((sgLeader.sgTotal ?? 0) - (competitor.sgTotal ?? 0));
+      const leaderValue = sgProperty === 'dgSgTotal' ? (sgLeader as any).dgSgTotal : sgLeader.sgTotal;
+      const competitorValue = sgProperty === 'dgSgTotal' ? (competitor as any).dgSgTotal : competitor.sgTotal;
+      const gap = Math.abs((leaderValue ?? 0) - (competitorValue ?? 0));
       if (gap > 0.01) { // Meaningful difference (more than rounding error)
         sgGapSize = gap;
         break;
@@ -269,8 +289,8 @@ export class MatchupComparisonEngine {
     // Category dominance
     const categoryDominance = this.analyzeCategoryDominance(players);
 
-    // Putting edge
-    const puttingAnalysis = this.analyzeCategory(players, 'sgPutt', 0.3);
+    // Putting edge - prefer DataGolf data if available
+    const puttingAnalysis = this.analyzeCategoryWithFallback(players, 'dgSgPutt', 'sgPutt', 0.3);
     
     // Ball striking edge (T2G or OTT if T2G not available)
     const ballStrikingAnalysis = this.analyzeBallStriking(players);
@@ -289,28 +309,54 @@ export class MatchupComparisonEngine {
   }
 
   private analyzeCategoryDominance(players: PlayerComparison[]) {
-    const categories = ['sgPutt', 'sgApp', 'sgArg', 'sgOtt'] as const;
+    const pgaCategories = ['sgPutt', 'sgApp', 'sgArg', 'sgOtt'] as const;
+    const dgCategories = ['dgSgPutt', 'dgSgApp', 'dgSgArg', 'dgSgOtt'] as const;
     const dominanceScore = new Map<string, { categories: number; totalGap: number }>();
     const MINIMUM_GAP = 0.05; // Require at least 0.05 SG advantage to count as "dominance"
 
-    // Check if ALL players have complete SG data (all 4 categories)
-    const playersWithCompleteSG = players.filter(p => 
+    // Check if ALL players have complete DataGolf SG data (all 4 categories)
+    const playersWithCompleteDgSG = players.filter(p => 
+      (p as any).dgSgPutt !== null && (p as any).dgSgApp !== null && 
+      (p as any).dgSgArg !== null && (p as any).dgSgOtt !== null
+    );
+
+    // Check if ALL players have complete PGA Tour SG data (all 4 categories)
+    const playersWithCompletePgaSG = players.filter(p => 
       p.sgPutt !== null && p.sgApp !== null && p.sgArg !== null && p.sgOtt !== null
     );
 
-    // Only analyze if all players in the matchup have complete SG data
-    if (playersWithCompleteSG.length !== players.length) {
+    // Prefer DataGolf data if available for all players, otherwise use PGA Tour data
+    let categoriesToUse: readonly string[];
+    let playersToAnalyze: PlayerComparison[];
+    
+    if (playersWithCompleteDgSG.length === players.length) {
+      categoriesToUse = dgCategories;
+      playersToAnalyze = playersWithCompleteDgSG;
+    } else if (playersWithCompletePgaSG.length === players.length) {
+      categoriesToUse = pgaCategories;
+      playersToAnalyze = playersWithCompletePgaSG;
+    } else {
+      // Not enough complete data from either source
       return null;
     }
 
-    categories.forEach(category => {
-      const playersWithStat = players.filter(p => p[category] !== null);
+    categoriesToUse.forEach(category => {
+      const playersWithStat = playersToAnalyze.filter(p => {
+        const value = category.startsWith('dg') ? (p as any)[category] : p[category as keyof PlayerComparison];
+        return value !== null;
+      });
       
       if (playersWithStat.length >= 2) {
-        const sorted = [...playersWithStat].sort((a, b) => (b[category] ?? 0) - (a[category] ?? 0));
+        const sorted = [...playersWithStat].sort((a, b) => {
+          const aValue = category.startsWith('dg') ? (a as any)[category] : a[category as keyof PlayerComparison];
+          const bValue = category.startsWith('dg') ? (b as any)[category] : b[category as keyof PlayerComparison];
+          return (bValue ?? 0) - (aValue ?? 0);
+        });
         const leader = sorted[0];
         const secondBest = sorted[1];
-        const gap = (leader[category] ?? 0) - (secondBest[category] ?? 0);
+        const leaderValue = category.startsWith('dg') ? (leader as any)[category] : leader[category as keyof PlayerComparison];
+        const secondValue = category.startsWith('dg') ? (secondBest as any)[category] : secondBest[category as keyof PlayerComparison];
+        const gap = (leaderValue ?? 0) - (secondValue ?? 0);
         
         // Only count as dominance if gap is meaningful
         if (gap >= MINIMUM_GAP) {
@@ -340,6 +386,45 @@ export class MatchupComparisonEngine {
     return maxCategories >= 2 ? { player: dominantPlayer!, categories: maxCategories } : null;
   }
 
+  private analyzeCategoryWithFallback(players: PlayerComparison[], primaryCategory: string, fallbackCategory: keyof PlayerComparison, threshold: number) {
+    // Check which data source has better coverage
+    const playersWithPrimary = players.filter(p => (p as any)[primaryCategory] !== null);
+    const playersWithFallback = players.filter(p => p[fallbackCategory] !== null && typeof p[fallbackCategory] === 'number');
+    
+    // Prefer primary (DataGolf) if it has equal or better coverage
+    if (playersWithPrimary.length >= playersWithFallback.length && playersWithPrimary.length >= 2) {
+      return this.analyzeCategoryData(playersWithPrimary, primaryCategory, threshold, true);
+    } else if (playersWithFallback.length >= 2) {
+      return this.analyzeCategoryData(playersWithFallback, fallbackCategory, threshold, false);
+    } else {
+      return { hasEdge: false, edgePlayer: null, gapSize: 0 };
+    }
+  }
+
+  private analyzeCategoryData(playersWithStat: PlayerComparison[], category: string | keyof PlayerComparison, threshold: number, isDataGolf: boolean) {
+    if (playersWithStat.length < 2) {
+      return { hasEdge: false, edgePlayer: null, gapSize: 0 };
+    }
+
+    const sorted = [...playersWithStat].sort((a, b) => {
+      const aValue = isDataGolf ? (a as any)[category] : a[category as keyof PlayerComparison];
+      const bValue = isDataGolf ? (b as any)[category] : b[category as keyof PlayerComparison];
+      return (bValue ?? 0) - (aValue ?? 0);
+    });
+
+    const leader = sorted[0];
+    const secondBest = sorted[1];
+    const leaderValue = isDataGolf ? (leader as any)[category] : leader[category as keyof PlayerComparison];
+    const secondValue = isDataGolf ? (secondBest as any)[category] : secondBest[category as keyof PlayerComparison];
+    const gap = (leaderValue ?? 0) - (secondValue ?? 0);
+
+    return {
+      hasEdge: gap >= threshold,
+      edgePlayer: gap >= threshold ? leader.name : null,
+      gapSize: gap
+    };
+  }
+
   private analyzeCategory(players: PlayerComparison[], category: keyof PlayerComparison, threshold: number) {
     const playersWithStat = players.filter(p => p[category] !== null && typeof p[category] === 'number');
     
@@ -360,14 +445,14 @@ export class MatchupComparisonEngine {
   }
 
   private analyzeBallStriking(players: PlayerComparison[]) {
-    // Try T2G first
+    // Try T2G first (PGA Tour only - no DataGolf equivalent)
     const t2gPlayers = players.filter(p => p.sgT2g !== null);
     if (t2gPlayers.length >= 2) {
       return this.analyzeCategory(players, 'sgT2g', 0.5);
     }
 
-    // Fallback to OTT
-    return this.analyzeCategory(players, 'sgOtt', 0.5);
+    // Fallback to OTT - prefer DataGolf data if available
+    return this.analyzeCategoryWithFallback(players, 'dgSgOtt', 'sgOtt', 0.5);
   }
 
   private analyzeForm(players: PlayerComparison[]) {
