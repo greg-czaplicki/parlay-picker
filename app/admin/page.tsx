@@ -58,7 +58,6 @@ export default function AdminPage() {
     </div>
   )
 }
-}
 
 export const metadata = {
   title: 'Admin Dashboard - Golf Parlay Picker',
