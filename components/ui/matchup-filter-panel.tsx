@@ -16,7 +16,12 @@ import {
   TrendingUp,
   Target,
   DollarSign,
-  BarChart3
+  BarChart3,
+  Brain,
+  TrendingDown,
+  Activity,
+  AlertTriangle,
+  CheckCircle
 } from 'lucide-react';
 import { 
   MatchupRelativeFilters, 
@@ -25,6 +30,7 @@ import {
   FILTER_PRESETS 
 } from '@/types/matchup-filters';
 import { cn } from '@/lib/utils';
+import { useFilterConfidence } from '@/hooks/use-filter-confidence';
 
 interface MatchupFilterPanelProps {
   filters: MatchupRelativeFilters;
@@ -35,6 +41,7 @@ interface MatchupFilterPanelProps {
   resultCount?: number;
   totalCount?: number;
   className?: string;
+  activePreset?: FilterPreset | null;
 }
 
 const presetInfo: Record<FilterPreset, { label: string; icon: any; description: string }> = {
@@ -48,11 +55,6 @@ const presetInfo: Record<FilterPreset, { label: string; icon: any; description: 
     icon: BarChart3,
     description: 'One player dominates categories'
   },
-  'coin-flip': {
-    label: 'Coin Flip',
-    icon: DollarSign,
-    description: 'Even matchups'
-  },
   'form-play': {
     label: 'Form Play',
     icon: Zap,
@@ -62,6 +64,11 @@ const presetInfo: Record<FilterPreset, { label: string; icon: any; description: 
     label: 'Value Hunter',
     icon: Target,
     description: 'Find mispriced players'
+  },
+  'data-intel': {
+    label: 'Data Intel',
+    icon: Brain,
+    description: 'DataGolf vs PGA Tour insights'
   }
 };
 
@@ -73,10 +80,59 @@ export const MatchupFilterPanel: FC<MatchupFilterPanelProps> = ({
   onClearFilters,
   resultCount,
   totalCount,
-  className
+  className,
+  activePreset
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['odds']));
+  const { confidence, isLoading: isLoadingConfidence } = useFilterConfidence();
+
+  // Helper functions for confidence display
+  const getConfidenceColor = (score: number) => {
+    if (score >= 0.7) return 'text-green-500';
+    if (score >= 0.4) return 'text-yellow-500';
+    return 'text-red-500';
+  };
+
+  const getConfidenceIcon = (trendDirection: string) => {
+    switch (trendDirection) {
+      case 'improving': return <TrendingUp className="h-3 w-3 text-green-500" />;
+      case 'declining': return <TrendingDown className="h-3 w-3 text-red-500" />;
+      default: return <Activity className="h-3 w-3 text-gray-400" />;
+    }
+  };
+
+  const getConfidenceBadge = (preset: FilterPreset) => {
+    const conf = confidence[preset];
+    if (!conf || isLoadingConfidence) return null;
+
+    const score = Math.round(conf.confidenceScore * 100);
+    const edge = ((conf.edgeDetected || 0) * 100).toFixed(1);
+    const isPositiveEdge = (conf.edgeDetected || 0) > 0;
+
+    if (conf.sampleSize < 10) {
+      return (
+        <div className="flex items-center gap-1 text-xs text-gray-400">
+          <AlertTriangle className="h-3 w-3" />
+          <span>Low Data</span>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex items-center gap-1 text-xs">
+        {getConfidenceIcon(conf.trendDirection)}
+        <span className={getConfidenceColor(conf.confidenceScore)}>
+          {score}% 
+        </span>
+        {isPositiveEdge && (
+          <span className="text-green-500">
+            +{edge}%
+          </span>
+        )}
+      </div>
+    );
+  };
 
   const toggleCategory = (category: string) => {
     setExpandedCategories(prev => {
@@ -171,17 +227,10 @@ export const MatchupFilterPanel: FC<MatchupFilterPanelProps> = ({
           <div className="flex items-center gap-2">
             <FilterIcon className="h-4 w-4" />
             <span className="font-medium">Matchup Filters</span>
-            {activeFilterCount > 0 && (
-              <>
-                <Badge variant="secondary" className="ml-2">
-                  {activeFilterCount} Active
-                </Badge>
-                {resultCount !== undefined && totalCount !== undefined && (
-                  <Badge variant="outline" className="ml-1 text-xs">
-                    {resultCount}/{totalCount} matchups
-                  </Badge>
-                )}
-              </>
+            {resultCount !== undefined && totalCount !== undefined && (
+              <Badge variant="outline" className="ml-2 text-xs">
+                {resultCount}/{totalCount} matchups
+              </Badge>
             )}
           </div>
           <div className="flex items-center gap-2">
@@ -196,14 +245,17 @@ export const MatchupFilterPanel: FC<MatchupFilterPanelProps> = ({
                 Clear
               </Button>
             )}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="h-8 w-8 p-0"
-            >
-              {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </Button>
+            {/* Expand button hidden for now */}
+            {false && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="h-8 w-8 p-0"
+              >
+                {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </Button>
+            )}
           </div>
         </div>
 
@@ -214,25 +266,62 @@ export const MatchupFilterPanel: FC<MatchupFilterPanelProps> = ({
             {(Object.keys(presetInfo) as FilterPreset[]).map(preset => {
               const info = presetInfo[preset];
               const Icon = info.icon;
+              const isActive = activePreset === preset;
+              const conf = confidence[preset];
+              const hasConfidence = conf && conf.sampleSize >= 5;
+              
               return (
-                <Button
-                  key={preset}
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onPresetSelect(preset)}
-                  className="h-8 text-xs"
-                  title={info.description}
-                >
-                  <Icon className="h-3 w-3 mr-1" />
-                  {info.label}
-                </Button>
+                <div key={preset} className="relative">
+                  <Button
+                    variant={isActive ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => onPresetSelect(preset)}
+                    className={cn(
+                      "h-auto text-xs flex flex-col items-center py-2 px-3 min-w-[80px]", 
+                      isActive && "bg-blue-600 hover:bg-blue-700"
+                    )}
+                    title={`${info.description}${hasConfidence ? `\nConfidence: ${Math.round(conf.confidenceScore * 100)}%\nWin Rate: ${(conf.winRate * 100).toFixed(1)}%\nEdge: ${((conf.edgeDetected || 0) * 100).toFixed(1)}%` : ''}`}
+                  >
+                    <div className="flex items-center gap-1 mb-1">
+                      <Icon className="h-3 w-3" />
+                      <span>{info.label}</span>
+                    </div>
+                    {hasConfidence && (
+                      <div className="w-full">
+                        {getConfidenceBadge(preset)}
+                      </div>
+                    )}
+                    {!hasConfidence && !isLoadingConfidence && (
+                      <div className="flex items-center gap-1 text-xs text-gray-400">
+                        <span>No Data</span>
+                      </div>
+                    )}
+                    {isLoadingConfidence && (
+                      <div className="flex items-center gap-1 text-xs text-gray-400">
+                        <span>Loading...</span>
+                      </div>
+                    )}
+                  </Button>
+                  
+                  {/* Confidence indicator dot */}
+                  {hasConfidence && (
+                    <div 
+                      className={cn(
+                        "absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white",
+                        conf.confidenceScore >= 0.7 ? "bg-green-500" :
+                        conf.confidenceScore >= 0.4 ? "bg-yellow-500" : "bg-red-500"
+                      )}
+                      title={`Confidence: ${Math.round(conf.confidenceScore * 100)}%`}
+                    />
+                  )}
+                </div>
               );
             })}
           </div>
         </div>
 
-        {/* Expanded Filters */}
-        {isExpanded && (
+        {/* Expanded Filters - Hidden for now */}
+        {false && isExpanded && (
           <div className="space-y-4 border-t border-gray-700 pt-4">
             {/* Odds Comparisons */}
             <div>

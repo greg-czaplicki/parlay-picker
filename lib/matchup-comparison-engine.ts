@@ -7,12 +7,19 @@ export interface PlayerComparison {
   name: string;
   odds: number | null;
   dgOdds: number | null;
+  // PGA Tour SG stats (current tournament/season)
   sgTotal: number | null;
   sgPutt: number | null;
   sgApp: number | null;
   sgArg: number | null;
   sgOtt: number | null;
   sgT2g: number | null;
+  // DataGolf skill ratings
+  dgSgTotal: number | null;
+  dgSgPutt: number | null;
+  dgSgApp: number | null;
+  dgSgArg: number | null;
+  dgSgOtt: number | null;
   position: number | null;
   todayScore: number | null;
   totalScore: number | null;
@@ -39,6 +46,14 @@ export interface MatchupComparison {
     ballStrikingGapSize: number;
     hasPositionMismatch: boolean;
     formLeader: string | null;
+    // DataGolf vs PGA Tour analysis
+    dgLeader: string | null;
+    dgGapSize: number;
+    hasDataSourceDisagreement: boolean;
+    dataSourceDisagreementType: 'mild' | 'strong' | null;
+    hasDataConsensus: boolean;
+    dgAdvantagePlayer: string | null;
+    dgAdvantageSize: number;
   };
 }
 
@@ -97,27 +112,26 @@ export class MatchupComparisonEngine {
 
     if (matchup.type === '3ball') {
       const m = matchup as Supabase3BallMatchupRow;
-      players.push(this.createPlayerComparison(m.player1_dg_id, m.player1_name, m.odds1, m.dg_odds1));
-      players.push(this.createPlayerComparison(m.player2_dg_id, m.player2_name, m.odds2, m.dg_odds2));
+      players.push(this.createPlayerComparison(m.player1_dg_id, m.player1_name, m.odds1, m.dg_odds1, (m as any).player1_sg_data));
+      players.push(this.createPlayerComparison(m.player2_dg_id, m.player2_name, m.odds2, m.dg_odds2, (m as any).player2_sg_data));
       if (m.player3_dg_id && m.player3_name) {
-        players.push(this.createPlayerComparison(m.player3_dg_id, m.player3_name, m.odds3, m.dg_odds3));
+        players.push(this.createPlayerComparison(m.player3_dg_id, m.player3_name, m.odds3, m.dg_odds3, (m as any).player3_sg_data));
       }
     } else {
       const m = matchup as Supabase2BallMatchupRow;
-      players.push(this.createPlayerComparison(m.player1_dg_id, m.player1_name, m.odds1, m.dg_odds1));
-      players.push(this.createPlayerComparison(m.player2_dg_id, m.player2_name, m.odds2, m.dg_odds2));
+      players.push(this.createPlayerComparison(m.player1_dg_id, m.player1_name, m.odds1, m.dg_odds1, (m as any).player1_sg_data));
+      players.push(this.createPlayerComparison(m.player2_dg_id, m.player2_name, m.odds2, m.dg_odds2, (m as any).player2_sg_data));
     }
 
     return players;
   }
 
-  private createPlayerComparison(dgId: number, name: string, odds: number | null, dgOdds: number | null): PlayerComparison {
+  private createPlayerComparison(dgId: number, name: string, odds: number | null, dgOdds: number | null, sgData?: any): PlayerComparison {
     const stats = this.playerStats.get(dgId);
     const tourneyStats = this.tournamentStats.get(dgId);
 
     // Get player name from stats if not provided in matchup
     const playerName = name || stats?.player_name || tourneyStats?.player_name || `Player ${dgId}`;
-
 
     // Use season stats for SG (more reliable), tournament stats for position/scores
     const comparison = {
@@ -125,12 +139,19 @@ export class MatchupComparisonEngine {
       name: playerName,
       odds,
       dgOdds,
-      sgTotal: stats?.sg_total ?? null, // Prioritize season SG stats
+      // PGA Tour SG stats (from season/tournament data)
+      sgTotal: stats?.sg_total ?? null, 
       sgPutt: stats?.sg_putt ?? null,
       sgApp: stats?.sg_app ?? null,
       sgArg: stats?.sg_arg ?? null,
       sgOtt: stats?.sg_ott ?? null,
-      sgT2g: tourneyStats?.sg_t2g ?? null, // Tournament-specific stat
+      sgT2g: tourneyStats?.sg_t2g ?? null,
+      // DataGolf skill ratings (from player_skill_ratings table)
+      dgSgTotal: sgData?.seasonSgTotal ?? null,
+      dgSgPutt: sgData?.seasonSgPutt ?? null,
+      dgSgApp: sgData?.seasonSgApp ?? null,
+      dgSgArg: sgData?.seasonSgArg ?? null,
+      dgSgOtt: sgData?.seasonSgOtt ?? null,
       position: stats?.position ? this.parsePosition(stats.position) : null,
       todayScore: stats?.today ?? null,
       totalScore: stats?.total ?? tourneyStats?.total ?? null,
@@ -150,8 +171,14 @@ export class MatchupComparisonEngine {
     // Odds analysis
     const oddsAnalysis = this.analyzeOdds(players);
     
-    // SG analysis
+    // SG analysis (PGA Tour)
     const sgAnalysis = this.analyzeSG(players);
+    
+    // DataGolf analysis
+    const dgAnalysis = this.analyzeDataGolf(players);
+    
+    // Data source comparison
+    const dataSourceAnalysis = this.analyzeDataSourceDisagreement(players);
     
     // Form analysis
     const formAnalysis = this.analyzeForm(players);
@@ -159,6 +186,8 @@ export class MatchupComparisonEngine {
     return {
       ...oddsAnalysis,
       ...sgAnalysis,
+      ...dgAnalysis,
+      ...dataSourceAnalysis,
       ...formAnalysis
     };
   }
@@ -372,73 +401,84 @@ export class MatchupComparisonEngine {
     };
   }
 
-  // Filter methods
-  filterByOddsGap(matchups: MatchupRow[], minGap: number = 40): MatchupRow[] {
-    return matchups.filter(matchup => {
-      const analysis = this.analyzeMatchup(matchup);
-      return analysis.analysis.hasOddsGap && analysis.analysis.oddsGapSize >= minGap;
-    });
-  }
-
-  filterByOddsSgMismatch(matchups: MatchupRow[]): MatchupRow[] {
-    return matchups.filter(matchup => {
-      const analysis = this.analyzeMatchup(matchup);
-      return analysis.analysis.hasOddsSgMismatch;
-    });
-  }
-
-  filterBySgDominance(matchups: MatchupRow[], minCategories: number = 3): MatchupRow[] {
-    return matchups.filter(matchup => {
-      const analysis = this.analyzeMatchup(matchup);
-      return analysis.analysis.sgCategoryDominance !== null && 
-             analysis.analysis.sgCategoryDominance.categories >= minCategories;
-    });
-  }
-
-  filterByPuttingEdge(matchups: MatchupRow[], minGap: number = 0.3): MatchupRow[] {
-    return matchups.filter(matchup => {
-      const analysis = this.analyzeMatchup(matchup);
-      return analysis.analysis.hasPuttingEdge && analysis.analysis.puttingGapSize >= minGap;
-    });
-  }
-
-  filterByBallStrikingEdge(matchups: MatchupRow[], minGap: number = 0.5): MatchupRow[] {
-    return matchups.filter(matchup => {
-      const analysis = this.analyzeMatchup(matchup);
-      return analysis.analysis.hasBallStrikingEdge && analysis.analysis.ballStrikingGapSize >= minGap;
-    });
-  }
-
-  // Preset filters
-  applyPreset(matchups: MatchupRow[], preset: string): MatchupRow[] {
-    switch (preset) {
-      case 'fade-chalk':
-        return this.filterByOddsSgMismatch(matchups);
-      
-      case 'stat-dom':
-        return this.filterBySgDominance(matchups, 3);
-      
-      case 'coin-flip':
-        return matchups.filter(matchup => {
-          const analysis = this.analyzeMatchup(matchup);
-          return analysis.analysis.sgGapSize < 0.2;
-        });
-      
-      case 'form-play':
-        return matchups.filter(matchup => {
-          const analysis = this.analyzeMatchup(matchup);
-          return analysis.analysis.hasPositionMismatch;
-        });
-      
-      case 'value':
-        return matchups.filter(matchup => {
-          const analysis = this.analyzeMatchup(matchup);
-          return analysis.analysis.hasOddsSgMismatch || 
-                 (analysis.analysis.sgGapSize > 0.5 && !analysis.analysis.hasOddsGap);
-        });
-      
-      default:
-        return matchups;
+  private analyzeDataGolf(players: PlayerComparison[]) {
+    const playersWithDgSG = players.filter(p => p.dgSgTotal !== null);
+    
+    if (playersWithDgSG.length < 2) {
+      return {
+        dgLeader: null,
+        dgGapSize: 0
+      };
     }
+
+    // DataGolf SG analysis
+    const sortedByDgSG = [...playersWithDgSG].sort((a, b) => (b.dgSgTotal ?? 0) - (a.dgSgTotal ?? 0));
+    const dgLeader = sortedByDgSG[0];
+    const secondBest = sortedByDgSG[1];
+    const dgGapSize = (dgLeader.dgSgTotal ?? 0) - (secondBest.dgSgTotal ?? 0);
+
+    return {
+      dgLeader: dgLeader.name,
+      dgGapSize
+    };
   }
+
+  private analyzeDataSourceDisagreement(players: PlayerComparison[]) {
+    const playersWithBothSG = players.filter(p => p.sgTotal !== null && p.dgSgTotal !== null);
+    
+    if (playersWithBothSG.length < 2) {
+      return {
+        hasDataSourceDisagreement: false,
+        dataSourceDisagreementType: null,
+        hasDataConsensus: false,
+        dgAdvantagePlayer: null,
+        dgAdvantageSize: 0
+      };
+    }
+
+    // Rank players by each data source
+    const pgaRanking = [...playersWithBothSG].sort((a, b) => (b.sgTotal ?? 0) - (a.sgTotal ?? 0));
+    const dgRanking = [...playersWithBothSG].sort((a, b) => (b.dgSgTotal ?? 0) - (a.dgSgTotal ?? 0));
+
+    // Check if leaders are different
+    const pgaLeader = pgaRanking[0];
+    const dgLeader = dgRanking[0];
+    const hasLeaderDisagreement = pgaLeader.dgId !== dgLeader.dgId;
+
+    // Calculate disagreement strength
+    let disagreementType: 'mild' | 'strong' | null = null;
+    let dgAdvantagePlayer: string | null = null;
+    let dgAdvantageSize = 0;
+
+    if (hasLeaderDisagreement) {
+      // Find how much DataGolf disagrees with PGA Tour ranking
+      const pgaLeaderDgSg = pgaLeader.dgSgTotal ?? 0;
+      const dgLeaderDgSg = dgLeader.dgSgTotal ?? 0;
+      const pgaLeaderPgaSg = pgaLeader.sgTotal ?? 0;
+      const dgLeaderPgaSg = dgLeader.sgTotal ?? 0;
+
+      // DataGolf advantage: how much better DG rates their leader vs PGA's leader
+      dgAdvantageSize = dgLeaderDgSg - pgaLeaderDgSg;
+      
+      if (dgAdvantageSize > 0.2) {
+        disagreementType = 'strong';
+        dgAdvantagePlayer = dgLeader.name;
+      } else if (dgAdvantageSize > 0.1) {
+        disagreementType = 'mild';
+        dgAdvantagePlayer = dgLeader.name;
+      }
+    }
+
+    // Check for consensus (both sources agree on leader)
+    const hasDataConsensus = !hasLeaderDisagreement && playersWithBothSG.length >= 2;
+
+    return {
+      hasDataSourceDisagreement: hasLeaderDisagreement,
+      dataSourceDisagreementType: disagreementType,
+      hasDataConsensus,
+      dgAdvantagePlayer,
+      dgAdvantageSize: Math.abs(dgAdvantageSize)
+    };
+  }
+
 }

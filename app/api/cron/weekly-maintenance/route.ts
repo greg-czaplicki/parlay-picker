@@ -47,69 +47,125 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // 2. Clean up old matchup data (keep last 60 days)
-    console.log('🗑️ Cleaning up old matchups...')
+    // 2. Clean up old unused matchup data (preserve historical data needed for filter performance)
+    console.log('🗑️ Cleaning up old unused matchups...')
     try {
-      const sixtyDaysAgo = new Date()
-      sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60)
+      // Only delete matchups that are NOT needed for filter performance tracking
+      // Keep all matchups that have results in matchup_results table
+      // Only delete very old matchups (1+ year) that have no results
+      const oneYearAgo = new Date()
+      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
 
+      // Delete only matchups older than 1 year that don't have results
       const { data: deletedMatchups, error: matchupsError } = await supabase
         .from('betting_markets')
         .delete()
-        .lt('created_at', sixtyDaysAgo.toISOString())
+        .lt('created_at', oneYearAgo.toISOString())
+        .not('id', 'in', 
+          `(SELECT DISTINCT matchup_id FROM matchup_results WHERE matchup_id IS NOT NULL)`
+        )
 
       if (matchupsError) {
         throw new Error(`Matchups cleanup failed: ${matchupsError.message}`)
       }
 
       results.push({
-        task: 'cleanup_matchups',
+        task: 'cleanup_unused_matchups',
         success: true,
-        message: 'Old matchups cleaned up',
-        cutoff_date: sixtyDaysAgo.toISOString()
+        message: 'Old unused matchups cleaned up (preserved historical data for filter tracking)',
+        cutoff_date: oneYearAgo.toISOString(),
+        note: 'Kept all matchups with filter performance results'
       })
-      console.log('✅ Old matchups cleaned up')
+      console.log('✅ Old unused matchups cleaned up (preserved filter performance data)')
     } catch (error: any) {
       console.error('❌ Matchups cleanup failed:', error)
       results.push({
-        task: 'cleanup_matchups',
+        task: 'cleanup_unused_matchups',
         success: false,
         error: error.message
       })
     }
 
-    // 3. Clean up old parlay data (keep last 90 days)
+    // 3. Clean up old parlay data (keep last 180 days for better historical analysis)
     console.log('🗑️ Cleaning up old parlays...')
     try {
-      const ninetyDaysAgo = new Date()
-      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90)
+      const sixMonthsAgo = new Date()
+      sixMonthsAgo.setDate(sixMonthsAgo.getDate() - 180)
 
       const { data: deletedParlays, error: parlaysError } = await supabase
         .from('parlays')
         .delete()
-        .lt('created_at', ninetyDaysAgo.toISOString())
+        .lt('created_at', sixMonthsAgo.toISOString())
 
       if (parlaysError) {
         throw new Error(`Parlays cleanup failed: ${parlaysError.message}`)
       }
 
       results.push({
-        task: 'cleanup_parlays',
+        task: 'cleanup_old_parlays',
         success: true,
-        message: 'Old parlays cleaned up',
-        cutoff_date: ninetyDaysAgo.toISOString()
+        message: 'Old parlays cleaned up (extended retention for better analysis)',
+        cutoff_date: sixMonthsAgo.toISOString(),
+        note: 'Extended retention from 90 to 180 days for historical analysis'
       })
-      console.log('✅ Old parlays cleaned up')
+      console.log('✅ Old parlays cleaned up (6-month retention)')
     } catch (error: any) {
       console.error('❌ Parlays cleanup failed:', error)
       results.push({
-        task: 'cleanup_parlays',
+        task: 'cleanup_old_parlays',
         success: false,
         error: error.message
       })
     }
 
-    // 4. Database optimization - analyze tables
+    // 4. Filter performance data maintenance (preserve ALL historical data)
+    console.log('📊 Managing filter performance data...')
+    try {
+      // Check filter performance table sizes
+      const { count: resultsCount } = await supabase
+        .from('matchup_results')
+        .select('*', { count: 'exact', head: true })
+
+      const { count: performanceCount } = await supabase
+        .from('filter_performance_snapshots')
+        .select('*', { count: 'exact', head: true })
+
+      const { count: historicalCount } = await supabase
+        .from('filter_historical_performance')
+        .select('*', { count: 'exact', head: true })
+
+      // Only clean up filter_performance_events older than 2 years (these are just event logs)
+      const twoYearsAgo = new Date()
+      twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2)
+
+      const { data: deletedEvents, error: eventsError } = await supabase
+        .from('filter_performance_events')
+        .delete()
+        .lt('created_at', twoYearsAgo.toISOString())
+
+      results.push({
+        task: 'filter_performance_maintenance',
+        success: true,
+        message: 'Filter performance data maintained',
+        data_stats: {
+          matchup_results: resultsCount || 0,
+          performance_snapshots: performanceCount || 0,
+          historical_performance: historicalCount || 0,
+          old_events_cleaned: 'Events older than 2 years removed'
+        },
+        note: 'ALL matchup results and performance data preserved for historical analysis'
+      })
+      console.log('✅ Filter performance data maintained (preserved all historical data)')
+    } catch (error: any) {
+      console.error('❌ Filter performance maintenance failed:', error)
+      results.push({
+        task: 'filter_performance_maintenance',
+        success: false,
+        error: error.message
+      })
+    }
+
+    // 5. Database optimization - analyze tables
     console.log('📊 Running database optimization...')
     try {
       // Get table statistics
@@ -138,7 +194,7 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // 5. Health check - verify critical tables have recent data
+    // 6. Health check - verify critical tables have recent data
     console.log('🏥 Running system health check...')
     try {
       const yesterday = new Date()

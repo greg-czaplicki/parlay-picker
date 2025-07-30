@@ -1,6 +1,6 @@
 // Matchup-relative filter types for comparing players within betting groups
 
-export type FilterPreset = 'fade-chalk' | 'stat-dom' | 'coin-flip' | 'form-play' | 'value';
+export type FilterPreset = 'fade-chalk' | 'stat-dom' | 'form-play' | 'value' | 'data-intel';
 
 export interface MatchupRelativeFilters {
   // Odds comparisons
@@ -15,6 +15,12 @@ export interface MatchupRelativeFilters {
   sgPuttGapMin?: number; // Minimum putting advantage threshold
   sgBallStrikingGapMin?: number; // Minimum T2G/OTT advantage
   sgAppGapMin?: number; // Minimum approach advantage
+  
+  // DataGolf vs PGA Tour data comparisons
+  showDataSourceDisagreement?: boolean; // DataGolf and PGA Tour disagree on leader
+  showDataConsensus?: boolean; // Both sources agree on leader (high confidence)
+  dgAdvantageMin?: number; // Minimum DataGolf advantage over PGA Tour assessment
+  strongDisagreementOnly?: boolean; // Only show strong disagreements (>0.2 SG)
   
   // Form/position comparisons
   positionGapMin?: number; // Minimum leaderboard position difference
@@ -34,10 +40,10 @@ export interface MatchupFilterState extends MatchupRelativeFilters {
 }
 
 export interface FilterBadge {
-  type: 'odds-gap' | 'sg-mismatch' | 'sg-leader' | 'stat-dom' | 'putting-edge' | 'ball-striking' | 'form';
+  type: 'odds-gap' | 'sg-mismatch' | 'sg-leader' | 'stat-dom' | 'putting-edge' | 'ball-striking' | 'form' | 'data-consensus' | 'data-disagreement' | 'dg-advantage';
   label: string;
   value?: string | number;
-  color?: 'green' | 'yellow' | 'red' | 'blue';
+  color?: 'green' | 'yellow' | 'red' | 'blue' | 'purple';
 }
 
 export interface MatchupAnalysisResult {
@@ -178,6 +184,43 @@ export const FILTER_CONFIGS: FilterConfig[] = [
     type: 'toggle',
     defaultValue: false,
     category: 'form'
+  },
+  
+  // DataGolf filters
+  {
+    id: 'showDataSourceDisagreement',
+    label: 'Data Source Disagreement',
+    description: 'DataGolf and PGA Tour disagree on who should lead',
+    type: 'toggle',
+    defaultValue: false,
+    category: 'performance'
+  },
+  {
+    id: 'showDataConsensus',
+    label: 'Data Consensus',
+    description: 'Both DataGolf and PGA Tour agree on leader (high confidence)',
+    type: 'toggle',
+    defaultValue: false,
+    category: 'performance'
+  },
+  {
+    id: 'dgAdvantageMin',
+    label: 'DataGolf Advantage',
+    description: 'Minimum DataGolf skill advantage over PGA Tour assessment',
+    type: 'slider',
+    min: 0.1,
+    max: 0.5,
+    step: 0.05,
+    defaultValue: 0.15,
+    category: 'performance'
+  },
+  {
+    id: 'strongDisagreementOnly',
+    label: 'Strong Disagreement Only',
+    description: 'Only show strong data source disagreements (>0.2 SG)',
+    type: 'toggle',
+    defaultValue: false,
+    category: 'performance'
   }
 ];
 
@@ -190,10 +233,6 @@ export const FILTER_PRESETS: Record<FilterPreset, Partial<MatchupRelativeFilters
     sgCategoryDominance: 2,
     sgTotalGapMin: 0.3
   },
-  'coin-flip': {
-    maxOddsSpread: 30,
-    sgTotalGapMin: 0.2
-  },
   'form-play': {
     showPositionMismatch: true,
     scoreGapToday: 2
@@ -201,5 +240,9 @@ export const FILTER_PRESETS: Record<FilterPreset, Partial<MatchupRelativeFilters
   'value': {
     minOddsGap: 0.20, // 20 points minimum gap to find meaningful value
     showDgFdDisagreement: true
+  },
+  'data-intel': {
+    showDataSourceDisagreement: true,
+    dgAdvantageMin: 0.15
   }
 };

@@ -202,6 +202,11 @@ function transformMatchups(matchups: any[], pairings: any[], type: '2ball' | '3b
     
     // For v2 schema, we only need dg_ids, not UUIDs
     const record: any = {
+      // Required legacy fields
+      market_type: 'matchup',
+      market_name: `${m.p1_player_name} vs ${m.p2_player_name}${type === '3ball' ? ` vs ${m.p3_player_name}` : ''}`,
+      
+      // New schema columns
       event_id,
       round_num,
       type,
@@ -423,26 +428,30 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Use tournament name resolver for robust name matching
+    // Simplified tournament matching - direct database lookup
     const eventName = dg3.event_name;
-    const resolver = new TournamentNameResolver();
-    const tournamentMatch = await resolver.resolveTournamentName(eventName, tour);
+    console.log(`🔍 Looking for tournament: "${eventName}" on tour: ${tour}`);
     
-    if (!tournamentMatch) {
-      // Check if this is a known issue (like LIV events not in database)
-      if (eventName && eventName.toLowerCase().includes('liv')) {
-        return NextResponse.json({ 
-          inserted: 0,
-          three_ball: 0,
-          two_ball: 0,
-          message: `LIV events are not currently supported. Event: ${eventName}`,
-          debug: { eventName, tour }
-        })
-      }
+    const { data: tournamentData, error: tournamentError } = await supabase
+      .from('tournaments')
+      .select('dg_id, name, tour, start_date, end_date')
+      .eq('name', eventName)
+      .eq('tour', tour)
+      .limit(1)
+      .single();
       
-      // Get suggestions for better error reporting
-      const validation = await resolver.validateTournamentName(eventName, tour);
+    if (tournamentError || !tournamentData) {
+      console.error('Tournament lookup error:', tournamentError);
+      console.log('Available tournaments sample:');
       
+      // Get some recent tournaments for debugging
+      const { data: sampleTournaments } = await supabase
+        .from('tournaments')
+        .select('name, tour')
+        .eq('tour', tour)
+        .order('start_date', { ascending: false })
+        .limit(5);
+        
       return NextResponse.json({ 
         inserted: 0,
         three_ball: 0,
@@ -451,18 +460,17 @@ export async function POST(req: NextRequest) {
         debug: { 
           eventName, 
           tour,
-          suggestions: validation.suggestions,
-          recommendedAction: validation.recommendedAction
+          error: tournamentError?.message,
+          sampleTournaments: sampleTournaments || []
         }
       }, { status: 404 })
     }
     
-    const event_id = tournamentMatch.event_id;
+    const event_id = tournamentData.dg_id;
+    console.log(`✅ Found tournament: ${tournamentData.name} (ID: ${event_id})`);
     
-    // If this was a fuzzy match, add an alias to prevent future issues
-    if (tournamentMatch.match_type === 'fuzzy' && tournamentMatch.confidence < 1.0) {
-      await resolver.addTournamentAlias(event_id, eventName, 'datagolf');
-    }
+    // Store tournament info for later use
+    const courseName = undefined; // No course_name in tournaments table
     const round_num_3 = dg3.round_num;
     const round_num_2 = dg2.round_num;
     const created_at_3 = new Date(dg3.last_updated.replace(' UTC', 'Z')).toISOString();
@@ -503,9 +511,6 @@ export async function POST(req: NextRequest) {
     const teeTimeMap3 = createTeeTimeMap(dgField, round_num_3);
     const teeTimeMap2 = createTeeTimeMap(dgField, round_num_2);
 
-    // Get course name for timezone lookup
-    const courseName = tournamentMatch.course_name || undefined;
-    
     const matchups3 = transformMatchups(matchList3, dgModel.pairings, '3ball', event_id, round_num_3, created_at_3, teeTimeMap3, eventName, courseName);
     const matchups2 = transformMatchups(matchList2, dgModel.pairings, '2ball', event_id, round_num_2, created_at_2, teeTimeMap2, eventName, courseName);
     
@@ -517,13 +522,25 @@ export async function POST(req: NextRequest) {
     // Debug log: show first object to be inserted
     console.log('Sample matchup to upsert:', JSON.stringify(allMatchups[0], null, 2))
     
-    // Use upsert to handle updates of existing matchups (refresh scenario)
+    // Delete existing matchups for this event/round and then insert fresh ones
+    // This is simpler than trying to upsert with the conditional unique index
+    console.log(`🗑️ Deleting existing matchups for event ${event_id}, rounds ${round_num_3}/${round_num_2}`);
+    
+    const { error: deleteError } = await supabase
+      .from('betting_markets')
+      .delete()
+      .eq('event_id', event_id)
+      .in('round_num', [round_num_3, round_num_2]);
+      
+    if (deleteError) {
+      console.error('Delete error:', deleteError);
+      throw new Error(`Failed to delete existing matchups: ${deleteError.message}`);
+    }
+    
+    // Now insert fresh matchups
     const { error } = await supabase
       .from('betting_markets')
-      .upsert(allMatchups, { 
-        onConflict: 'event_id,round_num,player1_dg_id,player2_dg_id,player3_dg_id',
-        ignoreDuplicates: false // We want to update existing records
-      })
+      .insert(allMatchups)
     
     if (error) {
       console.error('Supabase upsert error:', error)

@@ -58,7 +58,7 @@ export function useMatchupsQuery(eventId: number | null, matchupType: "2ball" | 
       ...queryKeys.matchups.byEventAndType(eventId ?? 0, matchupType),
       roundNum ?? 'allRounds',
       fanDuelOnly ? 'fanDuelOnly' : 'allSportsbooks',
-      'v2-schema', // Add this to bust cache with old UUID data
+      'v2-schema-fresh', // Fresh cache after schema migration
     ],
     enabled: !!eventId,
     staleTime: 30 * 1000, // Reduced from 2 minutes to 30 seconds for faster updates

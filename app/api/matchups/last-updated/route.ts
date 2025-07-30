@@ -10,11 +10,11 @@ export async function GET(req: NextRequest) {
   try {
     const supabase = createSupabaseClient()
     
-    // Get the most recent matchup update time
+    // Get the most recent matchup update time (check both created_at and updated_at)
     const { data, error } = await supabase
       .from('betting_markets')
-      .select('created_at')
-      .order('created_at', { ascending: false })
+      .select('created_at, updated_at')
+      .order('updated_at', { ascending: false })
       .limit(1)
     
     if (error) {
@@ -29,7 +29,8 @@ export async function GET(req: NextRequest) {
       })
     }
     
-    const lastUpdated = data[0].created_at
+    // Use the most recent timestamp (updated_at or created_at)
+    const lastUpdated = data[0].updated_at || data[0].created_at
     const now = new Date()
     const updatedAt = new Date(lastUpdated)
     const minutesAgo = Math.floor((now.getTime() - updatedAt.getTime()) / (1000 * 60))

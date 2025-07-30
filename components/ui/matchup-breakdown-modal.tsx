@@ -62,6 +62,11 @@ export const MatchupBreakdownModal: FC<MatchupBreakdownModalProps> = ({
     return 'text-red-400';
   };
 
+  const formatSG = (sg: number | null) => {
+    if (sg === null || sg === undefined) return 'N/A';
+    return sg >= 0 ? `+${sg.toFixed(2)}` : sg.toFixed(2);
+  };
+
   // Calculate SG leaders for each category
   const sgLeaders = useMemo(() => {
     const leaders: Record<string, number> = {};
@@ -85,13 +90,28 @@ export const MatchupBreakdownModal: FC<MatchupBreakdownModalProps> = ({
         }
       }
     });
+
+    // DataGolf SG Total leader
+    const playersWithDgSG = players.filter(p => (p as any).dgSgTotal !== null);
+    if (playersWithDgSG.length >= 2) {
+      const sorted = [...playersWithDgSG].sort((a, b) => 
+        ((b as any).dgSgTotal || 0) - ((a as any).dgSgTotal || 0)
+      );
+      const leader = sorted[0];
+      const secondBest = sorted[1];
+      const gap = ((leader as any).dgSgTotal || 0) - ((secondBest as any).dgSgTotal || 0);
+      
+      if (gap >= MINIMUM_GAP) {
+        leaders.dgSgTotal = leader.dgId;
+      }
+    }
     
     return leaders;
   }, [players]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span>Matchup Breakdown</span>
@@ -131,9 +151,14 @@ export const MatchupBreakdownModal: FC<MatchupBreakdownModalProps> = ({
                 })()} suggests pricing disagreement
               </p>
             )}
-            {analysis.hasOddsSgMismatch && (
+            {analysis.hasOddsSgMismatch && !recommendedPlayer.reason.includes('DataGolf rates') && (
               <p className="text-sm text-blue-800 dark:text-blue-200 mt-1">
                 <strong>Value Mismatch:</strong> Player has better stats than their odds suggest
+              </p>
+            )}
+            {recommendedPlayer.reason.includes('DataGolf rates') && (
+              <p className="text-sm text-blue-800 dark:text-blue-200 mt-1">
+                <strong>Data Intelligence:</strong> DataGolf model significantly favors this player over market assessment
               </p>
             )}
           </div>
@@ -148,7 +173,8 @@ export const MatchupBreakdownModal: FC<MatchupBreakdownModalProps> = ({
                     <th className="text-left py-2 font-medium">Player</th>
                     <th className="text-center py-2 font-medium">FD Odds</th>
                     <th className="text-center py-2 font-medium">DG Odds</th>
-                    <th className="text-center py-2 font-medium">SG Total</th>
+                    <th className="text-center py-2 font-medium">PGA SG Total</th>
+                    <th className="text-center py-2 font-medium">DG SG Total</th>
                     <th className="text-center py-2 font-medium">SG Putt</th>
                     <th className="text-center py-2 font-medium">SG App</th>
                     <th className="text-center py-2 font-medium">SG Arg</th>
@@ -208,27 +234,32 @@ export const MatchupBreakdownModal: FC<MatchupBreakdownModalProps> = ({
                         </td>
                         <td className={`text-center py-2 font-mono ${getSGColor(player.sgTotal)}`}>
                           <span className={sgLeaders.sgTotal === player.dgId ? 'font-bold bg-green-500/20 px-2 py-0.5 rounded' : ''}>
-                            {player.sgTotal?.toFixed(2) ?? 'N/A'}
+                            {formatSG(player.sgTotal)}
+                          </span>
+                        </td>
+                        <td className={`text-center py-2 font-mono ${getSGColor((player as any).dgSgTotal)}`}>
+                          <span className={sgLeaders.dgSgTotal === player.dgId ? 'font-bold bg-purple-500/20 px-2 py-0.5 rounded' : ''}>
+                            {formatSG((player as any).dgSgTotal)}
                           </span>
                         </td>
                         <td className={`text-center py-2 font-mono ${getSGColor(player.sgPutt)}`}>
                           <span className={sgLeaders.sgPutt === player.dgId ? 'font-bold bg-green-500/20 px-2 py-0.5 rounded' : ''}>
-                            {player.sgPutt?.toFixed(2) ?? 'N/A'}
+                            {formatSG(player.sgPutt)}
                           </span>
                         </td>
                         <td className={`text-center py-2 font-mono ${getSGColor(player.sgApp)}`}>
                           <span className={sgLeaders.sgApp === player.dgId ? 'font-bold bg-green-500/20 px-2 py-0.5 rounded' : ''}>
-                            {player.sgApp?.toFixed(2) ?? 'N/A'}
+                            {formatSG(player.sgApp)}
                           </span>
                         </td>
                         <td className={`text-center py-2 font-mono ${getSGColor(player.sgArg)}`}>
                           <span className={sgLeaders.sgArg === player.dgId ? 'font-bold bg-green-500/20 px-2 py-0.5 rounded' : ''}>
-                            {player.sgArg?.toFixed(2) ?? 'N/A'}
+                            {formatSG(player.sgArg)}
                           </span>
                         </td>
                         <td className={`text-center py-2 font-mono ${getSGColor(player.sgOtt)}`}>
                           <span className={sgLeaders.sgOtt === player.dgId ? 'font-bold bg-green-500/20 px-2 py-0.5 rounded' : ''}>
-                            {player.sgOtt?.toFixed(2) ?? 'N/A'}
+                            {formatSG(player.sgOtt)}
                           </span>
                         </td>
                         <td className="text-center py-2">
@@ -294,6 +325,36 @@ export const MatchupBreakdownModal: FC<MatchupBreakdownModalProps> = ({
                 )}
               </div>
             </div>
+
+            {/* DataGolf Analysis - only show if we have DataGolf data */}
+            {(analysis.dgLeader || analysis.hasDataSourceDisagreement) && (
+              <div className="border rounded-lg p-3">
+                <h4 className="font-medium mb-2">🔍 Data Intelligence</h4>
+                <div className="text-sm space-y-1">
+                  {analysis.dgLeader && (
+                    <div>DataGolf Leader: <span className="font-medium">{analysis.dgLeader}</span></div>
+                  )}
+                  {analysis.dgGapSize > 0 && (
+                    <div>DG Gap: <span className="font-mono">{analysis.dgGapSize.toFixed(2)}</span></div>
+                  )}
+                  {analysis.hasDataSourceDisagreement && (
+                    <div className={`${analysis.dataSourceDisagreementType === 'strong' ? 'text-purple-600 dark:text-purple-400' : 'text-purple-500 dark:text-purple-300'}`}>
+                      🧠 {analysis.dataSourceDisagreementType === 'strong' ? 'Strong' : 'Mild'} data source disagreement
+                    </div>
+                  )}
+                  {analysis.hasDataConsensus && (
+                    <div className="text-green-600 dark:text-green-400">
+                      ✅ High confidence - both data sources agree
+                    </div>
+                  )}
+                  {analysis.dgAdvantagePlayer && analysis.dgAdvantageSize > 0.1 && (
+                    <div className="text-purple-600 dark:text-purple-400">
+                      📈 DataGolf rates {analysis.dgAdvantagePlayer} {analysis.dgAdvantageSize.toFixed(2)} SG higher
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Key Takeaway */}
@@ -327,6 +388,18 @@ export const MatchupBreakdownModal: FC<MatchupBreakdownModalProps> = ({
                     } else {
                       return `${formatPlayerName(recommendedPlayer.name)} dominates multiple statistical categories, making him great value at longer odds.`;
                     }
+                  })()
+                : recommendedPlayer.reason.includes('DataGolf rates')
+                ? (() => {
+                    const recommendedPlayerData = players.find(p => 
+                      formatPlayerName(p.name).toLowerCase() === formatPlayerName(recommendedPlayer.name).toLowerCase()
+                    );
+                    const favorite = [...players].sort((a, b) => (a.odds ?? 0) - (b.odds ?? 0))[0];
+                    const isFavorite = recommendedPlayerData?.dgId === favorite?.dgId;
+                    
+                    return isFavorite 
+                      ? `${formatPlayerName(recommendedPlayer.name)} is the betting favorite, but DataGolf's model rates them significantly higher than PGA Tour data suggests, indicating the market may still be undervaluing their true skill level.`
+                      : `${formatPlayerName(recommendedPlayer.name)} represents value based on DataGolf's superior player assessment model, which rates them much higher than both PGA Tour stats and market pricing indicate.`;
                   })()
                 : analysis.hasOddsSgMismatch
                 ? `${formatPlayerName(recommendedPlayer.name)} has better performance stats than their betting odds suggest, indicating potential value.`

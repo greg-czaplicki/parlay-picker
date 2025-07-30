@@ -26,6 +26,8 @@ import { cn } from "@/lib/utils"
 import { FormField, FormItem, FormLabel } from "@/components/ui/form"
 import { MatchupFilterPanel } from "@/components/ui/matchup-filter-panel"
 import { useMatchupFilters } from "@/hooks/use-matchup-filters"
+import { FilterPerformanceDashboard } from "@/components/filter-performance-dashboard"
+import { AdminDashboard } from "@/components/admin-dashboard"
 
 
 // Define props for Dashboard
@@ -33,7 +35,7 @@ interface DashboardProps {
   initialSeasonSkills: any[];
   initialLiveStats: any[];
   initialPgaTourStats?: any[];
-  defaultTab?: "matchups" | "players" | "parlay";
+  defaultTab?: "matchups" | "players" | "parlay" | "filter-performance" | "admin";
 }
 
 export default function Dashboard({ 
@@ -129,7 +131,8 @@ export default function Dashboard({
     clearFilters,
     getMatchupAnalysis,
     getRawMatchupAnalysis,
-    getValuePlayers
+    getValuePlayers,
+    activePreset
   } = useMatchupFilters({
     matchups: searchFilteredMatchups,
     // Pass season skills as player stats for SG data
@@ -385,6 +388,32 @@ export default function Dashboard({
                     <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-primary/20 to-primary-dark/20 animate-pulse-glow" />
                   )}
                 </button>
+                <button
+                  className={`relative px-6 py-3 rounded-lg font-medium transition-all duration-300 ${
+                    isMounted && activeTab === "filter-performance" 
+                      ? "bg-gradient-to-r from-primary to-primary-dark text-white shadow-lg shadow-primary/25" 
+                      : "text-muted-foreground hover:text-foreground hover:bg-white/10"
+                  }`}
+                  onClick={() => setActiveTab("filter-performance")}
+                >
+                  Filter Performance
+                  {isMounted && activeTab === "filter-performance" && (
+                    <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-primary/20 to-primary-dark/20 animate-pulse-glow" />
+                  )}
+                </button>
+                <button
+                  className={`relative px-6 py-3 rounded-lg font-medium transition-all duration-300 ${
+                    isMounted && activeTab === "admin" 
+                      ? "bg-gradient-to-r from-primary to-primary-dark text-white shadow-lg shadow-primary/25" 
+                      : "text-muted-foreground hover:text-foreground hover:bg-white/10"
+                  }`}
+                  onClick={() => setActiveTab("admin")}
+                >
+                  Admin
+                  {isMounted && activeTab === "admin" && (
+                    <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-primary/20 to-primary-dark/20 animate-pulse-glow" />
+                  )}
+                </button>
               </div>
             </div>
           </div>
@@ -475,6 +504,7 @@ export default function Dashboard({
                           resultCount={filteredMatchups.length}
                           totalCount={searchFilteredMatchups?.length || 0}
                           className="w-full"
+                          activePreset={activePreset}
                         />
                       </div>
                     </div>
@@ -507,13 +537,6 @@ export default function Dashboard({
             {/* Row 2: Recommended Picks (Right) - Better space utilization */}
             <div className="lg:col-span-1">
               <div className="relative">
-                {filterState.isActive && (
-                  <div className="absolute -top-2 right-4 z-10">
-                    <Badge variant="secondary" className="text-xs bg-yellow-500/20 text-yellow-400 border-yellow-500/30">
-                      Filters Active: {filteredMatchups.length} matchups → {getValuePlayers().length} value picks
-                    </Badge>
-                  </div>
-                )}
                 <RecommendedPicksPanel 
                   eventId={selectedEventId}
                   matchupType={matchupType} 
@@ -539,6 +562,18 @@ export default function Dashboard({
         )}
 
           {activeTab === "parlay" && <ParlayBuilder matchupType={matchupType} roundNum={currentRound} />}
+
+          {activeTab === "filter-performance" && (
+            <div className="w-full">
+              <FilterPerformanceDashboard className="w-full" />
+            </div>
+          )}
+
+          {activeTab === "admin" && (
+            <div className="w-full">
+              <AdminDashboard className="w-full" />
+            </div>
+          )}
         </div>
       </div>
     </ParlayProvider>

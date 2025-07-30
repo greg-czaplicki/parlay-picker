@@ -34,6 +34,7 @@ import { usePlayerStatsQuery, PlayerStat } from "@/hooks/use-player-stats-query"
 import { useParlayContext } from "@/context/ParlayContext"
 import { useParlaysQuery } from '@/hooks/use-parlays-query'
 import { PlayerSearchWithCount, usePlayerSearch } from "@/components/ui/player-search"
+import { getDisplayTimes } from "@/lib/timezone-utils"
 import React from 'react'
 
 // Only 3-ball matchups
@@ -287,23 +288,17 @@ export default function MatchupsTable({
       const utcDate = new Date(teeTime);
       
       // Get tournament local time using proper timezone
-      // For 3M Open in Minnesota, this should be America/Chicago (Central Time)
+      // Wyndham Championship is in North Carolina (Eastern Time)
       const localTime = utcDate.toLocaleString('en-US', {
-        timeZone: 'America/Chicago', // 3M Open is in Minnesota (Central Time)
+        timeZone: 'America/New_York', // Eastern Time for Wyndham Championship
         hour: 'numeric',
         minute: '2-digit',
         hour12: true
       });
       
-      // Get Eastern time
-      const easternTime = utcDate.toLocaleString('en-US', {
-        timeZone: 'America/New_York',
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true
-      });
-      
-      return { localTime, easternDiff: easternTime };
+      // Only show Eastern Time conversion for non-Eastern tournaments
+      // Since user is in ET and Wyndham is in ET, no conversion needed
+      return { localTime, easternDiff: "" };
     } catch (error) {
       return { localTime: "-", easternDiff: "" };
     }
@@ -666,9 +661,9 @@ export default function MatchupsTable({
                   <TableHeader className="bg-[#1e1e23]">
                     <TableRow>
                       <TableHead className="text-white">Player</TableHead>
-                      <TableHead className="text-white text-center">
-                        {matchupType === "3ball" ? "Group Tee Time" : "Tee Time"}
-                      </TableHead>
+                      {matchupType === "2ball" && (
+                        <TableHead className="text-white text-center">Tee Time</TableHead>
+                      )}
                       <TableHead className="text-white text-center">Position</TableHead>
                       <TableHead className="text-white text-center">FanDuel</TableHead>
                       <TableHead className="text-white text-center">DataGolf</TableHead>
@@ -744,12 +739,14 @@ export default function MatchupsTable({
                                 <span className="text-sm font-medium text-primary/80">
                                   {matchupType === "3ball" ? "3-Ball Group" : "2-Ball Match"} {matchupIndex + 1}
                                 </span>
-                                <span className="text-xs px-2 py-0.5 rounded bg-gray-800">
-                                  Tee Time: {groupTeeTime}
-                                  {groupEasternTime && (
-                                    <span className="text-muted-foreground ml-1">({groupEasternTime} ET)</span>
-                                  )}
-                                </span>
+                                {matchupType === "3ball" && (
+                                  <span className="text-xs px-2 py-0.5 rounded bg-gray-800">
+                                    Tee Time: {groupTeeTime}
+                                    {groupEasternTime && (
+                                      <span className="text-muted-foreground ml-1">({groupEasternTime} ET)</span>
+                                    )}
+                                  </span>
+                                )}
                               </div>
                             </TableCell>
                           </TableRow>
@@ -881,12 +878,14 @@ export default function MatchupsTable({
                                     )}
                                   </div>
                                 </TableCell>
-                                <TableCell className="text-center">
-                                  <div>{playerTeeTime}</div>
-                                  {playerEasternTime && (
-                                    <div className="text-xs text-muted-foreground">{playerEasternTime} ET</div>
-                                  )}
-                                </TableCell>
+                                {matchupType === "2ball" && (
+                                  <TableCell className="text-center">
+                                    <div>{playerTeeTime}</div>
+                                    {playerEasternTime && (
+                                      <div className="text-xs text-muted-foreground">{playerEasternTime}</div>
+                                    )}
+                                  </TableCell>
+                                )}
                                 <TableCell className="text-center">
                                   <div>{positionData.position}</div>
                                   <div className="text-xs text-muted-foreground">{positionData.score}</div>
@@ -1029,15 +1028,17 @@ export default function MatchupsTable({
                         </span>
                       </div>
                       <div className="glass-card overflow-hidden">
-                        {/* Add tee time header */}
-                        <div className="bg-[#1e1e23] px-4 py-3 flex justify-between items-center border-b-2 border-b-gray-800">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground">Tee Time</span>
-                            <span className="text-sm px-2 py-0.5 rounded bg-gray-800/80 text-primary/80">
-                              {groupTeeTime}
-                            </span>
+                        {/* Add tee time header for 3-ball only */}
+                        {matchupType === "3ball" && (
+                          <div className="bg-[#1e1e23] px-4 py-3 flex justify-between items-center border-b-2 border-b-gray-800">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground">Tee Time</span>
+                              <span className="text-sm px-2 py-0.5 rounded bg-gray-800/80 text-primary/80">
+                                {groupTeeTime}
+                              </span>
+                            </div>
                           </div>
-                        </div>
+                        )}
                         <div className="p-0 divide-y-2 divide-gray-800/50">
                           {players.map((player: Player, idx: number) => {
                             const playerName = formatPlayerName(player.name);

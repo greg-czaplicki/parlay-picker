@@ -35,6 +35,7 @@ interface UseMatchupFiltersResult {
     sgTotal?: number | null;
   }>;
   isLoading: boolean;
+  activePreset: FilterPreset | null;
 }
 
 export function useMatchupFilters({
@@ -43,6 +44,7 @@ export function useMatchupFilters({
   tournamentStats
 }: UseMatchupFiltersProps): UseMatchupFiltersResult {
   const [filters, setFilters] = useState<MatchupRelativeFilters>({});
+  const [activePreset, setActivePreset] = useState<FilterPreset | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   // Initialize comparison engine
@@ -168,6 +170,20 @@ export function useMatchupFilters({
         }
       }
 
+      // DataGolf filters
+      if (filters.showDataSourceDisagreement) {
+        checks.push(analysis.analysis.hasDataSourceDisagreement);
+      }
+      if (filters.showDataConsensus) {
+        checks.push(analysis.analysis.hasDataConsensus);
+      }
+      if (filters.dgAdvantageMin !== undefined) {
+        checks.push(analysis.analysis.dgAdvantageSize >= filters.dgAdvantageMin);
+      }
+      if (filters.strongDisagreementOnly) {
+        checks.push(analysis.analysis.dataSourceDisagreementType === 'strong');
+      }
+
       // Apply AND/OR logic
       const result = filters.requireAll ? checks.every(c => c) : checks.some(c => c);
       console.log(`Matchup ${matchup.id} final result:`, {
@@ -245,10 +261,38 @@ export function useMatchupFilters({
       passesFilters = true;
     }
 
+    if (analysis.analysis.hasDataSourceDisagreement) {
+      badges.push({
+        type: 'data-disagreement',
+        label: analysis.analysis.dataSourceDisagreementType === 'strong' ? 'Strong Data Disagreement' : 'Data Disagreement',
+        color: 'purple'
+      });
+      passesFilters = true;
+    }
+
+    if (analysis.analysis.hasDataConsensus) {
+      badges.push({
+        type: 'data-consensus',
+        label: 'Data Consensus',
+        color: 'green'
+      });
+      passesFilters = true;
+    }
+
+    if (analysis.analysis.dgAdvantageSize > 0.1 && analysis.analysis.dgAdvantagePlayer) {
+      badges.push({
+        type: 'dg-advantage',
+        label: 'DataGolf Advantage',
+        value: `+${analysis.analysis.dgAdvantageSize.toFixed(2)}`,
+        color: 'purple'
+      });
+      passesFilters = true;
+    }
+
     return {
       passesFilters,
       badges,
-      highlightPlayer: analysis.analysis.sgLeader || analysis.analysis.oddsLeader || undefined
+      highlightPlayer: analysis.analysis.dgAdvantagePlayer || analysis.analysis.sgLeader || analysis.analysis.oddsLeader || undefined
     };
   }, [analysisCache, filters]);
 
@@ -259,6 +303,7 @@ export function useMatchupFilters({
 
   // Update a single filter
   const updateFilter = useCallback((filterId: keyof MatchupRelativeFilters, value: any) => {
+    setActivePreset(null); // Clear active preset when manually adjusting filters
     setFilters(prev => ({
       ...prev,
       [filterId]: value
@@ -267,12 +312,21 @@ export function useMatchupFilters({
 
   // Apply a preset
   const applyPreset = useCallback((preset: FilterPreset) => {
-    setFilters(FILTER_PRESETS[preset]);
-  }, []);
+    if (activePreset === preset) {
+      // If clicking the same preset, clear it
+      setFilters({});
+      setActivePreset(null);
+    } else {
+      // Apply new preset
+      setFilters(FILTER_PRESETS[preset]);
+      setActivePreset(preset);
+    }
+  }, [activePreset]);
 
   // Clear all filters
   const clearFilters = useCallback(() => {
     setFilters({});
+    setActivePreset(null);
   }, []);
 
   // Calculate filter state
@@ -317,18 +371,25 @@ export function useMatchupFilters({
 
       // For different filter types, extract the relevant "value" player
       if (filters.minOddsGap && analysis.analysis.hasOddsGap) {
-        // Find underdogs with competitive SG stats
-        const playersWithOdds = analysis.players.filter(p => p.odds !== null && p.sgTotal !== null);
-        console.log(`Players with odds and SG:`, playersWithOdds.map(p => ({ name: p.name, odds: p.odds, sgTotal: p.sgTotal })));
+        // Find underdogs with competitive SG stats (use DataGolf if available, else PGA Tour)
+        const playersWithOdds = analysis.players.filter(p => p.odds !== null && (p.dgSgTotal !== null || p.sgTotal !== null));
+        console.log(`Players with odds and SG:`, playersWithOdds.map(p => ({ 
+          name: p.name, 
+          odds: p.odds, 
+          pgaSg: p.sgTotal,
+          dgSg: p.dgSgTotal 
+        })));
         
         if (playersWithOdds.length >= 2) {
           const sortedByOdds = [...playersWithOdds].sort((a, b) => (a.odds ?? 0) - (b.odds ?? 0));
           const favorite = sortedByOdds[0]; // Lowest odds = favorite
           const underdogs = sortedByOdds.slice(1); // Everyone else
           
-          // Find underdogs who are competitive with the favorite
+          // Find underdogs who are competitive with the favorite (prefer DataGolf SG)
           const competitiveUnderdogs = underdogs.filter(dog => {
-            const sgGap = (favorite.sgTotal ?? 0) - (dog.sgTotal ?? 0);
+            const favSg = favorite.dgSgTotal ?? favorite.sgTotal ?? 0;
+            const dogSg = dog.dgSgTotal ?? dog.sgTotal ?? 0;
+            const sgGap = favSg - dogSg;
             // Dog is competitive if within 0.3 SG or actually better
             return sgGap <= 0.3;
           });
@@ -336,8 +397,12 @@ export function useMatchupFilters({
           if (competitiveUnderdogs.length > 0) {
             // Pick the best value: lowest SG gap relative to odds gap
             const bestValue = competitiveUnderdogs.reduce((best, current) => {
-              const currentSgGap = (favorite.sgTotal ?? 0) - (current.sgTotal ?? 0);
-              const bestSgGap = (favorite.sgTotal ?? 0) - (best.sgTotal ?? 0);
+              const favSg = favorite.dgSgTotal ?? favorite.sgTotal ?? 0;
+              const currentSg = current.dgSgTotal ?? current.sgTotal ?? 0;
+              const bestSg = best.dgSgTotal ?? best.sgTotal ?? 0;
+              
+              const currentSgGap = favSg - currentSg;
+              const bestSgGap = favSg - bestSg;
               
               // If current has better SG than best, pick current
               if (currentSgGap < bestSgGap) return current;
@@ -346,7 +411,9 @@ export function useMatchupFilters({
               return best;
             });
             
-            const sgDiff = (favorite.sgTotal ?? 0) - (bestValue.sgTotal ?? 0);
+            const favSg = favorite.dgSgTotal ?? favorite.sgTotal ?? 0;
+            const bestValueSg = bestValue.dgSgTotal ?? bestValue.sgTotal ?? 0;
+            const sgDiff = favSg - bestValueSg;
             
             // Calculate the actual American odds gap between this player and the favorite
             const favoriteAmerican = ((favorite.odds ?? 1) - 1) * 100;
@@ -354,6 +421,12 @@ export function useMatchupFilters({
             const oddsGap = Math.round(bestValueAmerican - favoriteAmerican);
             
             let reason = `${oddsGap}pt odds gap`;
+            
+            // Add data source context if both are available
+            const usingDg = bestValue.dgSgTotal !== null && favorite.dgSgTotal !== null;
+            if (usingDg) {
+              reason += ` (DataGolf)`;
+            }
             
             if (sgDiff < 0) {
               reason += `, leads SG by ${Math.abs(sgDiff).toFixed(2)}`;
@@ -366,8 +439,10 @@ export function useMatchupFilters({
             console.log(`Found value underdog:`, { 
               name: bestValue.name, 
               odds: bestValue.odds, 
-              sgTotal: bestValue.sgTotal,
-              sgGap: sgDiff 
+              pgaSg: bestValue.sgTotal,
+              dgSg: bestValue.dgSgTotal,
+              sgGap: sgDiff,
+              usingDataGolf: usingDg
             });
             
             valuePlayers.push({
@@ -376,7 +451,7 @@ export function useMatchupFilters({
               odds: bestValue.odds,
               matchupId: matchup.id,
               reason,
-              sgTotal: bestValue.sgTotal
+              sgTotal: bestValueSg // Use the SG we actually analyzed with
             });
           }
         }
@@ -433,6 +508,28 @@ export function useMatchupFilters({
           }
         }
       }
+
+      // DataGolf vs PGA Tour disagreement value
+      if (filters.showDataSourceDisagreement && analysis.analysis.hasDataSourceDisagreement && analysis.analysis.dgAdvantagePlayer) {
+        const dgAdvantagePlayer = analysis.players.find(p => p.name === analysis.analysis.dgAdvantagePlayer);
+        if (dgAdvantagePlayer) {
+          const dgAdvantage = analysis.analysis.dgAdvantageSize;
+          let reason = `DataGolf rates ${dgAdvantage.toFixed(2)} SG higher than PGA Tour`;
+          
+          if (analysis.analysis.dataSourceDisagreementType === 'strong') {
+            reason = `Strong data disagreement - ${reason}`;
+          }
+          
+          valuePlayers.push({
+            dgId: dgAdvantagePlayer.dgId,
+            name: dgAdvantagePlayer.name,
+            odds: dgAdvantagePlayer.odds,
+            matchupId: matchup.id,
+            reason,
+            sgTotal: dgAdvantagePlayer.dgSgTotal // Use DataGolf SG since that's the advantage
+          });
+        }
+      }
     });
 
     // Remove duplicates (same player from multiple reasons)
@@ -452,6 +549,7 @@ export function useMatchupFilters({
     getMatchupAnalysis,
     getRawMatchupAnalysis,
     getValuePlayers,
-    isLoading
+    isLoading,
+    activePreset
   };
 }

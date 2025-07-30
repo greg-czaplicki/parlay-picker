@@ -58,7 +58,9 @@ if (!('currentWeekEvents' in queryKeys)) {
 
 export function useCurrentWeekEventsQuery() {
   return useQuery<Event[], Error>({
-    queryKey: queryKeys.currentWeekEvents(),
+    queryKey: [...queryKeys.currentWeekEvents(), 'v2-fresh'],
     queryFn: fetchCurrentWeekEvents,
+    staleTime: 30 * 1000, // 30 seconds
+    gcTime: 5 * 60 * 1000, // 5 minutes
   })
 } 

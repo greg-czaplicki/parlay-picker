@@ -15,7 +15,7 @@ function hasValidFanDuelOdds(matchup: any): boolean {
   return hasOdds1 && hasOdds2 && hasOdds3;
 }
 
-// GET: Fetch matchups with enhanced SG data
+// GET: Fetch matchups using the new column-based schema
 export async function GET(req: NextRequest) {
   const supabase = createSupabaseClient()
   const { searchParams } = new URL(req.url)
@@ -26,100 +26,80 @@ export async function GET(req: NextRequest) {
   const fanDuelOnly = searchParams.get('fanDuelOnly') === 'true'
   const bustCache = searchParams.get('_t') // Cache-busting timestamp
 
-  // For now, return empty matchups until we implement the new structure
-  // TODO: Implement proper betting markets query
-  if (checkOnly) {
-    const response = NextResponse.json({ 
-      matchups: [], 
-      count: 0
-    })
-
-    if (bustCache) {
-      response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
-      response.headers.set('Pragma', 'no-cache')
-      response.headers.set('Expires', '0')
-    }
-
-    return response
-  }
+  console.log(`🔄 Matchups API: event_id=${event_id}, type=${type}, round=${round_num}, fanDuelOnly=${fanDuelOnly}`)
 
   try {
-    // Use the new betting markets API functionality
-    console.log('🔄 Matchups API: Using betting markets data')
-    
-    // Build query for betting markets
+    // Build query using new schema columns
     let query = supabase
       .from('betting_markets')
       .select(`
         id,
-        market_name,
-        market_subtype,
-        group_specific,
-        sportsbook_id,
-        tournament_id,
-        round_specific,
-        status,
-        sportsbooks(name, display_name),
-        tournaments(dg_id, name)
+        event_id,
+        round_num,
+        type,
+        player1_dg_id,
+        player1_name,
+        player2_dg_id,
+        player2_name,
+        player3_dg_id,
+        player3_name,
+        odds1,
+        odds2,
+        odds3,
+        dg_odds1,
+        dg_odds2,
+        dg_odds3,
+        start_hole,
+        tee_time,
+        player1_tee_time,
+        player2_tee_time,
+        created_at,
+        updated_at
       `)
-      .eq('status', 'active')
-      .eq('market_type', 'matchup');
+      .not('type', 'is', null) // Only get matchups with the new schema
+      .order('created_at', { ascending: false });
 
-    // If filtering by event_id, first get the tournament UUID
-    let tournamentUuid = null;
+    // Filter by event_id if provided
     if (event_id) {
-      const { data: tournament, error: tournamentError } = await supabase
-        .from('tournaments')
-        .select('id')
-        .eq('dg_id', parseInt(event_id))
-        .single();
-        
-      if (tournamentError || !tournament) {
-        console.log(`Tournament not found for dg_id ${event_id}`);
-        return NextResponse.json({ matchups: [], count: 0 });
-      }
-      
-      tournamentUuid = tournament.id;
-      query = query.eq('tournament_id', tournamentUuid);
+      query = query.eq('event_id', parseInt(event_id));
     }
 
     // Filter by round
     if (round_num) {
-      query = query.eq('round_specific', parseInt(round_num));
+      query = query.eq('round_num', parseInt(round_num));
     }
 
     // Filter by matchup type (2ball or 3ball)
     if (type && (type === '2ball' || type === '3ball')) {
-      query = query.eq('market_subtype', type);
+      query = query.eq('type', type);
     }
 
-    // Filter by sportsbook - need to get sportsbook UUID first
-    if (fanDuelOnly || searchParams.get('sportsbook') === 'fanduel') {
-      const { data: sportsbook } = await supabase
-        .from('sportsbooks')
-        .select('id')
-        .eq('name', 'fanduel')
-        .single();
-        
-      if (sportsbook) {
-        query = query.eq('sportsbook_id', sportsbook.id);
+    // Filter by FanDuel odds availability
+    if (fanDuelOnly) {
+      query = query
+        .not('odds1', 'is', null)
+        .not('odds2', 'is', null);
+      
+      // For 3ball matchups, also require odds3
+      if (type === '3ball') {
+        query = query.not('odds3', 'is', null);
       }
     }
 
-    const { data: markets, error } = await query;
+    const { data: matchups, error } = await query;
 
     if (error) {
-      console.error('Error fetching betting markets:', error);
+      console.error('Error fetching matchups:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    console.log(`📊 Found ${markets?.length || 0} betting markets`);
+    console.log(`📊 Found ${matchups?.length || 0} matchups`);
 
     // If checkOnly, just return count
     if (checkOnly) {
       const response = NextResponse.json({ 
         matchups: [], 
-        count: markets?.length || 0
+        count: matchups?.length || 0
       });
 
       if (bustCache) {
@@ -131,13 +111,20 @@ export async function GET(req: NextRequest) {
       return response;
     }
 
-    // Transform markets to the format expected by the frontend
-    const transformedMatchups = await transformMarketsToMatchups(markets || [], supabase);
+    // Filter by FanDuel odds if requested (additional client-side filtering)
+    let filteredMatchups = matchups || [];
+    if (fanDuelOnly && filteredMatchups.length > 0) {
+      filteredMatchups = filteredMatchups.filter(hasValidFanDuelOdds);
+      console.log(`📊 After FanDuel filter: ${filteredMatchups.length} matchups`);
+    }
+
+    // Enhance matchups with SG data
+    const enhancedMatchups = await enhanceMatchupsWithSGData(filteredMatchups, supabase);
 
     const response = NextResponse.json({ 
-      matchups: transformedMatchups,
-      count: transformedMatchups.length,
-      source: 'betting_markets'
+      matchups: enhancedMatchups,
+      count: enhancedMatchups.length,
+      source: 'betting_markets_v2'
     });
     
     if (bustCache) {
@@ -149,107 +136,90 @@ export async function GET(req: NextRequest) {
     return response
 
   } catch (error: any) {
-    console.error('Error fetching enhanced matchup data:', error)
+    console.error('Error fetching matchup data:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
 
-// Transform betting markets into the exact format expected by the frontend
-async function transformMarketsToMatchups(markets: any[], supabase: any) {
-  if (!markets || markets.length === 0) return [];
+// Enhance matchups with SG data from both PGA Tour stats and DataGolf skill ratings
+async function enhanceMatchupsWithSGData(matchups: any[], supabase: any) {
+  if (!matchups || matchups.length === 0) return matchups;
 
-  // Group markets by matchup_id (same players/matchup, different sportsbooks)
-  const groupedMarkets: Record<string, any[]> = {};
-  
-  markets.forEach(market => {
-    const matchupId = market.group_specific?.matchup_id;
-    if (matchupId) {
-      if (!groupedMarkets[matchupId]) {
-        groupedMarkets[matchupId] = [];
-      }
-      groupedMarkets[matchupId].push(market);
-    }
-  });
-
-  console.log(`📋 Grouped ${markets.length} markets into ${Object.keys(groupedMarkets).length} unique matchups`);
-
-  // Get all unique player IDs to fetch names
+  // Get all unique player IDs
   const allPlayerIds = new Set<number>();
-  Object.values(groupedMarkets).forEach(marketGroup => {
-    const players = marketGroup[0]?.group_specific?.players || [];
-    players.forEach((id: number) => allPlayerIds.add(id));
+  matchups.forEach(matchup => {
+    if (matchup.player1_dg_id) allPlayerIds.add(matchup.player1_dg_id);
+    if (matchup.player2_dg_id) allPlayerIds.add(matchup.player2_dg_id);
+    if (matchup.player3_dg_id) allPlayerIds.add(matchup.player3_dg_id);
   });
 
-  // Fetch player information
-  const { data: players, error: playersError } = await supabase
-    .from('players')
-    .select('dg_id, name')
-    .in('dg_id', Array.from(allPlayerIds));
-    
-  if (playersError) {
-    console.error('Error fetching player names:', playersError);
+  const playerIds = Array.from(allPlayerIds);
+  console.log(`🔍 Fetching SG data for ${playerIds.length} unique players`);
+
+  // Fetch DataGolf skill ratings
+  const { data: skillRatings, error: skillError } = await supabase
+    .from('player_skill_ratings')
+    .select(`
+      dg_id,
+      player_name,
+      sg_total,
+      sg_putt,
+      sg_arg,
+      sg_app,
+      sg_ott,
+      driving_acc,
+      driving_dist
+    `)
+    .in('dg_id', playerIds);
+
+  if (skillError) {
+    console.error('Error fetching skill ratings:', skillError);
   }
-  
-  const playerMap: Record<number, string> = {};
-  (players || []).forEach((player: any) => {
-    playerMap[player.dg_id] = player.name || `Player ${player.dg_id}`;
+
+  // Create skill ratings map
+  const skillRatingsMap: Record<number, any> = {};
+  (skillRatings || []).forEach(rating => {
+    skillRatingsMap[rating.dg_id] = {
+      seasonSgTotal: rating.sg_total,
+      seasonSgPutt: rating.sg_putt,
+      seasonSgArg: rating.sg_arg,
+      seasonSgApp: rating.sg_app,
+      seasonSgOtt: rating.sg_ott,
+      seasonDrivingAcc: rating.driving_acc,
+      seasonDrivingDist: rating.driving_dist
+    };
   });
 
-  // Transform each unique matchup group into the expected format
-  const matchups = Object.entries(groupedMarkets).map(([matchupId, marketGroup]) => {
-    const firstMarket = marketGroup[0];
-    const players = firstMarket.group_specific?.players || [];
-    const isThreeBall = firstMarket.market_subtype === '3ball';
+  console.log(`📊 Found skill ratings for ${Object.keys(skillRatingsMap).length} players`);
 
-    // Find FanDuel market for odds (preferred sportsbook)
-    const fanDuelMarket = marketGroup.find(m => m.sportsbooks?.name === 'fanduel');
-    const oddsMarket = fanDuelMarket || marketGroup[0]; // Fallback to first market
+  // Enhance each matchup with SG data
+  return matchups.map(matchup => {
+    const enhanced = { ...matchup };
 
-    // Create the matchup object in the exact format expected by frontend
-    const matchup: any = {
-      id: matchupId,
-      event_id: firstMarket.tournaments?.dg_id || null,
-      event_name: firstMarket.tournaments?.name || null,
-      round_num: firstMarket.round_specific || 1,
-      type: firstMarket.market_subtype,
-      player1_dg_id: players[0] || null,
-      player1_name: playerMap[players[0]] || `Player ${players[0]}`,
-      player2_dg_id: players[1] || null,
-      player2_name: playerMap[players[1]] || `Player ${players[1]}`,
-      // Extract FanDuel odds from betting markets (preferred sportsbook)
-      odds1: fanDuelMarket?.group_specific?.player_odds?.p1 || null,
-      odds2: fanDuelMarket?.group_specific?.player_odds?.p2 || null,
-      // Extract DataGolf odds
-      dg_odds1: fanDuelMarket?.group_specific?.dg_odds?.p1 || null,
-      dg_odds2: fanDuelMarket?.group_specific?.dg_odds?.p2 || null,
-      // Extract tee time data
-      tee_time: fanDuelMarket?.group_specific?.tee_time || null,
-      start_hole: fanDuelMarket?.group_specific?.start_hole || 1,
-    };
-
-    // Add third player for 3-ball matchups
-    if (isThreeBall && players[2]) {
-      matchup.player3_dg_id = players[2];
-      matchup.player3_name = playerMap[players[2]] || `Player ${players[2]}`;
-      matchup.odds3 = fanDuelMarket?.group_specific?.player_odds?.p3 || null;
-      matchup.dg_odds3 = fanDuelMarket?.group_specific?.dg_odds?.p3 || null;
-    } else {
-      matchup.player3_dg_id = null;
-      matchup.player3_name = null;
-      matchup.odds3 = null;
-      matchup.dg_odds3 = null;
+    // Add SG data for each player
+    if (matchup.player1_dg_id && skillRatingsMap[matchup.player1_dg_id]) {
+      enhanced.player1_sg_data = skillRatingsMap[matchup.player1_dg_id];
+    }
+    
+    if (matchup.player2_dg_id && skillRatingsMap[matchup.player2_dg_id]) {
+      enhanced.player2_sg_data = skillRatingsMap[matchup.player2_dg_id];
+    }
+    
+    if (matchup.player3_dg_id && skillRatingsMap[matchup.player3_dg_id]) {
+      enhanced.player3_sg_data = skillRatingsMap[matchup.player3_dg_id];
     }
 
-    return matchup;
-  });
+    // Mark as enhanced
+    enhanced.sg_data_enhanced = true;
+    enhanced.season_sg_players = Object.keys(skillRatingsMap).length;
 
-  console.log(`✅ Transformed ${matchups.length} matchups for frontend compatibility`);
-  return matchups;
+    return enhanced;
+  });
 }
 
-// POST: Currently disabled - needs to be reimplemented for betting_markets table
+// POST: Currently disabled - use the ingest endpoint instead
 export async function POST(req: NextRequest) {
   return NextResponse.json({ 
-    error: 'Matchup creation is temporarily disabled during database migration. Betting markets need to be populated through a different process.' 
+    error: 'Matchup creation should use the /api/matchups/ingest endpoint instead.' 
   }, { status: 503 })
-} 
+}
