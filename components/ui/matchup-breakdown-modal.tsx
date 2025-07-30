@@ -146,7 +146,8 @@ export const MatchupBreakdownModal: FC<MatchupBreakdownModalProps> = ({
                 <thead>
                   <tr className="border-b">
                     <th className="text-left py-2 font-medium">Player</th>
-                    <th className="text-center py-2 font-medium">Odds</th>
+                    <th className="text-center py-2 font-medium">FD Odds</th>
+                    <th className="text-center py-2 font-medium">DG Odds</th>
                     <th className="text-center py-2 font-medium">SG Total</th>
                     <th className="text-center py-2 font-medium">SG Putt</th>
                     <th className="text-center py-2 font-medium">SG App</th>
@@ -182,6 +183,28 @@ export const MatchupBreakdownModal: FC<MatchupBreakdownModalProps> = ({
                         </td>
                         <td className="text-center py-2 font-mono">
                           {formatOdds(player.odds)}
+                        </td>
+                        <td className="text-center py-2 font-mono">
+                          {player.dgOdds && (
+                            <span className={
+                              // Highlight if this player is DG favorite but not FD favorite
+                              (() => {
+                                const playersWithBothOdds = players.filter(p => p.odds && p.dgOdds);
+                                if (playersWithBothOdds.length < 2) return '';
+                                
+                                const fdFav = [...playersWithBothOdds].sort((a, b) => (a.odds ?? 0) - (b.odds ?? 0))[0];
+                                const dgFav = [...playersWithBothOdds].sort((a, b) => (a.dgOdds ?? 0) - (b.dgOdds ?? 0))[0];
+                                
+                                if (player.dgId === dgFav.dgId && player.dgId !== fdFav.dgId) {
+                                  return 'font-bold bg-yellow-500/20 px-2 py-0.5 rounded';
+                                }
+                                return '';
+                              })()
+                            }>
+                              {formatOdds(player.dgOdds)}
+                            </span>
+                          )}
+                          {!player.dgOdds && 'N/A'}
                         </td>
                         <td className={`text-center py-2 font-mono ${getSGColor(player.sgTotal)}`}>
                           <span className={sgLeaders.sgTotal === player.dgId ? 'font-bold bg-green-500/20 px-2 py-0.5 rounded' : ''}>

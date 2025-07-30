@@ -320,8 +320,8 @@ export class MatchupComparisonEngine {
 
     const sorted = [...playersWithStat].sort((a, b) => (b[category] as number) - (a[category] as number));
     const leader = sorted[0];
-    const worst = sorted[sorted.length - 1];
-    const gapSize = Math.abs((leader[category] as number) - (worst[category] as number));
+    const secondBest = sorted[1];
+    const gapSize = Math.abs((leader[category] as number) - (secondBest[category] as number));
 
     return {
       hasEdge: gapSize >= threshold,

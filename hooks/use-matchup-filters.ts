@@ -317,24 +317,68 @@ export function useMatchupFilters({
 
       // For different filter types, extract the relevant "value" player
       if (filters.minOddsGap && analysis.analysis.hasOddsGap) {
-        // Find the underdog (worse odds) in matchups with big gaps
-        const playersWithOdds = analysis.players.filter(p => p.odds !== null);
-        console.log(`Players with odds:`, playersWithOdds.map(p => ({ name: p.name, odds: p.odds })));
+        // Find underdogs with competitive SG stats
+        const playersWithOdds = analysis.players.filter(p => p.odds !== null && p.sgTotal !== null);
+        console.log(`Players with odds and SG:`, playersWithOdds.map(p => ({ name: p.name, odds: p.odds, sgTotal: p.sgTotal })));
         
         if (playersWithOdds.length >= 2) {
-          const sortedByOdds = [...playersWithOdds].sort((a, b) => (b.odds ?? 0) - (a.odds ?? 0));
-          const underdog = sortedByOdds[0]; // Highest odds = biggest underdog
+          const sortedByOdds = [...playersWithOdds].sort((a, b) => (a.odds ?? 0) - (b.odds ?? 0));
+          const favorite = sortedByOdds[0]; // Lowest odds = favorite
+          const underdogs = sortedByOdds.slice(1); // Everyone else
           
-          console.log(`Found underdog:`, { name: underdog.name, odds: underdog.odds });
-          
-          valuePlayers.push({
-            dgId: underdog.dgId,
-            name: underdog.name,
-            odds: underdog.odds,
-            matchupId: matchup.id,
-            reason: `${Math.round(analysis.analysis.oddsGapSize * 100)}pt odds gap`,
-            sgTotal: underdog.sgTotal
+          // Find underdogs who are competitive with the favorite
+          const competitiveUnderdogs = underdogs.filter(dog => {
+            const sgGap = (favorite.sgTotal ?? 0) - (dog.sgTotal ?? 0);
+            // Dog is competitive if within 0.3 SG or actually better
+            return sgGap <= 0.3;
           });
+          
+          if (competitiveUnderdogs.length > 0) {
+            // Pick the best value: lowest SG gap relative to odds gap
+            const bestValue = competitiveUnderdogs.reduce((best, current) => {
+              const currentSgGap = (favorite.sgTotal ?? 0) - (current.sgTotal ?? 0);
+              const bestSgGap = (favorite.sgTotal ?? 0) - (best.sgTotal ?? 0);
+              
+              // If current has better SG than best, pick current
+              if (currentSgGap < bestSgGap) return current;
+              // If tied on SG, pick the one with better odds
+              if (currentSgGap === bestSgGap && (current.odds ?? 0) > (best.odds ?? 0)) return current;
+              return best;
+            });
+            
+            const sgDiff = (favorite.sgTotal ?? 0) - (bestValue.sgTotal ?? 0);
+            
+            // Calculate the actual American odds gap between this player and the favorite
+            const favoriteAmerican = ((favorite.odds ?? 1) - 1) * 100;
+            const bestValueAmerican = ((bestValue.odds ?? 1) - 1) * 100;
+            const oddsGap = Math.round(bestValueAmerican - favoriteAmerican);
+            
+            let reason = `${oddsGap}pt odds gap`;
+            
+            if (sgDiff < 0) {
+              reason += `, leads SG by ${Math.abs(sgDiff).toFixed(2)}`;
+            } else if (sgDiff <= 0.1) {
+              reason += `, nearly even SG`;
+            } else {
+              reason += `, only ${sgDiff.toFixed(2)} SG behind`;
+            }
+            
+            console.log(`Found value underdog:`, { 
+              name: bestValue.name, 
+              odds: bestValue.odds, 
+              sgTotal: bestValue.sgTotal,
+              sgGap: sgDiff 
+            });
+            
+            valuePlayers.push({
+              dgId: bestValue.dgId,
+              name: bestValue.name,
+              odds: bestValue.odds,
+              matchupId: matchup.id,
+              reason,
+              sgTotal: bestValue.sgTotal
+            });
+          }
         }
       }
 
@@ -365,6 +409,28 @@ export function useMatchupFilters({
             reason: `Leads ${analysis.analysis.sgCategoryDominance.categories} SG categories by 0.05+`,
             sgTotal: dominator.sgTotal
           });
+        }
+      }
+
+      if (filters.showDgFdDisagreement) {
+        // Check if DG and FD rank players differently
+        const playersWithBothOdds = analysis.players.filter(p => p.odds !== null && p.dgOdds !== null);
+        if (playersWithBothOdds.length >= 2) {
+          const fdRanking = [...playersWithBothOdds].sort((a, b) => (a.odds ?? 0) - (b.odds ?? 0));
+          const dgRanking = [...playersWithBothOdds].sort((a, b) => (a.dgOdds ?? 0) - (b.dgOdds ?? 0));
+          
+          if (fdRanking[0]?.dgId !== dgRanking[0]?.dgId) {
+            // DataGolf's favorite is not FanDuel's favorite - this is value
+            const dgFavorite = dgRanking[0];
+            valuePlayers.push({
+              dgId: dgFavorite.dgId,
+              name: dgFavorite.name,
+              odds: dgFavorite.odds,
+              matchupId: matchup.id,
+              reason: `DataGolf favorite but not FanDuel favorite`,
+              sgTotal: dgFavorite.sgTotal
+            });
+          }
         }
       }
     });

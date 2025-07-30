@@ -199,7 +199,7 @@ export const FILTER_PRESETS: Record<FilterPreset, Partial<MatchupRelativeFilters
     scoreGapToday: 2
   },
   'value': {
-    minOddsGap: 0.05, // 5 points in decimal format (0.05)
+    minOddsGap: 0.20, // 20 points minimum gap to find meaningful value
     showDgFdDisagreement: true
   }
 };
