@@ -58,7 +58,24 @@ export function ParlayProvider({ children }: { children: ReactNode }) {
       const savedSelections = localStorage.getItem('parlaySelections');
       if (savedSelections) {
         try {
-          const parsed = JSON.parse(savedSelections).map((s: any) => ({ ...s, id: String(s.id) }));
+          const parsed = JSON.parse(savedSelections).map((s: any) => {
+            // Parse odds properly - handle strings like "+120" or numbers like 120
+            let odds = s.odds;
+            if (typeof odds === 'string') {
+              // Remove + and any spaces, then convert to number
+              odds = Number(odds.replace(/[+\s]/g, ''));
+            } else {
+              odds = Number(odds);
+            }
+            
+            return {
+              ...s,
+              id: String(s.id),
+              odds: isNaN(odds) ? s.odds : odds, // Keep original if parsing fails
+              valueRating: Number(s.valueRating) || s.valueRating,
+              confidenceScore: Number(s.confidenceScore) || s.confidenceScore
+            };
+          });
           loadedSelections = parsed;
           setSelections(parsed);
         } catch (error) {
@@ -189,23 +206,44 @@ export function ParlayProvider({ children }: { children: ReactNode }) {
     }
     try {
       const decimalOdds = currentSelections.map((selection) => {
-        const americanOdds = Number(selection.odds)
-        if (isNaN(americanOdds) || americanOdds === 0) return 1
-        return americanOdds > 0
-          ? (americanOdds / 100) + 1
-          : (100 / Math.abs(americanOdds)) + 1
+        let odds = selection.odds;
+        
+        // Handle string odds
+        if (typeof odds === 'string') {
+          odds = Number(odds.replace(/[+\s]/g, ''));
+        } else {
+          odds = Number(odds);
+        }
+        
+        if (isNaN(odds) || odds === 0) return 1;
+        
+        // Check if odds are already in decimal format (between 1 and 50, typical range)
+        if (odds > 1 && odds < 50) {
+          // Already decimal odds, use directly
+          return odds;
+        } else {
+          // American odds, convert to decimal
+          return odds > 0
+            ? (odds / 100) + 1
+            : (100 / Math.abs(odds)) + 1;
+        }
       })
+      
       const totalDecimalOdds = decimalOdds.reduce((acc, curr) => acc * curr, 1)
+      
+      // Convert back to American odds
       let americanOdds
       if (totalDecimalOdds >= 2) {
         americanOdds = Math.round((totalDecimalOdds - 1) * 100)
       } else {
         americanOdds = Math.round(-100 / (totalDecimalOdds - 1))
       }
+      
       setTotalOdds(americanOdds)
       const totalPayout = Number(currentStake) * totalDecimalOdds
       setPotentialPayout(Number(totalPayout.toFixed(2)))
-    } catch {
+    } catch (error) {
+      console.error('Error calculating parlay odds:', error)
       setTotalOdds(0)
       setPotentialPayout(0)
     }
