@@ -18,6 +18,8 @@ import { FilterChipList } from "@/components/ui/filter-chip"
 import { Badge } from "@/components/ui/badge"
 import { formatPlayerName } from "@/lib/utils"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetDescription } from "@/components/ui/sheet"
+import { MatchupBreakdownModal } from "@/components/ui/matchup-breakdown-modal"
+import { MatchupComparison } from "@/lib/matchup-comparison-engine"
 // Player search functionality is now handled by parent component
 
 interface RecommendedPicksProps {
@@ -36,6 +38,8 @@ interface RecommendedPicksProps {
   // Player search props
   playerSearchTerm?: string;
   highlightText?: (text: string) => React.ReactNode;
+  // Matchup analysis function for breakdown modal
+  getMatchupAnalysis?: (matchupId: number) => MatchupComparison | null;
 }
 
 // Helper to format Decimal odds into American odds string
@@ -139,6 +143,7 @@ export function RecommendedPicksContent({
   error: externalError,
   playerSearchTerm,
   highlightText,
+  getMatchupAnalysis,
 }: RecommendedPicksProps) {
   // Get the parlay context
   const { addSelection, removeSelection, selections } = useParlayContext()
@@ -146,6 +151,15 @@ export function RecommendedPicksContent({
   const [addedPlayers, setAddedPlayers] = useState<Record<string, boolean>>({})
   // Add pagination state
   const [displayLimit, setDisplayLimit] = useState(10)
+  // Modal state for matchup breakdown
+  const [selectedMatchupAnalysis, setSelectedMatchupAnalysis] = useState<MatchupComparison | null>(null)
+  const [selectedPlayer, setSelectedPlayer] = useState<{
+    name: string;
+    reason: string;
+    odds: number | null;
+    sgTotal: number | null;
+  } | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
 
   // Fetch complete matchup data to find opponents
   const { data: fullMatchupData } = useRecommendedPicksQuery(
@@ -307,6 +321,29 @@ export function RecommendedPicksContent({
     })
     setAddedPlayers(newAddedPlayers)
   }, [finalRecommendations, selections])
+
+  // Handle opening matchup breakdown modal
+  const handleShowBreakdown = (player: Player) => {
+    if (!getMatchupAnalysis || !player.matchupId) {
+      console.warn('No matchup analysis function provided or matchup ID missing')
+      return;
+    }
+
+    const analysis = getMatchupAnalysis(player.matchupId);
+    if (!analysis) {
+      console.warn(`No analysis found for matchup ${player.matchupId}`)
+      return;
+    }
+
+    setSelectedMatchupAnalysis(analysis);
+    setSelectedPlayer({
+      name: player.name,
+      reason: (player as any).reason || 'Recommended pick',
+      odds: player.odds,
+      sgTotal: player.sgTotal
+    });
+    setIsModalOpen(true);
+  }
 
   if (isLoading) {
     return (
@@ -473,11 +510,29 @@ export function RecommendedPicksContent({
                   >
                     <div className="flex flex-col h-full">
                       {/* Player Header */}
-                      <div className="flex items-center mb-2">
+                      <div className="flex items-center justify-between mb-2">
                         <h3 className="font-semibold text-lg text-white">
                           {playerSearchTerm && highlightText ? highlightText(player.name) : formatPlayerName(player.name)}
                         </h3>
-                        <div className="flex items-center gap-2 ml-2">
+                        <div className="flex items-center gap-2">
+                          {/* Info icon for matchup breakdown */}
+                          {getMatchupAnalysis && player.matchupId && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleShowBreakdown(player)}
+                                  className="h-8 w-8 p-0 hover:bg-white/10"
+                                >
+                                  <Info className="h-4 w-4 text-gray-400 hover:text-white" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-foreground">View matchup breakdown</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
                           {hasMatchupConflict && (
                             <Tooltip>
                               <TooltipTrigger>
@@ -667,6 +722,19 @@ export function RecommendedPicksContent({
             )}
           </CardContent>
         </Card>
+
+        {/* Matchup Breakdown Modal */}
+        <MatchupBreakdownModal
+          open={isModalOpen}
+          onOpenChange={setIsModalOpen}
+          matchupAnalysis={selectedMatchupAnalysis}
+          recommendedPlayer={selectedPlayer || {
+            name: '',
+            reason: '',
+            odds: null,
+            sgTotal: null
+          }}
+        />
       </div>
     </TooltipProvider>
   )

@@ -20,6 +20,7 @@ export function formatRelativeTime(isoTimestamp: string | null): string {
 }
 
 export function formatPlayerName(name: string): string {
+  if (!name || typeof name !== 'string') return 'Unknown Player';
   return name.includes(",") ? name.split(",").reverse().join(" ").trim() : name;
 }
 

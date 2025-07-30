@@ -14,13 +14,7 @@ import { ParlayProvider } from "@/context/ParlayContext"
 import { useCurrentWeekEventsQuery, Event as TournamentEvent } from "@/hooks/use-current-week-events-query"
 import { useMatchupTypeQuery } from "@/hooks/use-matchup-type-query"
 import { RecommendedPicksPanel } from "@/components/recommended-picks"
-import { FilterService } from "@/filters/filter-service"
-import { registerCoreFilters } from "@/filters/initFilters"
 import { useCurrentRoundForEvent } from '@/hooks/use-current-round-for-event'
-import { useFilterManager } from "@/hooks/use-filter-manager"
-import { useFilteredPlayers } from "@/hooks/use-filtered-players"
-import { FilterPanel } from "@/components/ui/filter-panel"
-import { FilterChipList } from "@/components/ui/filter-chip"
 import { Badge } from "@/components/ui/badge"
 import { Filter as FilterIcon, CloudRain } from "lucide-react"
 import { OddsFreshnessIndicator } from "@/components/odds-freshness-indicator"
@@ -30,9 +24,9 @@ import { PlayerSearchWithCount, usePlayerSearch } from "@/components/ui/player-s
 import { formatPlayerName } from "@/lib/utils"
 import { cn } from "@/lib/utils"
 import { FormField, FormItem, FormLabel } from "@/components/ui/form"
+import { MatchupFilterPanel } from "@/components/ui/matchup-filter-panel"
+import { useMatchupFilters } from "@/hooks/use-matchup-filters"
 
-// Register filters once at module load
-registerCoreFilters()
 
 // Define props for Dashboard
 interface DashboardProps {
@@ -125,33 +119,101 @@ export default function Dashboard({
       })
     : sharedMatchupsData
 
-  // Filter management - only for recommended picks
-  const filterManager = useFilterManager({ 
-    autoSave: true, 
-    enablePerformanceTracking: true 
+
+  // Matchup filters - use available season skills data for SG comparisons
+  const {
+    filteredMatchups,
+    filterState,
+    updateFilter,
+    applyPreset,
+    clearFilters,
+    getMatchupAnalysis,
+    getRawMatchupAnalysis,
+    getValuePlayers
+  } = useMatchupFilters({
+    matchups: searchFilteredMatchups,
+    // Pass season skills as player stats for SG data
+    playerStats: initialSeasonSkills?.map(skill => ({
+      player_id: String(skill.dg_id),
+      player_name: skill.player_name || skill.name || `Player ${skill.dg_id}`, // Include player name
+      sg_total: skill.sg_total,
+      sg_putt: skill.sg_putt,
+      sg_app: skill.sg_app,
+      sg_arg: skill.sg_arg,
+      sg_ott: skill.sg_ott,
+      season_sg_total: skill.sg_total
+    })),
+    tournamentStats: initialLiveStats
   })
 
-  // Use filtered data hook for recommendations - but pass shared matchups data
-  const {
-    data: filteredRecommendations,
-    isLoading: isLoadingRecommendations,
-    isError: isErrorRecommendations,
-    error: errorRecommendations,
-    originalCount: originalRecommendationsCount,
-    filteredCount: filteredRecommendationsCount,
-    appliedFilters: appliedRecommendationFilters,
-    performance: recommendationsPerformance
-  } = useFilteredPlayers(selectedEventId, matchupType, currentRound, {
-    filterIds: filterManager.selectedFilters,
-    filterOptions: filterManager.filterOptions,
-    bookmaker: "fanduel",
-    oddsGapPercentage: 40,
-    limit: 10,
-    debounceMs: 300,
-    enableCaching: true,
-    // Pass shared matchups data to prevent duplicate fetching
-    sharedMatchupsData
+  // Debug logging
+  console.log('Dashboard state:', {
+    selectedEventId,
+    matchupType,
+    currentRound,
+    sharedMatchupsDataLength: sharedMatchupsData?.length,
+    searchFilteredMatchupsLength: searchFilteredMatchups?.length,
+    filteredMatchupsLength: filteredMatchups?.length,
+    isLoadingMatchups,
+    isErrorMatchups
   })
+  
+  // Create custom recommendations for value players when filters are active
+  const valuePlayerRecommendations = useMemo(() => {
+    if (!filterState.isActive) return null;
+    
+    const valuePlayers = getValuePlayers();
+    if (valuePlayers.length === 0) return [];
+
+    // Convert value players to recommendation format
+    const recommendations = valuePlayers.map((player, index) => ({
+      dg_id: player.dgId,
+      name: player.name || 'Unknown Player', // RecommendedPicksPanel expects 'name' field
+      player_name: player.name || 'Unknown Player', // Keep both for compatibility
+      odds: player.odds,
+      matchup_id: player.matchupId, // snake_case for API compatibility
+      matchupId: player.matchupId, // camelCase for component compatibility
+      reason: player.reason,
+      sgTotal: player.sgTotal, // RecommendedPicksPanel expects 'sgTotal' (camelCase)
+      season_sg_total: player.sgTotal, // Use same value for season SG
+      event_id: selectedEventId,
+      round_num: currentRound,
+      bookmaker: 'fanduel',
+      created_at: new Date().toISOString()
+    }));
+    
+    // Sort recommendations by best value first
+    const sortedRecommendations = recommendations.sort((a, b) => {
+      // Parse odds gap from reason string (e.g., "31pt odds gap" -> 31)
+      const getOddsGap = (reason: string) => {
+        const match = reason.match(/(\d+)pt odds gap/);
+        return match ? parseInt(match[1]) : 0;
+      };
+      
+      const aGap = getOddsGap(a.reason);
+      const bGap = getOddsGap(b.reason);
+      
+      // Sort by largest odds gap first (best value)
+      if (aGap !== bGap) {
+        return bGap - aGap;
+      }
+      
+      // Secondary sort: higher SG Total (better player)
+      const aSG = a.sgTotal || 0;
+      const bSG = b.sgTotal || 0;
+      if (aSG !== bSG) {
+        return bSG - aSG;
+      }
+      
+      // Tertiary sort: better odds (higher payout)
+      const aOdds = a.odds || 0;
+      const bOdds = b.odds || 0;
+      return bOdds - aOdds;
+    });
+    
+    return sortedRecommendations;
+  }, [filterState.isActive, selectedEventId, currentRound, filteredMatchups]);
+
 
   // When selectedEventId or latestRound changes, update currentRound
   useEffect(() => {
@@ -368,61 +430,31 @@ export default function Dashboard({
                       )}
                     </div>
 
-                    {/* Filter Panel for Recommendations */}
-                    <div className="border-t border-border/20 pt-6">
-                      <FilterPanel
-                        selectedFilters={filterManager.selectedFilters}
-                        onFiltersChange={(filterIds) => {
-                          // Clear existing filters and add new ones
-                          filterManager.clearAllFilters()
-                          filterIds.forEach(id => filterManager.addFilter(id))
-                        }}
-                        filterOptions={filterManager.filterOptions}
-                        onFilterOptionsChange={filterManager.updateFilterOptions}
-                        multiSelect={true}
-                        showResultCount={false}
-                        isLoading={isLoadingRecommendations}
-                        compact={false}
-                      />
-                    </div>
-
-                    {/* Results Summary */}
-                    {filterManager.hasFilters && (
-                      <div className="border-t border-border/20 pt-6">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <Badge variant="outline" className="text-sm bg-primary/10 text-primary border-primary/20">
-                              Recommendations: {filteredRecommendationsCount} of {originalRecommendationsCount}
-                            </Badge>
-                            {appliedRecommendationFilters.length > 0 && (
-                              <FilterChipList
-                                filterIds={appliedRecommendationFilters}
-                                onRemove={filterManager.removeFilter}
-                                onClearAll={filterManager.clearAllFilters}
-                                size="sm"
-                                maxVisible={3}
-                              />
-                            )}
-                          </div>
-                          {recommendationsPerformance.filterTime > 0 && (
-                            <Badge variant="secondary" className="text-xs bg-muted/50 text-muted-foreground">
-                              {Math.round(recommendationsPerformance.filterTime)}ms
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    )}
 
                     {/* Player Search - Positioned above content for better UX */}
                     <div className="lg:col-span-3">
-                      <div className="flex justify-center">
-                        <PlayerSearchWithCount
-                          players={allPlayersFromMatchups}
-                          placeholder="Search players across matchups & picks..."
-                          className="w-full card-clean border border-border/10 bg-white/6 hover:bg-white/10 transition-all rounded-2xl"
-                          caseSensitive={false}
-                          value={playerSearchTerm}
-                          onSearchChange={setPlayerSearchTerm}
+                      <div className="flex flex-col gap-3">
+                        <div className="flex justify-center">
+                          <PlayerSearchWithCount
+                            players={allPlayersFromMatchups}
+                            placeholder="Search players across matchups & picks..."
+                            className="w-full card-clean border border-border/10 bg-white/6 hover:bg-white/10 transition-all rounded-2xl"
+                            caseSensitive={false}
+                            value={playerSearchTerm}
+                            onSearchChange={setPlayerSearchTerm}
+                          />
+                        </div>
+                        
+                        {/* Matchup Filters */}
+                        <MatchupFilterPanel
+                          filters={filterState}
+                          activeFilterCount={filterState.activeFilterCount}
+                          onFilterChange={updateFilter}
+                          onPresetSelect={applyPreset}
+                          onClearFilters={clearFilters}
+                          resultCount={filteredMatchups.length}
+                          totalCount={searchFilteredMatchups?.length || 0}
+                          className="w-full"
                         />
                       </div>
                     </div>
@@ -439,35 +471,49 @@ export default function Dashboard({
                 roundNum={currentRound}
                 showFilters={true}
                 compactFilters={false}
-                // Let MatchupsTable handle its own data fetching for sportsbook filtering
-                // sharedMatchupsData={searchFilteredMatchups}
-                // isLoading={isLoadingMatchups}
-                // isError={isErrorMatchups}
-                // error={errorMatchups}
+                // Pass filtered matchups data when filters are active
+                sharedMatchupsData={filterState.isActive ? filteredMatchups : undefined}
+                isLoading={isLoadingMatchups}
+                isError={isErrorMatchups}
+                error={errorMatchups}
                 // Pass search props for highlighting
                 playerSearchTerm={playerSearchTerm}
                 highlightText={highlightText}
+                // Pass matchup analysis for badges
+                getMatchupAnalysis={getMatchupAnalysis}
               />
             </div>
 
             {/* Row 2: Recommended Picks (Right) - Better space utilization */}
             <div className="lg:col-span-1">
-              <RecommendedPicksPanel 
-                eventId={selectedEventId}
-                matchupType={matchupType} 
-                limit={10} 
-                oddsGapPercentage={40}
-                bookmaker="fanduel"
-                roundNum={currentRound}
-                showFilters={false}
-                filteredData={filteredRecommendations}
-                isLoading={isLoadingRecommendations}
-                isError={isErrorRecommendations}
-                error={errorRecommendations}
-                // Pass search props for highlighting
-                playerSearchTerm={playerSearchTerm}
-                highlightText={highlightText}
-              />
+              <div className="relative">
+                {filterState.isActive && (
+                  <div className="absolute -top-2 right-4 z-10">
+                    <Badge variant="secondary" className="text-xs bg-yellow-500/20 text-yellow-400 border-yellow-500/30">
+                      Filters Active: {filteredMatchups.length} matchups → {getValuePlayers().length} value picks
+                    </Badge>
+                  </div>
+                )}
+                <RecommendedPicksPanel 
+                  eventId={selectedEventId}
+                  matchupType={matchupType} 
+                  limit={10} 
+                  oddsGapPercentage={40}
+                  bookmaker="fanduel"
+                  roundNum={currentRound}
+                  showFilters={false}
+                  // Use value player recommendations from matchup filters
+                  filteredData={valuePlayerRecommendations}
+                  isLoading={false}
+                  isError={false}
+                  error={null}
+                  // Pass search props for highlighting
+                  playerSearchTerm={playerSearchTerm}
+                  highlightText={highlightText}
+                  // Pass matchup analysis function for breakdown modal
+                  getMatchupAnalysis={getRawMatchupAnalysis}
+                />
+              </div>
             </div>
           </div>
         )}

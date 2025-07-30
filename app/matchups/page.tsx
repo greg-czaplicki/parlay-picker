@@ -22,9 +22,9 @@ const supabaseServerClient = createClient(supabaseUrl, supabaseKey)
 async function getInitialPlayerData() {
   console.log("Fetching initial player data on server...")
   try {
-    // Fetch Season Skills from DataGolf
+    // Fetch Season Skills from PGA Tour data (more accurate than DataGolf skill ratings)
     const { data: seasonSkills, error: skillError } = await supabaseServerClient
-      .from("player_skill_ratings")
+      .from("player_season_stats")
       .select("*")
       .order("sg_total", { ascending: false })
 

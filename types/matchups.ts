@@ -103,4 +103,5 @@ export interface MatchupsTableProps {
   error?: Error | null;
   playerSearchTerm?: string;
   highlightText?: (text: string) => React.ReactNode;
+  getMatchupAnalysis?: (matchupId: number) => any;
 } 

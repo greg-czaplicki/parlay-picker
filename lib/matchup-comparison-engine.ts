@@ -1,0 +1,442 @@
+import { MatchupRow, Supabase2BallMatchupRow, Supabase3BallMatchupRow } from '@/types/matchups';
+import { PlayerStat } from '@/hooks/use-player-stats-query';
+import { LiveTournamentStat } from '@/types/definitions';
+
+export interface PlayerComparison {
+  dgId: number;
+  name: string;
+  odds: number | null;
+  dgOdds: number | null;
+  sgTotal: number | null;
+  sgPutt: number | null;
+  sgApp: number | null;
+  sgArg: number | null;
+  sgOtt: number | null;
+  sgT2g: number | null;
+  position: number | null;
+  todayScore: number | null;
+  totalScore: number | null;
+  seasonSgTotal: number | null;
+}
+
+export interface MatchupComparison {
+  matchupId: number;
+  type: '2ball' | '3ball';
+  players: PlayerComparison[];
+  analysis: {
+    hasOddsGap: boolean;
+    oddsGapSize: number;
+    oddsLeader: string | null;
+    hasOddsSgMismatch: boolean;
+    sgLeader: string | null;
+    sgGapSize: number;
+    sgCategoryDominance: { player: string; categories: number } | null;
+    hasPuttingEdge: boolean;
+    puttingEdgePlayer: string | null;
+    puttingGapSize: number;
+    hasBallStrikingEdge: boolean;
+    ballStrikingEdgePlayer: string | null;
+    ballStrikingGapSize: number;
+    hasPositionMismatch: boolean;
+    formLeader: string | null;
+  };
+}
+
+// Helper function to convert decimal odds to American odds
+function convertDecimalToAmerican(decimal: number): number {
+  if (decimal <= 1.01) return 0; // Invalid odds
+  
+  if (decimal >= 2.0) {
+    // Positive American odds: (decimal - 1) * 100
+    return Math.round((decimal - 1) * 100);
+  } else {
+    // Negative American odds: -100 / (decimal - 1)
+    return Math.round(-100 / (decimal - 1));
+  }
+}
+
+export class MatchupComparisonEngine {
+  private playerStats: Map<number, PlayerStat> = new Map();
+  private tournamentStats: Map<number, LiveTournamentStat> = new Map();
+
+  constructor(
+    playerStats?: PlayerStat[],
+    tournamentStats?: LiveTournamentStat[]
+  ) {
+    if (playerStats) {
+      playerStats.forEach(stat => {
+        // Handle both string and number player_id formats
+        const dgId = typeof stat.player_id === 'string' ? parseInt(stat.player_id) : stat.player_id;
+        if (!isNaN(dgId)) {
+          this.playerStats.set(dgId, stat);
+        }
+      });
+    }
+
+    if (tournamentStats) {
+      tournamentStats.forEach(stat => {
+        this.tournamentStats.set(Number(stat.dg_id), stat);
+      });
+    }
+  }
+
+  analyzeMatchup(matchup: MatchupRow): MatchupComparison {
+    const players = this.extractPlayers(matchup);
+    const analysis = this.performAnalysis(players);
+
+    return {
+      matchupId: matchup.id,
+      type: matchup.type as '2ball' | '3ball',
+      players,
+      analysis
+    };
+  }
+
+  private extractPlayers(matchup: MatchupRow): PlayerComparison[] {
+    const players: PlayerComparison[] = [];
+
+    if (matchup.type === '3ball') {
+      const m = matchup as Supabase3BallMatchupRow;
+      players.push(this.createPlayerComparison(m.player1_dg_id, m.player1_name, m.odds1, m.dg_odds1));
+      players.push(this.createPlayerComparison(m.player2_dg_id, m.player2_name, m.odds2, m.dg_odds2));
+      if (m.player3_dg_id && m.player3_name) {
+        players.push(this.createPlayerComparison(m.player3_dg_id, m.player3_name, m.odds3, m.dg_odds3));
+      }
+    } else {
+      const m = matchup as Supabase2BallMatchupRow;
+      players.push(this.createPlayerComparison(m.player1_dg_id, m.player1_name, m.odds1, m.dg_odds1));
+      players.push(this.createPlayerComparison(m.player2_dg_id, m.player2_name, m.odds2, m.dg_odds2));
+    }
+
+    return players;
+  }
+
+  private createPlayerComparison(dgId: number, name: string, odds: number | null, dgOdds: number | null): PlayerComparison {
+    const stats = this.playerStats.get(dgId);
+    const tourneyStats = this.tournamentStats.get(dgId);
+
+    // Get player name from stats if not provided in matchup
+    const playerName = name || stats?.player_name || tourneyStats?.player_name || `Player ${dgId}`;
+
+
+    // Use season stats for SG (more reliable), tournament stats for position/scores
+    const comparison = {
+      dgId,
+      name: playerName,
+      odds,
+      dgOdds,
+      sgTotal: stats?.sg_total ?? null, // Prioritize season SG stats
+      sgPutt: stats?.sg_putt ?? null,
+      sgApp: stats?.sg_app ?? null,
+      sgArg: stats?.sg_arg ?? null,
+      sgOtt: stats?.sg_ott ?? null,
+      sgT2g: tourneyStats?.sg_t2g ?? null, // Tournament-specific stat
+      position: stats?.position ? this.parsePosition(stats.position) : null,
+      todayScore: stats?.today ?? null,
+      totalScore: stats?.total ?? tourneyStats?.total ?? null,
+      seasonSgTotal: stats?.season_sg_total ?? null
+    };
+
+    return comparison;
+  }
+
+  private parsePosition(position: string): number | null {
+    if (!position) return null;
+    const match = position.match(/\d+/);
+    return match ? parseInt(match[0]) : null;
+  }
+
+  private performAnalysis(players: PlayerComparison[]): MatchupComparison['analysis'] {
+    // Odds analysis
+    const oddsAnalysis = this.analyzeOdds(players);
+    
+    // SG analysis
+    const sgAnalysis = this.analyzeSG(players);
+    
+    // Form analysis
+    const formAnalysis = this.analyzeForm(players);
+
+    return {
+      ...oddsAnalysis,
+      ...sgAnalysis,
+      ...formAnalysis
+    };
+  }
+
+  private analyzeOdds(players: PlayerComparison[]) {
+    const playersWithOdds = players.filter(p => p.odds !== null);
+    
+    if (playersWithOdds.length < 2) {
+      return {
+        hasOddsGap: false,
+        oddsGapSize: 0,
+        oddsLeader: null,
+        hasOddsSgMismatch: false
+      };
+    }
+
+    // Sort by odds (lower is better/favorite)  
+    const sortedByOdds = [...playersWithOdds].sort((a, b) => (a.odds ?? 0) - (b.odds ?? 0));
+    const favorite = sortedByOdds[0];
+    const underdog = sortedByOdds[sortedByOdds.length - 1]; // Worst odds = biggest underdog
+    const oddsGapSize = Math.abs((underdog.odds ?? 0) - (favorite.odds ?? 0));
+
+    // Check for SG mismatch (favorite has worse SG than underdog)
+    const playersWithSG = players.filter(p => p.sgTotal !== null);
+    let hasOddsSgMismatch = false;
+    
+    if (playersWithSG.length >= 2) {
+      const sortedBySG = [...playersWithSG].sort((a, b) => (b.sgTotal ?? 0) - (a.sgTotal ?? 0));
+      const sgLeader = sortedBySG[0];
+      hasOddsSgMismatch = favorite.dgId !== sgLeader.dgId && favorite.sgTotal !== null && sgLeader.sgTotal !== null && favorite.sgTotal < sgLeader.sgTotal;
+    }
+
+    // Convert to American odds for more intuitive gap checking
+    const favoriteAmerican = convertDecimalToAmerican(favorite.odds ?? 0);
+    const underdogAmerican = convertDecimalToAmerican(underdog.odds ?? 0);
+    const americanGap = Math.abs(underdogAmerican - favoriteAmerican);
+    
+    return {
+      hasOddsGap: americanGap >= 5, // 5 American odds points or more (e.g., +100 vs +105)
+      oddsGapSize, // Keep decimal for compatibility
+      oddsLeader: favorite.name,
+      hasOddsSgMismatch
+    };
+  }
+
+  private analyzeSG(players: PlayerComparison[]) {
+    const playersWithSG = players.filter(p => p.sgTotal !== null);
+    
+    if (playersWithSG.length < 2) {
+      return {
+        sgLeader: null,
+        sgGapSize: 0,
+        sgCategoryDominance: null,
+        hasPuttingEdge: false,
+        puttingEdgePlayer: null,
+        puttingGapSize: 0,
+        hasBallStrikingEdge: false,
+        ballStrikingEdgePlayer: null,
+        ballStrikingGapSize: 0
+      };
+    }
+
+    // SG Total analysis
+    const sortedBySG = [...playersWithSG].sort((a, b) => (b.sgTotal ?? 0) - (a.sgTotal ?? 0));
+    const sgLeader = sortedBySG[0];
+    
+    // Find first player with different SG Total (handles ties)
+    let sgGapSize = 0;
+    for (let i = 1; i < sortedBySG.length; i++) {
+      const competitor = sortedBySG[i];
+      const gap = Math.abs((sgLeader.sgTotal ?? 0) - (competitor.sgTotal ?? 0));
+      if (gap > 0.01) { // Meaningful difference (more than rounding error)
+        sgGapSize = gap;
+        break;
+      }
+    }
+
+    // Category dominance
+    const categoryDominance = this.analyzeCategoryDominance(players);
+
+    // Putting edge
+    const puttingAnalysis = this.analyzeCategory(players, 'sgPutt', 0.3);
+    
+    // Ball striking edge (T2G or OTT if T2G not available)
+    const ballStrikingAnalysis = this.analyzeBallStriking(players);
+
+    return {
+      sgLeader: sgLeader.name,
+      sgGapSize,
+      sgCategoryDominance: categoryDominance,
+      hasPuttingEdge: puttingAnalysis.hasEdge,
+      puttingEdgePlayer: puttingAnalysis.edgePlayer,
+      puttingGapSize: puttingAnalysis.gapSize,
+      hasBallStrikingEdge: ballStrikingAnalysis.hasEdge,
+      ballStrikingEdgePlayer: ballStrikingAnalysis.edgePlayer,
+      ballStrikingGapSize: ballStrikingAnalysis.gapSize
+    };
+  }
+
+  private analyzeCategoryDominance(players: PlayerComparison[]) {
+    const categories = ['sgPutt', 'sgApp', 'sgArg', 'sgOtt'] as const;
+    const dominanceScore = new Map<string, { categories: number; totalGap: number }>();
+    const MINIMUM_GAP = 0.05; // Require at least 0.05 SG advantage to count as "dominance"
+
+    // Count how many players have SG data
+    const playersWithAnySG = players.filter(p => 
+      p.sgPutt !== null || p.sgApp !== null || p.sgArg !== null || p.sgOtt !== null
+    );
+
+    if (playersWithAnySG.length === 0) {
+      return null;
+    }
+
+    categories.forEach(category => {
+      const playersWithStat = players.filter(p => p[category] !== null);
+      
+      if (playersWithStat.length >= 2) {
+        const sorted = [...playersWithStat].sort((a, b) => (b[category] ?? 0) - (a[category] ?? 0));
+        const leader = sorted[0];
+        const secondBest = sorted[1];
+        const gap = (leader[category] ?? 0) - (secondBest[category] ?? 0);
+        
+        // Only count as dominance if gap is meaningful
+        if (gap >= MINIMUM_GAP) {
+          const current = dominanceScore.get(leader.name) ?? { categories: 0, totalGap: 0 };
+          dominanceScore.set(leader.name, {
+            categories: current.categories + 1,
+            totalGap: current.totalGap + gap
+          });
+        }
+      }
+    });
+
+    let dominantPlayer = null;
+    let maxCategories = 0;
+    let bestTotalGap = 0;
+
+    dominanceScore.forEach((score, player) => {
+      // Prefer more categories, but use total gap as tiebreaker
+      if (score.categories > maxCategories || 
+          (score.categories === maxCategories && score.totalGap > bestTotalGap)) {
+        maxCategories = score.categories;
+        bestTotalGap = score.totalGap;
+        dominantPlayer = player;
+      }
+    });
+
+    return maxCategories >= 2 ? { player: dominantPlayer!, categories: maxCategories } : null;
+  }
+
+  private analyzeCategory(players: PlayerComparison[], category: keyof PlayerComparison, threshold: number) {
+    const playersWithStat = players.filter(p => p[category] !== null && typeof p[category] === 'number');
+    
+    if (playersWithStat.length < 2) {
+      return { hasEdge: false, edgePlayer: null, gapSize: 0 };
+    }
+
+    const sorted = [...playersWithStat].sort((a, b) => (b[category] as number) - (a[category] as number));
+    const leader = sorted[0];
+    const worst = sorted[sorted.length - 1];
+    const gapSize = Math.abs((leader[category] as number) - (worst[category] as number));
+
+    return {
+      hasEdge: gapSize >= threshold,
+      edgePlayer: leader.name,
+      gapSize
+    };
+  }
+
+  private analyzeBallStriking(players: PlayerComparison[]) {
+    // Try T2G first
+    const t2gPlayers = players.filter(p => p.sgT2g !== null);
+    if (t2gPlayers.length >= 2) {
+      return this.analyzeCategory(players, 'sgT2g', 0.5);
+    }
+
+    // Fallback to OTT
+    return this.analyzeCategory(players, 'sgOtt', 0.5);
+  }
+
+  private analyzeForm(players: PlayerComparison[]) {
+    const playersWithPosition = players.filter(p => p.position !== null);
+    
+    let hasPositionMismatch = false;
+    let formLeader = null;
+
+    // Check for position mismatch (lower ranked player favored)
+    if (playersWithPosition.length >= 2) {
+      const sortedByPosition = [...playersWithPosition].sort((a, b) => (a.position ?? 999) - (b.position ?? 999));
+      const sortedByOdds = [...playersWithPosition.filter(p => p.odds !== null)].sort((a, b) => (a.odds ?? 0) - (b.odds ?? 0));
+      
+      if (sortedByOdds.length > 0 && sortedByPosition.length > 0) {
+        const oddsLeader = sortedByOdds[0];
+        const positionLeader = sortedByPosition[0];
+        hasPositionMismatch = oddsLeader.dgId !== positionLeader.dgId && oddsLeader.position !== null && positionLeader.position !== null && oddsLeader.position > positionLeader.position;
+      }
+    }
+
+    // Find form leader (best today's score)
+    const playersWithToday = players.filter(p => p.todayScore !== null);
+    if (playersWithToday.length > 0) {
+      const sortedByToday = [...playersWithToday].sort((a, b) => (a.todayScore ?? 0) - (b.todayScore ?? 0));
+      formLeader = sortedByToday[0].name;
+    }
+
+    return {
+      hasPositionMismatch,
+      formLeader
+    };
+  }
+
+  // Filter methods
+  filterByOddsGap(matchups: MatchupRow[], minGap: number = 40): MatchupRow[] {
+    return matchups.filter(matchup => {
+      const analysis = this.analyzeMatchup(matchup);
+      return analysis.analysis.hasOddsGap && analysis.analysis.oddsGapSize >= minGap;
+    });
+  }
+
+  filterByOddsSgMismatch(matchups: MatchupRow[]): MatchupRow[] {
+    return matchups.filter(matchup => {
+      const analysis = this.analyzeMatchup(matchup);
+      return analysis.analysis.hasOddsSgMismatch;
+    });
+  }
+
+  filterBySgDominance(matchups: MatchupRow[], minCategories: number = 3): MatchupRow[] {
+    return matchups.filter(matchup => {
+      const analysis = this.analyzeMatchup(matchup);
+      return analysis.analysis.sgCategoryDominance !== null && 
+             analysis.analysis.sgCategoryDominance.categories >= minCategories;
+    });
+  }
+
+  filterByPuttingEdge(matchups: MatchupRow[], minGap: number = 0.3): MatchupRow[] {
+    return matchups.filter(matchup => {
+      const analysis = this.analyzeMatchup(matchup);
+      return analysis.analysis.hasPuttingEdge && analysis.analysis.puttingGapSize >= minGap;
+    });
+  }
+
+  filterByBallStrikingEdge(matchups: MatchupRow[], minGap: number = 0.5): MatchupRow[] {
+    return matchups.filter(matchup => {
+      const analysis = this.analyzeMatchup(matchup);
+      return analysis.analysis.hasBallStrikingEdge && analysis.analysis.ballStrikingGapSize >= minGap;
+    });
+  }
+
+  // Preset filters
+  applyPreset(matchups: MatchupRow[], preset: string): MatchupRow[] {
+    switch (preset) {
+      case 'fade-chalk':
+        return this.filterByOddsSgMismatch(matchups);
+      
+      case 'stat-dom':
+        return this.filterBySgDominance(matchups, 3);
+      
+      case 'coin-flip':
+        return matchups.filter(matchup => {
+          const analysis = this.analyzeMatchup(matchup);
+          return analysis.analysis.sgGapSize < 0.2;
+        });
+      
+      case 'form-play':
+        return matchups.filter(matchup => {
+          const analysis = this.analyzeMatchup(matchup);
+          return analysis.analysis.hasPositionMismatch;
+        });
+      
+      case 'value':
+        return matchups.filter(matchup => {
+          const analysis = this.analyzeMatchup(matchup);
+          return analysis.analysis.hasOddsSgMismatch || 
+                 (analysis.analysis.sgGapSize > 0.5 && !analysis.analysis.hasOddsGap);
+        });
+      
+      default:
+        return matchups;
+    }
+  }
+}
