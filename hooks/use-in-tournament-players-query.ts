@@ -121,11 +121,6 @@ export function useInTournamentPlayersQuery({
             sg_arg,
             sg_putt,
             sg_t2g,
-            accuracy,
-            distance,
-            gir,
-            prox_fw,
-            scrambling,
             data_golf_updated_at
           `)
           .order('position', { ascending: true, nullsFirst: false })
