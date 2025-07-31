@@ -28,7 +28,6 @@ interface SupabaseTournament {
   end_date: string; // "YYYY-MM-DD"
   status: string;
   tour: string; // Added tour field to identify PGA, OPP, or EURO
-  event_name?: string; // Keep for reference but won't be inserted
 }
 
 // Data Golf API Key

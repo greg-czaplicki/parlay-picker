@@ -169,28 +169,27 @@ function getCurrentTournamentRound(eventId: number): number {
 const tourParamSchema = z.object({ tour: z.enum(['pga', 'opp', 'euro']) });
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const tour = searchParams.get('tour') || 'pga';
-  logger.info(`Tour sync request received`, { tour });
-  
-  // Validate tour parameter
-  const tourSchema = z.enum(['pga', 'euro', 'opp']);
-  const validationResult = tourSchema.safeParse(tour);
-  
-  if (!validationResult.success) {
-    return handleApiError(`Invalid tour parameter: ${tour}. Must be 'pga', 'euro', or 'opp'.`);
-  }
-
-  const validatedTour = validationResult.data;
-  logger.info(`Validated tour parameter: ${validatedTour}`);
-
-  let totalInsertedCount = 0;
-  let lastSourceTimestamp: string | null = null;
-  let fetchedEventName: string | null = null;
-  const errors: string[] = [];
-  const supabase = createSupabaseClient();
-
   try {
+    const { searchParams } = new URL(request.url);
+    const tour = searchParams.get('tour') || 'pga';
+    logger.info(`Tour sync request received`, { tour });
+    
+    // Validate tour parameter
+    const tourSchema = z.enum(['pga', 'euro', 'opp']);
+    const validationResult = tourSchema.safeParse(tour);
+    
+    if (!validationResult.success) {
+      return handleApiError(`Invalid tour parameter: ${tour}. Must be 'pga', 'euro', or 'opp'.`);
+    }
+
+    const validatedTour = validationResult.data;
+    logger.info(`Validated tour parameter: ${validatedTour}`);
+
+    let totalInsertedCount = 0;
+    let lastSourceTimestamp: string | null = null;
+    let fetchedEventName: string | null = null;
+    const errors: string[] = [];
+    const supabase = createSupabaseClient();
     // Get active tournaments
     const today = new Date().toISOString().split('T')[0];
     logger.info(`Checking for active tournaments with end_date >= ${today}`);
@@ -230,13 +229,13 @@ export async function GET(request: Request) {
     const snapshotService = new TournamentSnapshotService();
 
     // Only fetch Euro tour data if tour is 'euro' and handle appropriately
-    if (tour === 'euro') {
+    if (validatedTour === 'euro') {
         return handleApiError('Euro tour data is not supported by DataGolf API. Only PGA and Opposite Field events are supported.');
     }
 
     for (const round of ROUNDS_TO_FETCH) {
       try {
-        const data = await fetchLiveStats(tour, round);
+        const data = await fetchLiveStats(validatedTour, round);
         if (!data) continue;
 
         // Check if this event is in our active tournaments list
@@ -244,7 +243,7 @@ export async function GET(request: Request) {
           t.name === data.event_name
         );
         if (!matchingTournament) {
-          logger.info(`Event "${data.event_name}" from ${tour.toUpperCase()} tour is not in active tournaments list. Skipping sync for this event.`);
+          logger.info(`Event "${data.event_name}" from ${validatedTour.toUpperCase()} tour is not in active tournaments list. Skipping sync for this event.`);
           continue;
         }
 
@@ -274,9 +273,9 @@ export async function GET(request: Request) {
       }
     }
 
-    const finalMessage = `${tour.toUpperCase()} tour sync complete. Total records inserted/updated: ${totalInsertedCount} across attempted rounds for ${fetchedEventName ?? 'event'}.`;
+    const finalMessage = `${validatedTour.toUpperCase()} tour sync complete. Total records inserted/updated: ${totalInsertedCount} across attempted rounds for ${fetchedEventName ?? 'event'}.`;
     if (errors.length > 0) {
-        logger.warn(`${tour.toUpperCase()} sync completed with errors:`, errors);
+        logger.warn(`${validatedTour.toUpperCase()} sync completed with errors:`, errors);
     }
 
       logger.info('Returning live-stats/sync-tour response');
@@ -284,12 +283,12 @@ export async function GET(request: Request) {
       processedCount: totalInsertedCount,
       sourceTimestamp: lastSourceTimestamp,
       eventName: fetchedEventName,
-      tour: tour.toUpperCase(),
+      tour: validatedTour.toUpperCase(),
       errors,
     }, finalMessage + (errors.length > 0 ? ` Errors: ${errors.join(', ')}` : ''));
 
   } catch (error) {
-    logger.error(`Error in ${tour.toUpperCase()} tour sync:`, error);
-    return handleApiError(`${tour.toUpperCase()} tour sync failed`);
+    logger.error(`Error in tour sync:`, error);
+    return handleApiError(`Tour sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
