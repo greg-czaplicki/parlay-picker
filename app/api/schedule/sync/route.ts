@@ -24,6 +24,7 @@ interface DataGolfScheduleResponse {
 interface SupabaseTournament {
   dg_id: number;
   name: string;
+  year: number;
   start_date: string; // "YYYY-MM-DD"
   end_date: string; // "YYYY-MM-DD"
   status: string;
@@ -113,6 +114,7 @@ async function fetchTourSchedule(url: string, tourCode: string): Promise<Supabas
         return {
           dg_id: eventId,
           name: event.event_name,
+          year: startDate.getFullYear(),
           start_date: event.start_date,
           end_date: calculateEndDate(event.start_date),
           status: status,

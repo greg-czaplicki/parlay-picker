@@ -89,9 +89,9 @@ jobs:
           fi
           
           # Parse and display sync results
-          processed_count=$(echo $content | jq -r '.processedCount // .data.totalRecords // 0')
-          event_name=$(echo $content | jq -r '.eventName // .data.eventName // "Unknown"')
-          errors=$(echo $content | jq -r '.errors // .data.errors // [] | length')
+          processed_count=$(echo $content | jq -r '.data.processedCount // .processedCount // 0')
+          event_name=$(echo $content | jq -r '.data.eventName // .eventName // "Unknown"')
+          errors=$(echo $content | jq -r '.data.errors // .errors // [] | length')
           
           echo "✅ PGA Sync completed: $processed_count records processed for $event_name"
           if [ $errors -gt 0 ]; then
