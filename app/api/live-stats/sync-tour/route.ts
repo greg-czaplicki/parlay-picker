@@ -197,7 +197,7 @@ export async function GET(request: Request) {
     
     const { data: activeTournaments, error: tournamentsError } = await supabase
       .from('tournaments')
-      .select('event_id, event_name, start_date, end_date')
+      .select('dg_id, name, event_name, start_date, end_date')
       .gte('end_date', today);
 
     if (tournamentsError) {
@@ -211,7 +211,7 @@ export async function GET(request: Request) {
       // Let's also check what tournaments exist in the database
       const { data: allTournaments } = await supabase
         .from('tournaments')
-        .select('event_id, event_name, start_date, end_date')
+        .select('dg_id, name, event_name, start_date, end_date')
         .order('start_date', { ascending: false })
         .limit(5);
       
@@ -240,7 +240,9 @@ export async function GET(request: Request) {
         if (!data) continue;
 
         // Check if this event is in our active tournaments list
-        const matchingTournament = activeTournaments.find(t => t.event_name === data.event_name);
+        const matchingTournament = activeTournaments.find(t => 
+          t.name === data.event_name || t.event_name === data.event_name
+        );
         if (!matchingTournament) {
           logger.info(`Event "${data.event_name}" from ${tour.toUpperCase()} tour is not in active tournaments list. Skipping sync for this event.`);
           continue;

@@ -22,12 +22,13 @@ interface DataGolfScheduleResponse {
 
 // Define the structure for Supabase upsert (matching tournaments table)
 interface SupabaseTournament {
-  event_id: number;
-  event_name: string;
-  course: string;
+  dg_id: number;
+  name: string;
   start_date: string; // "YYYY-MM-DD"
   end_date: string; // "YYYY-MM-DD"
-  tour?: string; // Added tour field to identify PGA, OPP, or EURO
+  status: string;
+  tour: string; // Added tour field to identify PGA, OPP, or EURO
+  event_name?: string; // Keep for reference but won't be inserted
 }
 
 // Data Golf API Key
@@ -98,12 +99,13 @@ async function fetchTourSchedule(url: string, tourCode: string): Promise<Supabas
         }
         
         return {
-          event_id: eventId,
-          event_name: event.event_name,
-          course: event.course,
+          dg_id: eventId,
+          name: event.event_name,
           start_date: event.start_date,
           end_date: calculateEndDate(event.start_date),
+          status: 'scheduled', // Default status, can be updated later
           tour: tourCode.toLowerCase(),
+          event_name: event.event_name, // Keep for reference
         };
       });
     
@@ -138,7 +140,7 @@ export async function GET(request: Request) {
       const { error: upsertError } = await supabase
         .from("tournaments")
         .upsert(allTournaments, {
-          onConflict: 'event_id', // Use event_id (Primary Key) for conflict resolution
+          onConflict: 'dg_id', // Use dg_id (Primary Key) for conflict resolution
           ignoreDuplicates: false // Ensure existing records are updated
         });
       if (upsertError) {
