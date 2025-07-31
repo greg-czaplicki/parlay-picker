@@ -57,8 +57,10 @@ function isDuringTournamentHours(): boolean {
 // Helper to sync tournaments using multiple APIs intelligently
 async function smartTournamentSync(): Promise<{ success: boolean; count: number; events: string[] }> {
   const baseUrl = process.env.VERCEL_URL 
-    ? `https://${process.env.VERCEL_URL}` 
+    ? (process.env.VERCEL_URL.startsWith('http') ? process.env.VERCEL_URL : `https://${process.env.VERCEL_URL}`)
     : 'http://localhost:3000'
+  
+  logger.info(`Smart sync using baseUrl: ${baseUrl}`)
   
   let totalCount = 0
   const events: string[] = []
