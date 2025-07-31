@@ -103,18 +103,23 @@ async function fetchTourSchedule(url: string, tourCode: string): Promise<Supabas
         const today = new Date();
         today.setHours(0, 0, 0, 0); // Reset time to start of day
         
+        // Get year from start date, or use current year as fallback
+        const year = !isNaN(startDate.getTime()) ? startDate.getFullYear() : today.getFullYear();
+        
         // Determine status based on dates
         let status = 'scheduled';
-        if (today > endDate) {
-          status = 'completed';
-        } else if (today >= startDate && today <= endDate) {
-          status = 'in_progress';
+        if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+          if (today > endDate) {
+            status = 'completed';
+          } else if (today >= startDate && today <= endDate) {
+            status = 'in_progress';
+          }
         }
         
         return {
           dg_id: eventId,
           name: event.event_name,
-          year: startDate.getFullYear(),
+          year: year,
           start_date: event.start_date,
           end_date: calculateEndDate(event.start_date),
           status: status,
