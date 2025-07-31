@@ -25,16 +25,33 @@ jobs:
         echo "Current UTC time: $(date -u)"
         echo "Current EST time: $(TZ='America/New_York' date)"
         
-        # Call the sync endpoint
+        # Debug environment variables
+        echo "VERCEL_URL: ${{ secrets.VERCEL_URL }}"
+        echo "CRON_SECRET configured: ${{ secrets.CRON_SECRET != '' }}"
+        
+        # Call the sync endpoint with better error handling
         response=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
           -X GET \
           -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
           -H "Content-Type: application/json" \
           "${{ secrets.VERCEL_URL }}/api/cron/live-tournament-sync")
         
+        curl_exit_code=$?
+        if [ $curl_exit_code -ne 0 ]; then
+          echo "❌ Curl command failed with exit code: $curl_exit_code"
+          echo "Response received: $response"
+          exit 2
+        fi
+        
         # Extract HTTP status and body
         http_status=$(echo "$response" | grep "HTTP_STATUS:" | cut -d: -f2)
         body=$(echo "$response" | sed '/HTTP_STATUS:/d')
+        
+        if [ -z "$http_status" ]; then
+          echo "❌ Could not extract HTTP status from response"
+          echo "Full response: $response"
+          exit 3
+        fi
         
         echo "HTTP Status: $http_status"
         echo "Response: $body"
