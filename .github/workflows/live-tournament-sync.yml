@@ -5,7 +5,7 @@ on:
     # Every 5 minutes during tournament hours (Thursday-Sunday, 11 AM - 1 AM UTC)
     # This corresponds to 6 AM - 8 PM EST (tournament hours)
     - cron: '*/5 11-23 * * 4-6'  # Thu-Sat 11:00-23:59 UTC
-    - cron: '*/5 0-1 * * 5-7'    # Fri-Sun 00:00-01:59 UTC (late evening EST)
+    - cron: '*/5 0-1 * * 5,6,0'  # Fri-Sun 00:00-01:59 UTC (late evening EST)
     - cron: '*/5 11-23 * * 0'    # Sunday 11:00-23:59 UTC
     - cron: '*/5 0-1 * * 1'      # Monday 00:00-01:59 UTC (late Sunday EST)
   
