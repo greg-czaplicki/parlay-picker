@@ -3,17 +3,33 @@ import { logger } from '@/lib/logger'
 import { TournamentSnapshotService } from '@/lib/services/tournament-snapshot-service'
 
 // Helper to check if tournaments are active
+function getCurrentWeekRange() {
+  const today = new Date();
+  const dayOfWeek = today.getDay(); // 0 (Sun) - 6 (Sat)
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - ((dayOfWeek + 6) % 7));
+  monday.setHours(0,0,0,0);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  sunday.setHours(23,59,59,999);
+  return {
+    monday: monday.toISOString().split('T')[0],
+    sunday: sunday.toISOString().split('T')[0],
+  }
+}
+
 async function getActiveTournaments() {
   const { createSupabaseClient } = await import('@/lib/api-utils')
   const supabase = createSupabaseClient()
   
-  const today = new Date().toISOString().split('T')[0]
-  logger.info(`Checking for active tournaments with end_date >= ${today}`)
+  const { monday, sunday } = getCurrentWeekRange()
+  logger.info(`Checking for active tournaments in current week: ${monday} to ${sunday}`)
   
   const { data: activeTournaments, error } = await supabase
     .from('tournaments')
     .select('dg_id, name, tour')
-    .gte('end_date', today)
+    .gte('start_date', monday)
+    .lte('start_date', sunday)
   
   if (error) {
     logger.error('Error fetching active tournaments:', error)
@@ -57,11 +73,16 @@ async function smartTournamentSync(): Promise<{ success: boolean; count: number;
     
     if (inPlayResponse.ok) {
       const inPlayData = await inPlayResponse.json()
+      logger.info('📊 In-play API response:', inPlayData)
       if (inPlayData.success) {
         totalCount += inPlayData.processedCount || 0
         events.push(...(inPlayData.eventNames || []))
         logger.info(`✅ In-play sync successful: ${inPlayData.processedCount} records with correct round progression`)
+      } else {
+        logger.warn('⚠️ In-play sync returned success: false')
       }
+    } else {
+      logger.error(`❌ In-play API failed with status: ${inPlayResponse.status}`)
     }
     
     // 2. Then run auto-sync to add SG data while preserving round progression
@@ -73,10 +94,15 @@ async function smartTournamentSync(): Promise<{ success: boolean; count: number;
     
     if (autoSyncResponse.ok) {
       const autoSyncData = await autoSyncResponse.json()
+      logger.info('📊 Auto-sync API response:', autoSyncData)
       if (autoSyncData.success) {
         totalCount += autoSyncData.data?.totalProcessed || 0
         logger.info(`✅ Auto-sync successful: ${autoSyncData.data?.totalProcessed} additional records with SG data`)
+      } else {
+        logger.warn('⚠️ Auto-sync returned success: false')
       }
+    } else {
+      logger.error(`❌ Auto-sync API failed with status: ${autoSyncResponse.status}`)
     }
     
     return { success: true, count: totalCount, events: [...new Set(events)] }
