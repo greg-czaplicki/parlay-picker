@@ -88,6 +88,23 @@ function createTeeTimeMap(fieldData: any, roundNum: number): Record<number, { te
   return teeTimeMap;
 }
 
+// Generate stable matchup key that matches the database function
+function generateMatchupKey(
+  eventId: number,
+  roundNum: number,
+  type: string,
+  player1DgId: number,
+  player2DgId: number,
+  player3DgId: number | null
+): string {
+  // Sort player IDs to ensure consistent keys
+  const playerIds = type === '3ball' && player3DgId 
+    ? [player1DgId, player2DgId, player3DgId].sort((a, b) => a - b)
+    : [player1DgId, player2DgId].sort((a, b) => a - b);
+  
+  return `${eventId}_R${roundNum}_${type}_${playerIds.join('_')}`;
+}
+
 function findPairing(pairings: any[], playerIds: number[]) {
   const inputIds = playerIds.filter(Boolean).map(Number).sort((a, b) => a - b);
   
@@ -201,12 +218,23 @@ function transformMatchups(matchups: any[], pairings: any[], type: '2ball' | '3b
     }
     
     // For v2 schema, we only need dg_ids, not UUIDs
+    // Generate stable matchup key
+    const matchupKey = generateMatchupKey(
+      event_id,
+      round_num,
+      type,
+      m.p1_dg_id,
+      m.p2_dg_id,
+      type === '3ball' ? m.p3_dg_id : null
+    );
+
     const record: any = {
       // Required legacy fields
       market_type: 'matchup',
       market_name: `${m.p1_player_name} vs ${m.p2_player_name}${type === '3ball' ? ` vs ${m.p3_player_name}` : ''}`,
       
       // New schema columns
+      matchup_key: matchupKey,
       event_id,
       round_num,
       type,
@@ -522,25 +550,59 @@ export async function POST(req: NextRequest) {
     // Debug log: show first object to be inserted
     console.log('Sample matchup to upsert:', JSON.stringify(allMatchups[0], null, 2))
     
-    // Delete existing matchups for this event/round and then insert fresh ones
-    // This is simpler than trying to upsert with the conditional unique index
-    console.log(`🗑️ Deleting existing matchups for event ${event_id}, rounds ${round_num_3}/${round_num_2}`);
+    // First, capture current odds as snapshots before updating
+    console.log(`📸 Capturing odds snapshots for event ${event_id}, rounds ${round_num_3}/${round_num_2}`);
     
-    const { error: deleteError } = await supabase
+    // Get existing matchups to create snapshots
+    const { data: existingMatchups } = await supabase
       .from('betting_markets')
-      .delete()
+      .select('*')
       .eq('event_id', event_id)
       .in('round_num', [round_num_3, round_num_2]);
+    
+    if (existingMatchups && existingMatchups.length > 0) {
+      // Create snapshots of current odds before updating
+      const snapshots = existingMatchups.map(m => ({
+        matchup_key: m.matchup_key,
+        event_id: m.event_id,
+        round_num: m.round_num,
+        type: m.type,
+        player1_dg_id: m.player1_dg_id,
+        player1_name: m.player1_name,
+        player2_dg_id: m.player2_dg_id,
+        player2_name: m.player2_name,
+        player3_dg_id: m.player3_dg_id,
+        player3_name: m.player3_name,
+        odds1: m.odds1,
+        odds2: m.odds2,
+        odds3: m.odds3,
+        dg_odds1: m.dg_odds1,
+        dg_odds2: m.dg_odds2,
+        dg_odds3: m.dg_odds3,
+        source: 'datagolf',
+        last_updated: m.updated_at || m.created_at
+      }));
       
-    if (deleteError) {
-      console.error('Delete error:', deleteError);
-      throw new Error(`Failed to delete existing matchups: ${deleteError.message}`);
+      const { error: snapshotError } = await supabase
+        .from('betting_markets_snapshots')
+        .insert(snapshots);
+        
+      if (snapshotError) {
+        console.error('Failed to create odds snapshots:', snapshotError);
+      } else {
+        console.log(`✅ Created ${snapshots.length} odds snapshots`);
+      }
     }
     
-    // Now insert fresh matchups
+    // Use UPSERT with matchup_key to update existing or insert new
+    console.log(`🔄 Upserting ${allMatchups.length} matchups for event ${event_id}`);
+    
     const { error } = await supabase
       .from('betting_markets')
-      .insert(allMatchups)
+      .upsert(allMatchups, { 
+        onConflict: 'matchup_key',
+        ignoreDuplicates: false 
+      })
     
     if (error) {
       console.error('Supabase upsert error:', error)

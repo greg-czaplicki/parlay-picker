@@ -681,6 +681,7 @@ export function RecommendedPicksContent({
                                 player: player.name,
                                 odds: player.odds,
                                 matchupId: player.matchupId,
+                                matchupKey: player.matchupKey,
                                 eventName: player.eventName || '',
                                 roundNum: player.roundNum || roundNum || 1,
                                 valueRating: player.valueRating || 7.5,

@@ -5,6 +5,7 @@ export type MatchupType = "2ball" | "3ball";
 // Base interface for matchup rows (V2 schema)
 export interface BaseMatchupRow {
   id: number;
+  matchup_key?: string; // Stable key for matchup persistence
   event_id: number;
   event_name?: string; // This will be added by the API from tournament lookup
   round_num: number;

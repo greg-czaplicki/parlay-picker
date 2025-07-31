@@ -16,13 +16,13 @@ export async function POST(req: NextRequest) {
   }
   
   // Get matchup data for all picks to calculate odds and store snapshot data
-  const pickMatchupIds = picks.map((pick: any) => pick.matchup_id).filter(Boolean)
+  const pickMatchupKeys = picks.map((pick: any) => pick.matchup_key).filter(Boolean)
   let matchupData = []
-  if (pickMatchupIds.length > 0) {
+  if (pickMatchupKeys.length > 0) {
     const { data: matchupsData, error: matchupsError } = await supabase
       .from('betting_markets')
       .select('*')
-      .in('id', pickMatchupIds)
+      .in('matchup_key', pickMatchupKeys)
     if (matchupsError) return NextResponse.json({ error: matchupsError.message }, { status: 400 })
     matchupData = matchupsData || []
   }
@@ -33,9 +33,9 @@ export async function POST(req: NextRequest) {
   const picksToInsert = []
   
   for (const pick of picks) {
-    const matchup = matchupData.find((m: any) => m.id === pick.matchup_id)
+    const matchup = matchupData.find((m: any) => m.matchup_key === pick.matchup_key)
     if (!matchup) {
-      return NextResponse.json({ error: `Matchup not found: ${pick.matchup_id}` }, { status: 400 })
+      return NextResponse.json({ error: `Matchup not found: ${pick.matchup_key}` }, { status: 400 })
     }
     
     // Determine player position and get snapshot data
@@ -71,14 +71,16 @@ export async function POST(req: NextRequest) {
     }
     
     picksToInsert.push({
-      matchup_id: pick.matchup_id, // UUID from betting_markets table
+      matchup_id: matchup.id, // Keep UUID for now until we migrate
+      matchup_key: pick.matchup_key, // Store the stable key too
       selection_name: playerName,
       odds_at_bet: Number(playerOdds),
       outcome: 'pending',
       selection_criteria: {
         picked_player_dg_id: Number(pick.picked_player_dg_id),
         player_position: playerPosition,
-        event_id: matchup.event_id ? Number(matchup.event_id) : null
+        event_id: matchup.event_id ? Number(matchup.event_id) : null,
+        matchup_key: pick.matchup_key
       }
     })
   }

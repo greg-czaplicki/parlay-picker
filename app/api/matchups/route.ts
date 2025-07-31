@@ -34,6 +34,7 @@ export async function GET(req: NextRequest) {
       .from('betting_markets')
       .select(`
         id,
+        matchup_key,
         event_id,
         round_num,
         type,

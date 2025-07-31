@@ -59,7 +59,7 @@ export default function ParlaySummary({ selections, userId = '00000000-0000-0000
       }
       
       return {
-        matchup_id: s.matchupId, // Now expecting number instead of string
+        matchup_key: s.matchupKey, // Use the stable key
         picked_player_dg_id: playerDgId!,  // Use non-null assertion since we validate below
         picked_player_name: s.player,
       };
