@@ -7,11 +7,20 @@ async function getActiveTournaments() {
   const { createSupabaseClient } = await import('@/lib/api-utils')
   const supabase = createSupabaseClient()
   
-  const { data: activeTournaments } = await supabase
+  const today = new Date().toISOString().split('T')[0]
+  logger.info(`Checking for active tournaments with end_date >= ${today}`)
+  
+  const { data: activeTournaments, error } = await supabase
     .from('tournaments')
     .select('dg_id, name, tour')
-    .gte('end_date', new Date().toISOString().split('T')[0])
+    .gte('end_date', today)
   
+  if (error) {
+    logger.error('Error fetching active tournaments:', error)
+    return []
+  }
+  
+  logger.info(`Found ${activeTournaments?.length || 0} active tournaments:`, activeTournaments)
   return activeTournaments || []
 }
 
