@@ -9,7 +9,7 @@ async function getActiveTournaments() {
   
   const { data: activeTournaments } = await supabase
     .from('tournaments')
-    .select('event_id, name, tour')
+    .select('dg_id, name, tour')
     .gte('end_date', new Date().toISOString().split('T')[0])
   
   return activeTournaments || []
