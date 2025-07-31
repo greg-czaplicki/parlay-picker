@@ -311,31 +311,9 @@ export async function GET(req?: NextRequest) {
         logger.info(`Looking for tournament match: API="${eventName}" vs DB tournaments: [${activeTournaments.map(t => `"${t.name}"`).join(', ')}]`);
         const matchingTournament = activeTournaments.find(t => t.name === eventName);
         if (!matchingTournament) {
-          logger.warn(`❌ Event "${eventName}" from ${tour.toUpperCase()} tour is not in active tournaments list.`);
+          logger.warn(`❌ Event "${eventName}" from ${tour.toUpperCase()} tour is not in active tournaments list - skipping.`);
           logger.info(`📋 Active tournaments: ${activeTournaments.map(t => t.name).join(', ')}`);
-          
-          // For Euro tour, let's be more flexible and check if we have any unsettled parlays for this event
-          if (tour === 'euro') {
-            const { data: euroTournament } = await supabase
-              .from('tournaments')
-              .select('dg_id, name')
-              .eq('name', eventName)
-              .eq('tour', 'euro')
-              .single();
-              
-            if (euroTournament) {
-              logger.info(`Found Euro tour event "${eventName}" in database, proceeding with sync despite active tournament check.`);
-              fetchedEventNames.push(eventName);
-              // Continue processing this tournament
-            } else {
-              logger.info(`Euro tour event "${eventName}" not found in database, skipping.`);
-              continue;
-            }
-          } else {
-            continue;
-          }
-        } else {
-          fetchedEventNames.push(eventName);
+          continue;
         }
 
         fetchedEventNames.push(eventName);
