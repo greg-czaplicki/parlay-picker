@@ -59,9 +59,9 @@ jobs:
           fi
           
           # Parse and display sync results
-          processed_count=$(echo $content | jq -r '.processedCount // 0')
-          event_name=$(echo $content | jq -r '.eventName // "Unknown"')
-          errors=$(echo $content | jq -r '.errors | length')
+          processed_count=$(echo $content | jq -r '.processedCount // .data.totalRecords // 0')
+          event_name=$(echo $content | jq -r '.eventName // .data.eventName // "Unknown"')
+          errors=$(echo $content | jq -r '.errors // .data.errors // [] | length')
           
           echo "✅ PGA Sync completed: $processed_count records processed for $event_name"
           if [ $errors -gt 0 ]; then
@@ -89,8 +89,8 @@ jobs:
             echo "⚠️ Continuing despite Euro sync failure (tour might be inactive)"
           else
             processed_count=$(echo $content | jq -r '.processedCount // 0')
-            event_names=$(echo $content | jq -r '.eventNames | join(", ") // "Unknown"')
-            errors=$(echo $content | jq -r '.errors | length')
+            event_names=$(echo $content | jq -r '.eventNames // null | if . then join(", ") else "Unknown" end')
+            errors=$(echo $content | jq -r '.errors // [] | length')
             
             echo "✅ Euro Sync completed: $processed_count records processed for $event_names"
             if [ $errors -gt 0 ]; then
@@ -119,8 +119,8 @@ jobs:
           
           # Parse comprehensive results
           processed_count=$(echo $content | jq -r '.processedCount // 0')
-          event_names=$(echo $content | jq -r '.eventNames | join(", ") // "None"')
-          errors=$(echo $content | jq -r '.errors | length')
+          event_names=$(echo $content | jq -r '.eventNames // null | if . then join(", ") else "None" end')
+          errors=$(echo $content | jq -r '.errors // [] | length')
           timestamp=$(echo $content | jq -r '.sourceTimestamp // "Unknown"')
           
           echo "✅ Multi-Tour Sync Summary:"
