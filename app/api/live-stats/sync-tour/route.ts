@@ -192,13 +192,31 @@ export async function GET(request: Request) {
 
   try {
     // Get active tournaments
-    const { data: activeTournaments } = await supabase
+    const today = new Date().toISOString().split('T')[0];
+    logger.info(`Checking for active tournaments with end_date >= ${today}`);
+    
+    const { data: activeTournaments, error: tournamentsError } = await supabase
       .from('tournaments')
-      .select('event_id, event_name')
-      .gte('end_date', new Date().toISOString().split('T')[0]);
+      .select('event_id, event_name, start_date, end_date')
+      .gte('end_date', today);
+
+    if (tournamentsError) {
+      logger.error('Error fetching tournaments:', tournamentsError);
+      throw tournamentsError;
+    }
+
+    logger.info(`Found ${activeTournaments?.length || 0} tournaments in database with end_date >= ${today}`, activeTournaments);
 
     if (!activeTournaments || activeTournaments.length === 0) {
-      logger.info('No active tournaments found.');
+      // Let's also check what tournaments exist in the database
+      const { data: allTournaments } = await supabase
+        .from('tournaments')
+        .select('event_id, event_name, start_date, end_date')
+        .order('start_date', { ascending: false })
+        .limit(5);
+      
+      logger.info('Latest 5 tournaments in database:', allTournaments);
+      
       return jsonSuccess({
         message: 'No active tournaments found',
         tour: validatedTour.toUpperCase(),
