@@ -155,8 +155,32 @@ export async function GET(request: NextRequest) {
 
     logger.info(`🎯 Found ${activeTournaments.length} active tournaments during tournament hours`)
 
-    // Run smart tournament sync
-    const syncResult = await smartTournamentSync()
+    // Run direct sync instead of smartTournamentSync
+    logger.info('🚀 BYPASSING smartTournamentSync - calling sync endpoint directly')
+    
+    let syncResult = { success: false, count: 0, events: [] }
+    
+    try {
+      const syncResponse = await fetch(`https://parlay-picker.vercel.app/api/live-stats/sync`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      
+      if (syncResponse.ok) {
+        const syncData = await syncResponse.json()
+        logger.info('✅ Direct sync successful:', syncData)
+        
+        syncResult = {
+          success: true,
+          count: syncData.processedCount || 0,
+          events: syncData.eventNames || []
+        }
+      } else {
+        logger.error('❌ Direct sync failed:', syncResponse.status)
+      }
+    } catch (error) {
+      logger.error('❌ Direct sync error:', error)
+    }
     
     // Initialize snapshot service for automatic triggers
     const snapshotService = new TournamentSnapshotService()
