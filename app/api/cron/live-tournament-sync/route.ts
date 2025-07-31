@@ -9,7 +9,7 @@ async function getActiveTournaments() {
   
   const { data: activeTournaments } = await supabase
     .from('tournaments')
-    .select('event_id, event_name, tour')
+    .select('event_id, name, tour')
     .gte('end_date', new Date().toISOString().split('T')[0])
   
   return activeTournaments || []
@@ -137,7 +137,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: syncResult.success,
       action: 'completed',
-      activeTournaments: activeTournaments.map((t: any) => ({ name: t.event_name, tour: t.tour })),
+      activeTournaments: activeTournaments.map((t: any) => ({ name: t.name, tour: t.tour })),
       duringTournamentHours: true,
       processedCount: syncResult.count,
       events: syncResult.events,

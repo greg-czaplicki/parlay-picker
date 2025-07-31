@@ -30,24 +30,15 @@ function getCurrentWeekRange() {
 }
 
 async function fetchCurrentWeekEvents(): Promise<Event[]> {
-  const supabase = createBrowserClient();
-  const { monday, sunday } = getCurrentWeekRange();
-  const { data, error } = await supabase
-    .from('tournaments')
-    .select('dg_id, name, start_date, end_date')
-    .lte('start_date', sunday)
-    .gte('end_date', monday);
-  if (error) throw error;
+  // Call our API route to get active tournaments from DataGolf
+  const response = await fetch('/api/tournaments/active', { cache: 'no-store' });
   
-  // Map data to expected format for compatibility
-  const events: Event[] = (data || []).map((t: any) => ({
-    event_id: t.dg_id,
-    event_name: t.name,
-    start_date: t.start_date,
-    end_date: t.end_date,
-  }));
+  if (!response.ok) {
+    throw new Error(`Failed to fetch active tournaments: ${response.statusText}`);
+  }
   
-  return events;
+  const data = await response.json();
+  return data;
 }
 
 // Add a query key for current week events if not present
