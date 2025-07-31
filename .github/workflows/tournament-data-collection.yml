@@ -38,6 +38,36 @@ jobs:
     timeout-minutes: 15
     
     steps:
+      - name: 📅 Sync Tournament Schedule
+        run: |
+          echo "📅 Syncing tournament schedule to ensure we have latest tournament data..."
+          
+          response=$(curl -s -L -w "HTTPSTATUS:%{http_code}" --max-time 60 \
+            -X GET "${{ env.APP_URL }}/api/schedule/sync" \
+            -H "User-Agent: GitHub-Actions-Tournament-Sync/1.0")
+          
+          http_code=$(echo $response | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+          content=$(echo $response | sed -e 's/HTTPSTATUS:.*//')
+          
+          echo "📊 Schedule Sync Response Code: $http_code"
+          echo "📄 Schedule Sync Response: $content"
+          
+          if [ $http_code -ne 200 ]; then
+            echo "❌ Schedule sync failed with status $http_code"
+            echo "⚠️ Continuing anyway - old schedule data may cause issues"
+          else
+            processed_count=$(echo $content | jq -r '.processedCount // 0')
+            pga_count=$(echo $content | jq -r '.tourCounts.pga // 0')
+            euro_count=$(echo $content | jq -r '.tourCounts.euro // 0')
+            
+            echo "✅ Schedule Sync completed:"
+            echo "   📈 Total Tournaments: $processed_count"
+            echo "   🏌️ PGA Tour: $pga_count"
+            echo "   🌍 Euro Tour: $euro_count"
+          fi
+          
+          # Add a small delay to ensure DB writes are complete
+          sleep 2
       - name: 🏌️ Sync PGA Tour Data
         if: ${{ github.event.inputs.specific_tour == 'both' || github.event.inputs.specific_tour == 'pga' || github.event.inputs.specific_tour == '' }}
         run: |

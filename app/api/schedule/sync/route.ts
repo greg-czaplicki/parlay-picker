@@ -40,12 +40,12 @@ if (!dataGolfApiKey) {
 const DATA_GOLF_PGA_SCHEDULE_URL = `https://feeds.datagolf.com/get-schedule?tour=pga&file_format=json&key=${dataGolfApiKey}`;
 const DATA_GOLF_EURO_SCHEDULE_URL = `https://feeds.datagolf.com/get-schedule?tour=euro&file_format=json&key=${dataGolfApiKey}`;
 
-// Helper to calculate end date (Start Date + 3 days)
+// Helper to calculate end date (Start Date + 4 days to cover full tournament)
 function calculateEndDate(startDateStr: string): string {
     try {
         const startDate = new Date(startDateStr + 'T00:00:00'); // Add time part for reliable parsing
         const endDate = new Date(startDate);
-        endDate.setDate(startDate.getDate() + 3);
+        endDate.setDate(startDate.getDate() + 4); // Changed from 3 to 4 days to ensure Sunday is included
         // Format back to YYYY-MM-DD
         return endDate.toISOString().split('T')[0];
     } catch (e) {
