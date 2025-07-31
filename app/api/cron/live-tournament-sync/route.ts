@@ -121,7 +121,7 @@ export async function GET(request: NextRequest) {
   }
 
   const startTime = Date.now()
-  logger.info('🏌️ Live tournament sync triggered')
+  logger.info('🏌️ Live tournament sync triggered - v2')
 
   try {
     // Check if we should run during current time
