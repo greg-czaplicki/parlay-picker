@@ -98,14 +98,26 @@ async function fetchTourSchedule(url: string, tourCode: string): Promise<Supabas
           logger.info(`Replacing non-numeric event_id "${event.event_id}" with generated ID: ${eventId}`);
         }
         
+        const startDate = new Date(event.start_date);
+        const endDate = new Date(calculateEndDate(event.start_date));
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); // Reset time to start of day
+        
+        // Determine status based on dates
+        let status = 'scheduled';
+        if (today > endDate) {
+          status = 'completed';
+        } else if (today >= startDate && today <= endDate) {
+          status = 'in_progress';
+        }
+        
         return {
           dg_id: eventId,
           name: event.event_name,
           start_date: event.start_date,
           end_date: calculateEndDate(event.start_date),
-          status: 'scheduled', // Default status, can be updated later
+          status: status,
           tour: tourCode.toLowerCase(),
-          event_name: event.event_name, // Keep for reference
         };
       });
     
