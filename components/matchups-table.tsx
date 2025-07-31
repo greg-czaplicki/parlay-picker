@@ -241,9 +241,15 @@ export default function MatchupsTable({
     }
   };
 
-  // Helper function to format player position data
-  const formatPlayerPosition = (playerId: string, teeTime: string | null): { position: string; score: string } => {
-    const playerStat = playerStatsMap[playerId];
+  // Helper function to format player position data - now uses sg_data from matchup response
+  const formatPlayerPosition = (playerId: string, teeTime: string | null, sgData?: any): { position: string; score: string } => {
+    // First try to use position data from sg_data (from matchup API response)
+    let playerStat = sgData;
+    
+    // Fallback to playerStatsMap if sg_data doesn't have position info
+    if (!playerStat || !playerStat.position) {
+      playerStat = playerStatsMap[playerId];
+    }
     
     if (!playerStat) {
       return { position: '-', score: '-' };
@@ -681,7 +687,8 @@ export default function MatchupsTable({
                           name: matchup.player1_name || '',
                           odds: matchup.odds1,
                           dgOdds: matchup.dg_odds1,
-                          tee_time: matchup.tee_time || null
+                          tee_time: matchup.tee_time || null,
+                          sg_data: (matchup as any).player1_sg_data
                         },
                         {
                           id: 'p2',
@@ -689,7 +696,8 @@ export default function MatchupsTable({
                           name: matchup.player2_name || '',
                           odds: matchup.odds2,
                           dgOdds: matchup.dg_odds2,
-                          tee_time: matchup.tee_time || null
+                          tee_time: matchup.tee_time || null,
+                          sg_data: (matchup as any).player2_sg_data
                         },
                         {
                           id: 'p3',
@@ -697,7 +705,8 @@ export default function MatchupsTable({
                           name: matchup.player3_name || '',
                           odds: matchup.odds3,
                           dgOdds: matchup.dg_odds3,
-                          tee_time: matchup.tee_time || null
+                          tee_time: matchup.tee_time || null,
+                          sg_data: (matchup as any).player3_sg_data
                         }
                       ].filter(p => p.dg_id !== null && p.name).sort((a, b) => {
                         // Sort by odds (lowest first, since that's the favorite)
@@ -753,7 +762,7 @@ export default function MatchupsTable({
                           {players.map((player: Player, idx: number) => {
                             const playerName = formatPlayerName(player.name);
                             const playerStatus = getPlayerStatus(playerName);
-                            const positionData = formatPlayerPosition(String(player.dg_id), player.tee_time);
+                            const positionData = formatPlayerPosition(String(player.dg_id), player.tee_time, (player as any).sg_data);
                             const { localTime: playerTeeTime, easternDiff: playerEasternTime } = formatTeeTime(player.tee_time);
 
                             // Check if this player has a significant odds gap (only for favorites)
@@ -1000,7 +1009,8 @@ export default function MatchupsTable({
                       name: matchup.player1_name || '',
                       odds: matchup.odds1,
                       dgOdds: matchup.dg_odds1,
-                      tee_time: matchup.tee_time || null
+                      tee_time: matchup.tee_time || null,
+                      sg_data: (matchup as any).player1_sg_data
                     },
                     {
                       id: 'p2',
@@ -1008,7 +1018,8 @@ export default function MatchupsTable({
                       name: matchup.player2_name || '',
                       odds: matchup.odds2,
                       dgOdds: matchup.dg_odds2,
-                      tee_time: matchup.tee_time || null
+                      tee_time: matchup.tee_time || null,
+                      sg_data: (matchup as any).player2_sg_data
                     },
                     {
                       id: 'p3',
@@ -1016,7 +1027,8 @@ export default function MatchupsTable({
                       name: matchup.player3_name || '',
                       odds: matchup.odds3,
                       dgOdds: matchup.dg_odds3,
-                      tee_time: matchup.tee_time || null
+                      tee_time: matchup.tee_time || null,
+                      sg_data: (matchup as any).player3_sg_data
                     }
                   ].filter(p => p.dg_id !== null && p.name).sort((a, b) => {
                     // Sort by odds (lowest first, since that's the favorite)
@@ -1030,7 +1042,8 @@ export default function MatchupsTable({
                       name: matchup.player1_name || '',
                       odds: matchup.odds1,
                       dgOdds: matchup.dg_odds1,
-                      tee_time: isSupabaseMatchupRow2Ball(matchup) ? matchup.player1_tee_time || matchup.tee_time || null : matchup.tee_time || null
+                      tee_time: isSupabaseMatchupRow2Ball(matchup) ? matchup.player1_tee_time || matchup.tee_time || null : matchup.tee_time || null,
+                      sg_data: (matchup as any).player1_sg_data
                     },
                     {
                       id: 'p2',
@@ -1038,7 +1051,8 @@ export default function MatchupsTable({
                       name: matchup.player2_name || '',
                       odds: matchup.odds2,
                       dgOdds: matchup.dg_odds2,
-                      tee_time: isSupabaseMatchupRow2Ball(matchup) ? matchup.player2_tee_time || matchup.tee_time || null : matchup.tee_time || null
+                      tee_time: isSupabaseMatchupRow2Ball(matchup) ? matchup.player2_tee_time || matchup.tee_time || null : matchup.tee_time || null,
+                      sg_data: (matchup as any).player2_sg_data
                     }
                   ].sort((a, b) => {
                     // Sort by odds (lowest first, since that's the favorite)
@@ -1082,7 +1096,7 @@ export default function MatchupsTable({
                           {players.map((player: Player, idx: number) => {
                             const playerName = formatPlayerName(player.name);
                             const playerStatus = getPlayerStatus(playerName);
-                            const positionData = formatPlayerPosition(String(player.dg_id), player.tee_time);
+                            const positionData = formatPlayerPosition(String(player.dg_id), player.tee_time, (player as any).sg_data);
                             const { localTime: playerTeeTime, easternDiff: playerEasternTime } = formatTeeTime(player.tee_time);
 
                             // Check if this player has a significant odds gap (only for favorites)

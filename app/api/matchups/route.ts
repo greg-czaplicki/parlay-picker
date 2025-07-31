@@ -193,6 +193,37 @@ async function enhanceMatchupsWithSGData(matchups: any[], supabase: any) {
 
   console.log(`📊 Found skill ratings for ${Object.keys(skillRatingsMap).length} players`);
 
+  // Fetch live tournament stats for position data
+  const { data: liveStats, error: liveError } = await supabase
+    .from('live_tournament_stats')
+    .select(`
+      player_name,
+      position,
+      total,
+      today,
+      thru,
+      round_num
+    `)
+    .in('player_name', matchups.flatMap(m => [m.player1_name, m.player2_name, m.player3_name].filter(Boolean)))
+    .eq('round_num', matchups[0]?.round_num || '1');
+
+  if (liveError) {
+    console.error('Error fetching live stats:', liveError);
+  }
+
+  // Create live stats map
+  const liveStatsMap: Record<string, any> = {};
+  (liveStats || []).forEach(stat => {
+    liveStatsMap[stat.player_name] = {
+      position: stat.position,
+      total: stat.total,
+      today: stat.today,
+      thru: stat.thru
+    };
+  });
+
+  console.log(`📊 Found live stats for ${Object.keys(liveStatsMap).length} players`);
+
   // Enhance each matchup with SG data
   return matchups.map(matchup => {
     const enhanced = { ...matchup };
@@ -208,6 +239,28 @@ async function enhanceMatchupsWithSGData(matchups: any[], supabase: any) {
     
     if (matchup.player3_dg_id && skillRatingsMap[matchup.player3_dg_id]) {
       enhanced.player3_sg_data = skillRatingsMap[matchup.player3_dg_id];
+    }
+
+    // Add live tournament data to SG data
+    if (matchup.player1_name && liveStatsMap[matchup.player1_name]) {
+      enhanced.player1_sg_data = {
+        ...enhanced.player1_sg_data,
+        ...liveStatsMap[matchup.player1_name]
+      };
+    }
+    
+    if (matchup.player2_name && liveStatsMap[matchup.player2_name]) {
+      enhanced.player2_sg_data = {
+        ...enhanced.player2_sg_data,
+        ...liveStatsMap[matchup.player2_name]
+      };
+    }
+    
+    if (matchup.player3_name && liveStatsMap[matchup.player3_name]) {
+      enhanced.player3_sg_data = {
+        ...enhanced.player3_sg_data,
+        ...liveStatsMap[matchup.player3_name]
+      };
     }
 
     // Mark as enhanced
