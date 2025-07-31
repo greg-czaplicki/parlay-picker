@@ -56,9 +56,9 @@ jobs:
             echo "❌ Schedule sync failed with status $http_code"
             echo "⚠️ Continuing anyway - old schedule data may cause issues"
           else
-            processed_count=$(echo $content | jq -r '.processedCount // 0')
-            pga_count=$(echo $content | jq -r '.tourCounts.pga // 0')
-            euro_count=$(echo $content | jq -r '.tourCounts.euro // 0')
+            processed_count=$(echo $content | jq -r '.data.processedCount // .processedCount // 0')
+            pga_count=$(echo $content | jq -r '.data.tourCounts.pga // .tourCounts.pga // 0')
+            euro_count=$(echo $content | jq -r '.data.tourCounts.euro // .tourCounts.euro // 0')
             
             echo "✅ Schedule Sync completed:"
             echo "   📈 Total Tournaments: $processed_count"
