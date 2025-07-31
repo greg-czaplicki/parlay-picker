@@ -261,7 +261,7 @@ export async function GET(req?: NextRequest) {
     // Get active tournaments list
     const { data: activeTournaments } = await supabase
       .from('tournaments')
-      .select('event_id, event_name')
+      .select('dg_id, name')
       .gte('end_date', new Date().toISOString().split('T')[0]);
 
     if (!activeTournaments || activeTournaments.length === 0) {
@@ -306,17 +306,17 @@ export async function GET(req?: NextRequest) {
         logger.info(`${tour.toUpperCase()} extracted event name: ${eventName}`);
 
         // Check if this event is in our active tournaments list
-        const matchingTournament = activeTournaments.find(t => t.event_name === eventName);
+        const matchingTournament = activeTournaments.find(t => t.name === eventName);
         if (!matchingTournament) {
           logger.warn(`Event "${eventName}" from ${tour.toUpperCase()} tour is not in active tournaments list.`);
-          logger.info(`Active tournaments: ${activeTournaments.map(t => t.event_name).join(', ')}`);
+          logger.info(`Active tournaments: ${activeTournaments.map(t => t.name).join(', ')}`);
           
           // For Euro tour, let's be more flexible and check if we have any unsettled parlays for this event
           if (tour === 'euro') {
             const { data: euroTournament } = await supabase
               .from('tournaments')
-              .select('event_id, event_name')
-              .eq('event_name', eventName)
+              .select('dg_id, name')
+              .eq('name', eventName)
               .eq('tour', 'euro')
               .single();
               
@@ -341,13 +341,13 @@ export async function GET(req?: NextRequest) {
         let eventId: number | undefined;
         const { data: tournamentData } = await supabase
           .from('tournaments')
-          .select('event_id')
-          .eq('event_name', eventName)
+          .select('dg_id')
+          .eq('name', eventName)
           .single();
         
         if (tournamentData) {
-          eventId = tournamentData.event_id;
-          logger.info(`${tour.toUpperCase()} mapped to event_id: ${eventId}`);
+          eventId = tournamentData.dg_id;
+          logger.info(`${tour.toUpperCase()} mapped to dg_id: ${eventId}`);
         } else {
           logger.warn(`No event_id found for tournament: ${eventName}`);
         }

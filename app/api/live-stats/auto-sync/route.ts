@@ -8,7 +8,7 @@ async function getActiveTournaments() {
   
   const { data, error } = await supabase
     .from('tournaments')
-    .select('event_id, event_name, start_date, end_date, tour')
+    .select('dg_id, name, start_date, end_date, tour')
     .lte('start_date', today)
     .gte('end_date', today)
   
@@ -99,7 +99,7 @@ export async function GET() {
     // Determine which API endpoints to try based on active tournaments
     const toursToSync = getRequiredApiTours(activeTournaments)
     
-    logger.info('Active tournaments:', activeTournaments.map(t => ({ name: t.event_name, tour: t.tour })))
+    logger.info('Active tournaments:', activeTournaments.map(t => ({ name: t.name, tour: t.tour })))
     logger.info('API endpoints to try:', toursToSync)
     
     const results = []
@@ -125,11 +125,11 @@ export async function GET() {
     const successCount = results.filter(r => r.success).length
     const message = `Auto-sync complete: ${successCount}/${results.length} tours synced, ${totalProcessed} records processed`
     
-    logger.info(message, { results, activeTournaments: activeTournaments.map(t => t.event_name) })
+    logger.info(message, { results, activeTournaments: activeTournaments.map(t => t.name) })
     
     return jsonSuccess({
       action: 'completed',
-      activeTournaments: activeTournaments.map(t => ({ name: t.event_name, tour: t.tour })),
+      activeTournaments: activeTournaments.map(t => ({ name: t.name, tour: t.tour })),
       duringTournamentHours: isDuringHours,
       results,
       totalProcessed,
