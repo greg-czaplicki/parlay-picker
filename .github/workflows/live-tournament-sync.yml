@@ -62,21 +62,27 @@ jobs:
           
           # Parse response to show summary
           if echo "$body" | grep -q '"success":true'; then
-            echo "📊 Sync was successful"
-            
-            # Extract processed count if available
-            processed_count=$(echo "$body" | grep -o '"processedCount":[0-9]*' | cut -d: -f2)
-            if [ -n "$processed_count" ]; then
-              echo "📈 Processed $processed_count records"
-            fi
-            
-            # Extract events if available
-            events=$(echo "$body" | grep -o '"events":\[[^]]*\]')
-            if [ -n "$events" ]; then
-              echo "🏆 Events: $events"
+            # Check if sync was skipped
+            if echo "$body" | grep -q '"action":"skipped"'; then
+              reason=$(echo "$body" | grep -o '"reason":"[^"]*"' | cut -d: -f2 | tr -d '"')
+              echo "⏭️ Sync was skipped: $reason"
+            else
+              echo "📊 Sync was completed"
+              
+              # Extract processed count if available
+              processed_count=$(echo "$body" | grep -o '"processedCount":[0-9]*' | cut -d: -f2)
+              if [ -n "$processed_count" ]; then
+                echo "📈 Processed $processed_count records"
+              fi
+              
+              # Extract events if available
+              events=$(echo "$body" | grep -o '"events":\[[^]]*\]')
+              if [ -n "$events" ]; then
+                echo "🏆 Events: $events"
+              fi
             fi
           else
-            echo "⏭️ Sync was skipped (likely outside tournament hours or no active tournaments)"
+            echo "❌ Sync failed - success was false"
           fi
         else
           echo "❌ Live tournament sync failed with status $http_status"
