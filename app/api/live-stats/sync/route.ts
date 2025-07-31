@@ -291,6 +291,8 @@ export async function GET(req?: NextRequest) {
     for (const tour of TOURS_TO_SYNC) {
       try {
         const response = await fetchInPlayPredictions(tour);
+        logger.info(`${tour.toUpperCase()} API raw response:`, JSON.stringify(response, null, 2));
+        
         if (!response || !response.data || response.data.length === 0) {
           logger.info(`No data available for ${tour.toUpperCase()} tour, skipping.`);
           continue;
@@ -306,10 +308,11 @@ export async function GET(req?: NextRequest) {
         logger.info(`${tour.toUpperCase()} extracted event name: ${eventName}`);
 
         // Check if this event is in our active tournaments list
+        logger.info(`Looking for tournament match: API="${eventName}" vs DB tournaments: [${activeTournaments.map(t => `"${t.name}"`).join(', ')}]`);
         const matchingTournament = activeTournaments.find(t => t.name === eventName);
         if (!matchingTournament) {
-          logger.warn(`Event "${eventName}" from ${tour.toUpperCase()} tour is not in active tournaments list.`);
-          logger.info(`Active tournaments: ${activeTournaments.map(t => t.name).join(', ')}`);
+          logger.warn(`❌ Event "${eventName}" from ${tour.toUpperCase()} tour is not in active tournaments list.`);
+          logger.info(`📋 Active tournaments: ${activeTournaments.map(t => t.name).join(', ')}`);
           
           // For Euro tour, let's be more flexible and check if we have any unsettled parlays for this event
           if (tour === 'euro') {
