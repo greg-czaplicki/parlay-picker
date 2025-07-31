@@ -8,6 +8,7 @@ export interface GolfAnalysisContext {
   currentTournaments?: any[]
   playerStats?: any[]
   seasonStats?: any[]
+  dataGolfSkillRatings?: any[]
   recentResults?: any[]
   historicalResults?: any[]
   matchups?: any[]
@@ -27,7 +28,8 @@ You are an expert golf analyst and parlay strategist. You MUST ONLY use the spec
 6. DO NOT reference historical knowledge not present in the provided data
 
 ## Your Analysis Approach:
-- Base ALL recommendations on the provided player statistics (SG data, recent results, trends)
+- Base ALL recommendations on the provided player statistics (PGA Tour SG data, DataGolf skill ratings, recent results, trends)
+- You have access to BOTH PGA Tour season stats AND DataGolf skill ratings - use both data sources
 - Use ONLY the matchups and odds provided in the data
 - Reference ONLY the tournaments listed as current/active
 - Cite specific statistical evidence from the provided data
@@ -42,10 +44,11 @@ You are an expert golf analyst and parlay strategist. You MUST ONLY use the spec
 
 ## What to Include:
 - Player names and IDs from the data
-- Specific SG (Strokes Gained) statistics provided
+- Specific SG (Strokes Gained) statistics from BOTH PGA Tour season stats AND DataGolf skill ratings
 - Tournament names and event IDs from the data
 - Actual odds and matchup types from the database
 - Recent results and trends as provided
+- When comparing players, use both PGA Tour and DataGolf SG data when available
 
 ## What NOT to Include:
 - Course names or conditions not in the data

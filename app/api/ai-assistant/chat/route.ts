@@ -49,9 +49,10 @@ export async function POST(request: NextRequest) {
       console.log('Sample matchup:', matchups[0])
 
       // Always fetch comprehensive data for better analysis
-      const [playerStats, seasonStats, trends, recentResults, historicalResults] = await Promise.all([
+      const [playerStats, seasonStats, dataGolfSkillRatings, trends, recentResults, historicalResults] = await Promise.all([
         dataAggregator.getPlayerAdvancedStats(eventIds, 100),
-        dataAggregator.getSeasonStats(100),
+        dataAggregator.getSeasonStats(), // Remove limit to get all players
+        dataAggregator.getDataGolfSkillRatings(), // Add DataGolf skill ratings
         dataAggregator.getPlayerTrends(undefined, 200),
         dataAggregator.getRecentTournamentResults(eventIds, 200),
         dataAggregator.getHistoricalTournamentResults(100)
@@ -59,11 +60,12 @@ export async function POST(request: NextRequest) {
       
       golfContext.playerStats = playerStats
       golfContext.seasonStats = seasonStats
+      golfContext.dataGolfSkillRatings = dataGolfSkillRatings
       golfContext.trends = trends
       golfContext.recentResults = recentResults
       golfContext.historicalResults = historicalResults
 
-      console.log(`AI Chat: Loaded ${playerStats.length} player stats, ${seasonStats.length} season stats, ${trends.length} trends, ${recentResults.length} current results, ${historicalResults.length} historical results`)
+      console.log(`AI Chat: Loaded ${playerStats.length} player stats, ${seasonStats.length} season stats, ${dataGolfSkillRatings.length} DataGolf skill ratings, ${trends.length} trends, ${recentResults.length} current results, ${historicalResults.length} historical results`)
 
       // Determine what additional data to fetch based on message content
       const messageLower = message.toLowerCase()
@@ -100,6 +102,7 @@ export async function POST(request: NextRequest) {
       matchups: golfContext.matchups?.length || 0,
       playerStats: golfContext.playerStats?.length || 0,
       seasonStats: golfContext.seasonStats?.length || 0,
+      dataGolfSkillRatings: golfContext.dataGolfSkillRatings?.length || 0,
       trends: golfContext.trends?.length || 0,
       recentResults: golfContext.recentResults?.length || 0,
       historicalResults: golfContext.historicalResults?.length || 0
@@ -116,6 +119,7 @@ export async function POST(request: NextRequest) {
         matchupsCount: golfContext.matchups?.length || 0,
         playersAnalyzed: golfContext.playerStats?.length || 0,
         seasonStatsCount: golfContext.seasonStats?.length || 0,
+        dataGolfSkillRatingsCount: golfContext.dataGolfSkillRatings?.length || 0,
         trendsAvailable: golfContext.trends?.length || 0,
         currentResultsCount: golfContext.recentResults?.length || 0,
         historicalResultsCount: golfContext.historicalResults?.length || 0

@@ -162,22 +162,52 @@ export class GolfDataAggregator {
     }
   }
 
-  async getSeasonStats(limit: number = 100): Promise<any[]> {
+  async getSeasonStats(limit?: number): Promise<any[]> {
     try {
       const supabase = getSupabaseClient()
       
-      const { data: seasonStats, error: seasonError } = await supabase
+      let query = supabase
         .from('player_season_stats')
         .select('*')
         .not('sg_total', 'is', null)
         .order('sg_total', { ascending: false })
-        .limit(limit)
+      
+      if (limit) {
+        query = query.limit(limit)
+      }
+      
+      const { data: seasonStats, error: seasonError } = await query
 
       if (seasonError) throw seasonError
       console.log(`Found ${seasonStats?.length || 0} season stats`)
       return seasonStats || []
     } catch (error) {
       console.error('Error fetching season stats:', error)
+      return []
+    }
+  }
+
+  async getDataGolfSkillRatings(limit?: number): Promise<any[]> {
+    try {
+      const supabase = getSupabaseClient()
+      
+      let query = supabase
+        .from('player_skill_ratings')
+        .select('*')
+        .not('sg_total', 'is', null)
+        .order('sg_total', { ascending: false })
+      
+      if (limit) {
+        query = query.limit(limit)
+      }
+      
+      const { data: skillRatings, error: skillError } = await query
+
+      if (skillError) throw skillError
+      console.log(`Found ${skillRatings?.length || 0} DataGolf skill ratings`)
+      return skillRatings || []
+    } catch (error) {
+      console.error('Error fetching DataGolf skill ratings:', error)
       return []
     }
   }
